@@ -1,0 +1,11 @@
+[INFO]: 2022/10/02 09:29:00 logging.go:29: create users table
+[INFO]: 2022/10/02 09:29:00 logging.go:29: create posts table
+[INFO]: 2022/10/02 09:29:00 logging.go:29: get all posts
+[ERROR]: 2022/10/02 09:29:00 logging.go:26: delete table User1Pref  --  pq: table "user1pref" does not exist
+[INFO]: 2022/10/02 09:29:00 logging.go:29: delete table User1Cont
+[INFO]: 2022/10/02 09:29:00 logging.go:29: delete table users
+[INFO]: 2022/10/02 09:29:00 logging.go:29: get all posts
+[INFO]: 2022/10/02 09:29:00 logging.go:29: delete table Post1
+[INFO]: 2022/10/02 09:29:00 logging.go:29: delete table Post2
+[INFO]: 2022/10/02 09:29:00 logging.go:29: delete table Post3
+[INFO]: 2022/10/02 09:29:00 logging.go:29: delete table posts
