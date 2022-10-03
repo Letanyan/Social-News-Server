@@ -24,7 +24,7 @@ func DBHashPassword(password string) string {
 func DBCreateUser(db *sql.DB, name string, email string, password string) {
 	insertUser := `INSERT INTO users(name, email, password) VALUES ($1, $2, $3)`
 	_, e := db.Exec(insertUser, name, email, password)
-	if Failed("insert user", e) {
+	if DidFail(e, "insert user") {
 		return
 	}
 
@@ -32,7 +32,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) {
 	row := db.QueryRow(getUserId, email)
 	var userId int64
 	e = row.Scan(&userId)
-	if Failed("get user ID", e) {
+	if DidFail(e, "get user ID") {
 		return
 	}
 
@@ -43,7 +43,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) {
 		PRIMARY KEY (postId, commentId)
 	);`, userId)
 	_, e = db.Exec(createUserContentTable)
-	if Failed("create user content table for user "+fmt.Sprint(userId), e) {
+	if DidFail(e, "create user content table for user ", userId) {
 		return
 	}
 
@@ -58,7 +58,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) {
 		PRIMARY KEY (kind, pid, sid)
 	);`, userId)
 	_, e = db.Exec(createUserPrefTable)
-	if Failed("create user preference table for user "+fmt.Sprint(userId), e) {
+	if DidFail(e, "create user preference table for user ", userId) {
 		return
 	}
 }
@@ -66,15 +66,15 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) {
 func DBDeleteUser(db *sql.DB, userId int) {
 	deleteFromUsers := `DELETE FROM users WHERE id=$1`
 	_, e := db.Exec(deleteFromUsers, userId)
-	Failed("delete user from users table", e)
+	DidFail(e, "delete user from users table")
 
 	deleteUserContTable := fmt.Sprintf(`DROP TABLE User%dCont`, userId)
 	_, e = db.Exec(deleteUserContTable)
-	Failed("delete user content table", e)
+	DidFail(e, "delete user content table")
 
 	deleteUserPrefTable := fmt.Sprintf(`DROP TABLE User%dPref`, userId)
 	_, e = db.Exec(deleteUserPrefTable)
-	Failed("delete user preference table", e)
+	DidFail(e, "delete user preference table")
 }
 
 func DBVoteForUser(db *sql.DB, userId int64, sourceId int64, isUpvote bool) {
@@ -91,5 +91,5 @@ func DBVoteForUser(db *sql.DB, userId int64, sourceId int64, isUpvote bool) {
 	WHERE kind=1 AND pid = %d
 	`, userId, sourceId, userId, updatedField, updatedField, sourceId)
 	_, e := db.Query(vote)
-	Failed("vote for user", e)
+	DidFail(e, "vote for user")
 }

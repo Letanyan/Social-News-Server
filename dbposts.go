@@ -16,13 +16,13 @@ func DBCreatePost(db *sql.DB, userId int, content string, tags []string) {
 	row := db.QueryRow(insertPost, userId, content)
 	var postId int64
 	e := row.Scan(&postId)
-	if Failed("get post ID", e) {
+	if DidFail(e, "get post ID") {
 		return
 	}
 
 	insertPostForUser := fmt.Sprintf(`INSERT INTO User%dCont(postId, commentId) VALUES(%d, -1)`, userId, postId)
 	_, e = db.Exec(insertPostForUser)
-	if Failed("insert post to user", e) {
+	if DidFail(e, "insert post to user") {
 		return
 	}
 
@@ -40,7 +40,7 @@ func DBCreatePost(db *sql.DB, userId int, content string, tags []string) {
 	);`, postId)
 
 	_, e = db.Exec(createPostTable)
-	if Failed("create post table for user "+fmt.Sprint(postId), e) {
+	if DidFail(e, "create post table for user ", postId) {
 		return
 	}
 }
@@ -48,7 +48,7 @@ func DBCreatePost(db *sql.DB, userId int, content string, tags []string) {
 func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 	getOldVote := fmt.Sprintf(`SELECT upvotes, downvotes FROM User%dPref WHERE kind=3 AND pid=$1`, userId)
 	rows, e := db.Query(getOldVote, postId)
-	if Failed("get downvote and upvote for post "+fmt.Sprint(postId), e) {
+	if DidFail(e, "get downvote and upvote for post ", postId) {
 		return
 	}
 	count := 0
@@ -56,7 +56,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 	var downvote float64
 	for rows.Next() {
 		e = rows.Scan(&upvote, &downvote)
-		if Failed("scan upvote and downvote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "scan upvote and downvote for post ", postId) {
 			continue
 		}
 		count += 1
@@ -83,7 +83,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 			WHERE id = %d;
 			`, postId, updateField, updateField, nowTime, nowTime, postId)
 		rows, e = db.Query(updateVoteForPost)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 		var updatedAt time.Time
@@ -91,7 +91,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 		var posterId int64
 		for rows.Next() {
 			e = rows.Scan(&posterId, pq.Array(&tags), &upvote, &downvote, &updatedAt)
-			if Failed("scan upvote and downvote for post "+fmt.Sprint(postId), e) {
+			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
@@ -101,7 +101,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 		voteAmount = 1 - math.Min(epoch(currentTime)-epoch(updatedAt), 604800.0)/604800.0
 		createPref := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid, %s) VALUES(3, $1, -1, $2)`, userId, updateField)
 		_, e = db.Exec(createPref, postId, voteAmount)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 	} else if (isUpvote && upvote > 0) || (!isUpvote && downvote > 0) {
@@ -109,7 +109,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 			UPDATE User%dPref SET %s = 0 WHERE kind=3 AND pid=%d
 			`, userId, updateField, postId)
 		_, e = db.Exec(updatePref)
-		if Failed("update "+updateField+" for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "update ", updateField, " for post ", postId) {
 			return
 		}
 		if isUpvote {
@@ -122,7 +122,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 			WHERE id = $1
 			`, updateField, updateField, voteAmount)
 		_, e = db.Exec(updateVoteForPost, postId)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 	} else {
@@ -140,13 +140,13 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 			WHERE id = %d;
 			`, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, postId)
 		rows, e = db.Query(updateVoteForPost)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 		var updatedAt time.Time
 		for rows.Next() {
 			e = rows.Scan(&upvote, &downvote, &updatedAt)
-			if Failed("scan upvote and downvote for post "+fmt.Sprint(postId), e) {
+			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
@@ -156,7 +156,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 			UPDATE User%dPref SET %s = $1, %s = 0 WHERE kind=3 AND pid=$2
 			`, userId, updateField, otherField)
 		_, e = db.Exec(createPref, voteAmount, postId)
-		if Failed("update "+updateField+" for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "update ", updateField, " for post ", postId) {
 			return
 		}
 	}
@@ -167,19 +167,19 @@ func DBDeletePost(db *sql.DB, postId int64) {
 	row := db.QueryRow(getUserId, postId)
 	var userId int64
 	e := row.Scan(&userId)
-	if !Failed("get userId for deleting post "+fmt.Sprint(postId), e) {
+	if !DidFail(e, "get userId for deleting post ", postId) {
 		deletePostFromUser := fmt.Sprintf(`DELETE FROM User%dCont WHERE postId=$2`, userId)
 		_, e = db.Exec(deletePostFromUser, postId)
-		Failed("delete post "+fmt.Sprint(postId)+" for user "+fmt.Sprint(userId), e)
+		DidFail(e, "delete post ", postId, " for user ", userId)
 	}
 
 	deleteFromPosts := `DELETE FROM posts WHERE id=$1`
 	_, e = db.Exec(deleteFromPosts, postId)
-	Failed("delete post from posts table", e)
+	DidFail(e, "delete post from posts table")
 
 	deletePostTable := fmt.Sprintf(`DROP TABLE User%dCont`, postId)
 	_, e = db.Exec(deletePostTable)
-	Failed("delete post table", e)
+	DidFail(e, "delete post table")
 }
 
 type SortOrder int
@@ -236,7 +236,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, sortOrder SortOrder, li
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getPosts)
-	if Failed("get posts", e) {
+	if DidFail(e, "get posts") {
 		return []string{}
 	}
 	defer rows.Close()
@@ -252,7 +252,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, sortOrder SortOrder, li
 		var score float64
 
 		e = rows.Scan(&id, &userId, &content, pq.Array(&tags), &createdAt, &cred, &score)
-		if Failed("read row", e) {
+		if DidFail(e, "read row") {
 			continue
 		}
 

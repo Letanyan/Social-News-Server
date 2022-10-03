@@ -19,19 +19,20 @@ func init() {
 	if isDebug || err != nil {
 		file = os.Stderr
 	}
-	info = log.New(file, "[INFO]: ", log.Ldate|log.Ltime|log.Lshortfile)
-	warn = log.New(file, "[WARNING]: ", log.Ldate|log.Ltime|log.Lshortfile)
-	fail = log.New(file, "[ERROR]: ", log.Ldate|log.Ltime|log.Lshortfile)
+	info = log.New(file, "[INFO]: ", log.Ldate|log.Ltime)
+	warn = log.New(file, "[WARNING]: ", log.Ldate|log.Ltime)
+	fail = log.New(file, "[ERROR]: ", log.Ldate|log.Ltime)
 }
 
-func Failed(message string, e error) bool {
+func DidFail(e error, message ...interface{}) bool {
 	if e != nil {
 		_, file, line, _ := runtime.Caller(1)
 		_, filename := filepath.Split(file)
-		fail.Println(filename+":"+fmt.Sprint(line)+":", message, " -- ", e.Error())
+		s := filename + ":" + fmt.Sprint(line) + ":" + fmt.Sprint(message...) + " -- " + e.Error()
+		fail.Println(s)
 		return true
 	} else {
-		info.Println(message)
+		info.Println(message...)
 		return false
 	}
 }

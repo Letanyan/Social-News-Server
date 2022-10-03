@@ -15,13 +15,13 @@ func DBCreateComment(db *sql.DB, userId int, content string, postId int, replyId
 	row := db.QueryRow(insertComment, content, nowTime)
 	var commentId int64
 	e := row.Scan(&commentId)
-	if Failed("get comment ID", e) {
+	if DidFail(e, "get comment ID") {
 		return
 	}
 
 	insertCommentForUser := fmt.Sprintf(`INSERT INTO User%dCont(postId, commentId) VALUES(%d, %d)`, userId, postId, commentId)
 	_, e = db.Exec(insertCommentForUser)
-	if Failed("insert comment "+fmt.Sprint(commentId)+" to user "+fmt.Sprint(userId), e) {
+	if DidFail(e, "insert comment ", commentId, " to user ", userId) {
 		return
 	}
 }
@@ -31,27 +31,27 @@ func DBDeleteComment(db *sql.DB, postId int, commentId int) {
 	row := db.QueryRow(getUserId, commentId)
 	var userId int64
 	e := row.Scan(&userId)
-	if !Failed("get userId for deleting comment "+fmt.Sprint(commentId)+" from post "+fmt.Sprint(postId), e) {
+	if !DidFail(e, "get userId for deleting comment ", commentId, " from post ", postId) {
 		deletePostFromUser := fmt.Sprintf(`DELETE FROM User%dCont WHERE postId=$1 AND commentId=$2`, userId)
 		_, e = db.Exec(deletePostFromUser, postId, commentId)
-		Failed("delete comment "+fmt.Sprint(commentId)+" for post "+fmt.Sprint(postId)+" for user "+fmt.Sprint(userId), e)
+		DidFail(e, "delete comment ", commentId, " for post ", postId, " for user ", userId)
 	}
 
 	deleteFromPostComments := fmt.Sprintf(`DELETE FROM post%d WHERE id=$1`, postId)
 	_, e = db.Exec(deleteFromPostComments, commentId)
-	Failed("delete comment "+fmt.Sprint(commentId)+" from post "+fmt.Sprint(postId)+" comments table", e)
+	DidFail(e, "delete comment ", commentId, " from post ", postId, " comments table")
 }
 
 func DBUpdateComment(db *sql.DB, postId int, commentId int, content string) {
 	updateFromPostComments := fmt.Sprintf(`UPDATE post%d SET content=$1 WHERE id=$2`, postId)
 	_, e := db.Exec(updateFromPostComments, content, commentId)
-	Failed("update comment "+fmt.Sprint(commentId)+" from post "+fmt.Sprint(postId)+" comments table", e)
+	DidFail(e, "update comment ", commentId, " from post ", postId, " comments table")
 }
 
 func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUpvote bool) {
 	getOldVote := fmt.Sprintf(`SELECT upvotes, downvotes FROM User%dPref WHERE kind=2 AND pid=$1 AND sid=$2`, userId)
 	rows, e := db.Query(getOldVote, postId, commentId)
-	if Failed("get downvote and upvote for post "+fmt.Sprint(postId), e) {
+	if DidFail(e, "get downvote and upvote for post ", postId) {
 		return
 	}
 	count := 0
@@ -59,7 +59,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 	var downvote float64
 	for rows.Next() {
 		e = rows.Scan(&upvote, &downvote)
-		if Failed("scan upvote and downvote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "scan upvote and downvote for post ", postId) {
 			continue
 		}
 		count += 1
@@ -86,14 +86,14 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 			WHERE id = %d;
 			`, postId, commentId, postId, updateField, updateField, nowTime, nowTime, commentId)
 		rows, e = db.Query(updateVoteForComment)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 		var updatedAt time.Time
 		var posterId int64
 		for rows.Next() {
 			e = rows.Scan(&posterId, &upvote, &downvote, &updatedAt)
-			if Failed("scan upvote and downvote for post "+fmt.Sprint(postId), e) {
+			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
@@ -102,7 +102,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 		voteAmount = 1 - math.Min(epoch(currentTime)-epoch(updatedAt), 604800.0)/604800.0
 		createPref := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid, %s) VALUES(2, $1, $2, $3)`, userId, updateField)
 		_, e = db.Exec(createPref, postId, commentId, voteAmount)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 	} else if (isUpvote && upvote > 0) || (!isUpvote && downvote > 0) {
@@ -110,7 +110,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 			UPDATE User%dPref SET %s = 0 WHERE kind=2 AND pid=%d AND sid=%d
 			`, userId, updateField, postId, commentId)
 		_, e = db.Exec(updatePref)
-		if Failed("update "+updateField+" for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "update ", updateField, " for post ", postId) {
 			return
 		}
 		if isUpvote {
@@ -123,7 +123,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 			WHERE id = $1
 			`, postId, updateField, updateField, voteAmount)
 		_, e = db.Exec(updateVoteForComment, commentId)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 	} else {
@@ -141,13 +141,13 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 			WHERE id = %d;
 			`, postId, commentId, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, commentId)
 		rows, e = db.Query(updateVoteForComment)
-		if Failed("vote for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 		var updatedAt time.Time
 		for rows.Next() {
 			e = rows.Scan(&upvote, &downvote, &updatedAt)
-			if Failed("scan upvote and downvote for post "+fmt.Sprint(postId), e) {
+			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
@@ -157,7 +157,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 			UPDATE User%dPref SET %s = $1, %s = 0 WHERE kind=2 AND pid=$2 AND sid=$3
 			`, userId, updateField, otherField)
 		_, e = db.Exec(createPref, voteAmount, postId, commentId)
-		if Failed("update "+updateField+" for post "+fmt.Sprint(postId), e) {
+		if DidFail(e, "update ", updateField, " for post ", postId) {
 			return
 		}
 	}

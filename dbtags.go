@@ -26,13 +26,13 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool) {
 	RETURNING id
 	`, tagRows, updatedField, updatedField, nowTime, tagArray)
 	rows, e := db.Query(upsertTags)
-	Failed("insert and update tags", e)
+	DidFail(e, "insert and update tags")
 
 	tagIndices := []int64{}
 	for rows.Next() {
 		var tag int64
 		rows.Scan(&tag)
-		if Failed("read tag index", e) {
+		if DidFail(e, "read tag index") {
 			continue
 		}
 		tagIndices = append(tagIndices, tag)
@@ -47,5 +47,5 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool) {
 	WHERE kind=4 AND pid = ANY(%s)
 	`, userId, tagIndexRows, userId, updatedField, updatedField, tagIndexArray)
 	_, e = db.Exec(upsertUserTags)
-	Failed("insert and update tags", e)
+	DidFail(e, "insert and update tags")
 }

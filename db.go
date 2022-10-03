@@ -18,7 +18,7 @@ func DBSetup(db *sql.DB) {
 		PRIMARY KEY (id)
 	);`
 	_, e := db.Exec(createUsers)
-	Failed("create users table", e)
+	DidFail(e, "create users table")
 
 	createPosts := `CREATE TABLE IF NOT EXISTS posts (
 		id BIGSERIAL,
@@ -33,7 +33,7 @@ func DBSetup(db *sql.DB) {
 		PRIMARY KEY (id)
 	);`
 	_, e = db.Exec(createPosts)
-	Failed("create posts table", e)
+	DidFail(e, "create posts table")
 
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
@@ -45,19 +45,19 @@ func DBSetup(db *sql.DB) {
 		PRIMARY KEY (name)
 	);`
 	_, e = db.Exec(createTags)
-	Failed("create tags table", e)
+	DidFail(e, "create tags table")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {
 	query := fmt.Sprintf(`DROP TABLE %s`, name)
 	_, e := db.Exec(query)
-	Failed("delete table "+name, e)
+	DidFail(e, "delete table ", name)
 }
 
 func DBDeleteAllPosts(db *sql.DB) {
 	query := `SELECT id FROM posts`
 	rows, e := db.Query(query)
-	if Failed("get all posts", e) {
+	if DidFail(e, "get all posts") {
 		return
 	}
 	for rows.Next() {
@@ -71,7 +71,7 @@ func DBDeleteAllPosts(db *sql.DB) {
 func DBDeleteAllUsers(db *sql.DB) {
 	query := `SELECT id FROM users`
 	rows, e := db.Query(query)
-	if Failed("get all posts", e) {
+	if DidFail(e, "get all posts") {
 		return
 	}
 	for rows.Next() {
