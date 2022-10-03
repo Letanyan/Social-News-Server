@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	warn *log.Logger
 	info *log.Logger
 	fail *log.Logger
 )
@@ -20,7 +19,6 @@ func init() {
 		file = os.Stderr
 	}
 	info = log.New(file, "[INFO]: ", log.Ldate|log.Ltime)
-	warn = log.New(file, "[WARNING]: ", log.Ldate|log.Ltime)
 	fail = log.New(file, "[ERROR]: ", log.Ldate|log.Ltime)
 }
 

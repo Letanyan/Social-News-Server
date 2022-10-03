@@ -3,6 +3,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strings"
+	"time"
 )
 
 func DBSetup(db *sql.DB) {
@@ -21,20 +23,25 @@ func DBSetup(db *sql.DB) {
 	_, e := db.Exec(createUsers)
 	DidFail(e, "create users table")
 
-	createPosts := `CREATE TABLE IF NOT EXISTS posts (
-		id BIGSERIAL,
-		userId BIGINT,
-		content TEXT,
-		tags TEXT[],
-		createdAt TIMESTAMP DEFAULT now(),
-		updatedAt TIMESTAMP DEFAULT now(),
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0, 
-
-		PRIMARY KEY (id)
-	);`
-	_, e = db.Exec(createPosts)
-	DidFail(e, "create posts table")
+	year := time.Now().UTC().Year()
+	createPostsTable := func(year int) {
+		createPosts := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS posts%d (
+			id BIGINT,
+			userId BIGINT,
+			content TEXT,
+			tags TEXT[],
+			createdAt TIMESTAMP DEFAULT now(),
+			updatedAt TIMESTAMP DEFAULT now(),
+			upvotes DOUBLE PRECISION DEFAULT 0.0,
+			downvotes DOUBLE PRECISION DEFAULT 0.0, 
+	
+			PRIMARY KEY (id)
+		);`, year)
+		_, e = db.Exec(createPosts)
+		DidFail(e, "create posts table")
+	}
+	createPostsTable(year)
+	createPostsTable(year + 1)
 
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
@@ -74,7 +81,8 @@ func DBDeleteTable(db *sql.DB, name string) {
 }
 
 func DBDeleteAllPosts(db *sql.DB) {
-	query := `SELECT id FROM posts`
+	tables := GetTableNamesLike(db, "posts%")
+	query := BuildUnionForNames(`SELECT id FROM {}`, tables)
 	rows, e := db.Query(query)
 	if DidFail(e, "get all posts") {
 		return
@@ -84,7 +92,9 @@ func DBDeleteAllPosts(db *sql.DB) {
 		rows.Scan(&id)
 		DBDeleteTable(db, fmt.Sprintf("Post%d", id))
 	}
-	DBDeleteTable(db, "posts")
+	for _, name := range tables {
+		DBDeleteTable(db, name)
+	}
 }
 
 func DBDeleteAllUsers(db *sql.DB) {
@@ -100,4 +110,38 @@ func DBDeleteAllUsers(db *sql.DB) {
 		DBDeleteTable(db, fmt.Sprintf("User%dCont", id))
 	}
 	DBDeleteTable(db, "users")
+}
+
+func BuildUnionForYears(query string, years []int64) string {
+	names := []string{}
+	for _, y := range years {
+		names = append(names, fmt.Sprint(y))
+	}
+	return BuildUnionForNames(query, names)
+}
+
+func BuildUnionForNames(query string, names []string) string {
+	result := ""
+	for i, y := range names {
+		result += strings.Replace(query, "{}", fmt.Sprint(y), 1)
+		if i < len(names)-1 {
+			result += "\nunion\n"
+		}
+	}
+	return result
+}
+
+func GetTableNamesLike(db *sql.DB, query string) []string {
+	cmd := fmt.Sprintf("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%s'", query)
+	rows, e := db.Query(cmd)
+	result := []string{}
+	if DidFail(e, "get all table names like ", query) {
+		return result
+	}
+	for rows.Next() {
+		name := ""
+		rows.Scan(&name)
+		result = append(result, name)
+	}
+	return result
 }

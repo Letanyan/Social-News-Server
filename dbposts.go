@@ -9,13 +9,14 @@ import (
 )
 
 func DBCreatePost(db *sql.DB, userId int, content string, tags []string) {
+	t := utc()
 	nowTime := formatNow()
-	insertPost := fmt.Sprintf(`INSERT INTO posts(userId, content, tags, createdAt, updatedAt) 
-	VALUES ($1, $2, %s, '%s', '%s') RETURNING id`, SQLFormattedArray(tags), nowTime, nowTime)
-	row := db.QueryRow(insertPost, userId, content)
-	var postId int64
-	e := row.Scan(&postId)
-	if DidFail(e, "get post ID") {
+	year := t.Year()
+	postId := idFromTime(t)
+	insertPost := fmt.Sprintf(`INSERT INTO posts%d(id, userId, content, tags, createdAt, updatedAt) 
+	VALUES (%d, $1, $2, %s, '%s', '%s')`, year, postId, SQLFormattedArray(tags), nowTime, nowTime)
+	_, e := db.Exec(insertPost, userId, content)
+	if DidFail(e, "create post") {
 		return
 	}
 
@@ -58,14 +59,15 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64) {
 		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
+	year := yearFromId(postId)
 	updateVoteForPost := fmt.Sprintf(`
-		SELECT userId, tags FROM posts WHERE id = %d;
-		UPDATE posts 
+		SELECT userId, tags FROM posts%d WHERE id = %d;
+		UPDATE posts%d 
 		SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 		%s = cooldown(%s, updatedAt, '%s', 31536000),
 		updatedAt = '%s'
 		WHERE id = %d;
-		`, postId, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, postId)
+		`, year, postId, year, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, postId)
 	rows, e := db.Query(updateVoteForPost)
 	if DidFail(e, "vote for post ", postId) {
 		return
@@ -95,8 +97,10 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64) {
 }
 
 func DBDeletePost(db *sql.DB, postId int64) {
-	getUserId := `SELECT userId FROM posts WHERE id=$1`
-	row := db.QueryRow(getUserId, postId)
+	year := yearFromId(postId)
+
+	deleteFromPosts := fmt.Sprintf(`DELETE FROM posts%d WHERE id=$1 RETURNING userId`, year)
+	row := db.QueryRow(deleteFromPosts, postId)
 	var userId int64
 	e := row.Scan(&userId)
 	if !DidFail(e, "get userId for deleting post ", postId) {
@@ -104,12 +108,9 @@ func DBDeletePost(db *sql.DB, postId int64) {
 		_, e = db.Exec(deletePostFromUser, postId)
 		DidFail(e, "delete post ", postId, " for user ", userId)
 	}
-
-	deleteFromPosts := `DELETE FROM posts WHERE id=$1`
-	_, e = db.Exec(deleteFromPosts, postId)
 	DidFail(e, "delete post from posts table")
 
-	deletePostTable := fmt.Sprintf(`DROP TABLE User%dCont`, postId)
+	deletePostTable := fmt.Sprintf(`DROP TABLE Post%d`, postId)
 	_, e = db.Exec(deletePostTable)
 	DidFail(e, "delete post table")
 }
@@ -127,9 +128,8 @@ const (
 
 func DBGetPosts(db *sql.DB, userId int64, tags []string, sortOrder SortOrder, limit int, offset int, startDate string, endDate string) []string {
 	getPosts := fmt.Sprintf(`SELECT id, userId, content, tags, createdAt, cred, upvotes * cred AS score 
-		FROM (SELECT id, userId, content, tags, createdAt, upvotes, COALESCE(upvotes / NULLIF(upvotes + downvotes, 0), 0.0) AS cred FROM posts) compute 
+		FROM (SELECT id, userId, content, tags, createdAt, upvotes, COALESCE(upvotes / NULLIF(upvotes + downvotes, 0), 0.0) AS cred FROM posts{}) compute 
 		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')
-		
 		`, startDate, endDate)
 
 	if len(tags) > 0 {
@@ -137,23 +137,29 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, sortOrder SortOrder, li
 		getPosts += fmt.Sprintf("AND %s && tags\n", queryTags)
 	}
 
+	sDate := parseTime(startDate)
+	eDate := parseTime(endDate)
+	years := yearsBetweenDates(sDate, eDate)
+	postQueries := BuildUnionForYears(getPosts, years)
+
 	switch sortOrder {
 	case soScore:
-		getPosts += "ORDER BY score\n"
+		postQueries += "ORDER BY score\n"
 	case soCred:
-		getPosts += "ORDER BY score\n"
+		postQueries += "ORDER BY score\n"
 	case soUpvotes:
-		getPosts += "ORDER BY score\n"
+		postQueries += "ORDER BY score\n"
 	case soDownvotes:
-		getPosts += "ORDER BY score\n"
+		postQueries += "ORDER BY score\n"
 	case soControversial:
-		getPosts += "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90)\n"
+		postQueries += "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90)\n"
 	case soCreatedAt:
-		getPosts += "ORDER BY createdAt\n"
+		postQueries += "ORDER BY createdAt\n"
 	}
-	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
-	rows, e := db.Query(getPosts)
+	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+
+	rows, e := db.Query(postQueries)
 	if DidFail(e, "get posts") {
 		return []string{}
 	}
