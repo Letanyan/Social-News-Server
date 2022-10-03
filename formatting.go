@@ -16,10 +16,6 @@ func formatNow() string {
 	return formatTime(t)
 }
 
-func epoch(t time.Time) float64 {
-	return float64(t.Unix())
-}
-
 func SQLFormattedArray(array []string) string {
 	result := "'{"
 	for i, s := range array {

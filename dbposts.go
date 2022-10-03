@@ -44,118 +44,53 @@ func DBCreatePost(db *sql.DB, userId int, content string, tags []string) {
 	}
 }
 
-func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
-	getOldVote := fmt.Sprintf(`SELECT upvotes, downvotes FROM User%dPref WHERE kind=3 AND pid=$1`, userId)
-	rows, e := db.Query(getOldVote, postId)
-	if DidFail(e, "get downvote and upvote for post ", postId) {
-		return
-	}
-	count := 0
-	var upvote float64
-	var downvote float64
-	for rows.Next() {
-		e = rows.Scan(&upvote, &downvote)
-		if DidFail(e, "scan upvote and downvote for post ", postId) {
-			continue
-		}
-		count += 1
-	}
-
+func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64) {
 	currentTime := time.Now().UTC()
 	nowTime := formatTime(currentTime)
 	var updateField string
 	var otherField string
-	voteAmount := 0.0
+	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updateField = "upvotes"
 		otherField = "downvotes"
 	} else {
 		updateField = "downvotes"
 		otherField = "upvotes"
+		upvoteAmount = -upvoteAmount
 	}
-	if count == 0 {
-		updateVoteForPost := fmt.Sprintf(`
-			SELECT userId, tags, upvotes, downvotes, updatedAt, date_frac(updatedAt, '%s', 604800) FROM posts WHERE id = %d;
-			UPDATE posts 
-			SET %s = %s + date_frac(updatedAt, '%s', 604800),
-			updatedAt = '%s'
-			WHERE id = %d;
-			`, nowTime, postId, updateField, updateField, nowTime, nowTime, postId)
-		rows, e = db.Query(updateVoteForPost)
-		if DidFail(e, "vote for post ", postId) {
-			return
+	updateVoteForPost := fmt.Sprintf(`
+		SELECT userId, tags FROM posts WHERE id = %d;
+		UPDATE posts 
+		SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
+		%s = cooldown(%s, updatedAt, '%s', 31536000),
+		updatedAt = '%s'
+		WHERE id = %d;
+		`, postId, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, postId)
+	rows, e := db.Query(updateVoteForPost)
+	if DidFail(e, "vote for post ", postId) {
+		return
+	}
+	var tags []string
+	var posterId int64
+	for rows.Next() {
+		e = rows.Scan(&posterId, pq.Array(&tags))
+		if DidFail(e, "scan upvote and downvote for post ", postId) {
+			continue
 		}
-		var updatedAt time.Time
-		var tags []string
-		var posterId int64
-		for rows.Next() {
-			e = rows.Scan(&posterId, pq.Array(&tags), &upvote, &downvote, &updatedAt, &voteAmount)
-			if DidFail(e, "scan upvote and downvote for post ", postId) {
-				continue
-			}
-		}
+	}
 
-		DBVoteTags(db, userId, tags, isUpvote)
-		DBVoteForUser(db, userId, posterId, isUpvote)
-		createPref := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid, %s) VALUES(3, $1, -1, $2)`, userId, updateField)
-		_, e = db.Exec(createPref, postId, voteAmount)
-		if DidFail(e, "vote for post ", postId) {
-			return
-		}
-	} else if (isUpvote && upvote > 0) || (!isUpvote && downvote > 0) {
-		updatePref := fmt.Sprintf(`
-			UPDATE User%dPref SET %s = 0 WHERE kind=3 AND pid=%d
-			`, userId, updateField, postId)
-		_, e = db.Exec(updatePref)
-		if DidFail(e, "update ", updateField, " for post ", postId) {
-			return
-		}
-		if isUpvote {
-			voteAmount = upvote
-		} else {
-			voteAmount = downvote
-		}
-		updateVoteForPost := fmt.Sprintf(`UPDATE posts 
-			SET %s = %s - %f
-			WHERE id = $1
-			`, updateField, updateField, voteAmount)
-		_, e = db.Exec(updateVoteForPost, postId)
-		if DidFail(e, "vote for post ", postId) {
-			return
-		}
-	} else {
-		if isUpvote {
-			voteAmount = downvote
-		} else {
-			voteAmount = upvote
-		}
-		updateVoteForPost := fmt.Sprintf(`
-			SELECT upvotes, downvotes, updatedAt, date_frac(updatedAt, '%s', 604800.0) FROM posts WHERE id = %d;
-			UPDATE posts 
-			SET %s = %s + date_frac(updatedAt, '%s', 604800.0),
-			updatedAt = TIMESTAMP '%s',
-			%s = %s - %f
-			WHERE id = %d;
-			`, nowTime, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, postId)
-		rows, e = db.Query(updateVoteForPost)
-		if DidFail(e, "vote for post ", postId) {
-			return
-		}
-		var updatedAt time.Time
-		for rows.Next() {
-			e = rows.Scan(&upvote, &downvote, &updatedAt, &voteAmount)
-			if DidFail(e, "scan upvote and downvote for post ", postId) {
-				continue
-			}
-		}
-
-		createPref := fmt.Sprintf(`
-			UPDATE User%dPref SET %s = $1, %s = 0 WHERE kind=3 AND pid=$2
-			`, userId, updateField, otherField)
-		_, e = db.Exec(createPref, voteAmount, postId)
-		if DidFail(e, "update ", updateField, " for post ", postId) {
-			return
-		}
+	DBVoteTags(db, userId, tags, isUpvote)
+	DBVoteForUser(db, userId, posterId, isUpvote)
+	createPref := fmt.Sprintf(`
+	INSERT INTO User%dPref (kind, pid, sid) 
+	VALUES(3, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
+	UPDATE User%dPref
+	SET %s = %s + %d
+	WHERE kind=3 AND pid=%d
+	`, userId, postId, userId, updateField, updateField, upvoteAmount, postId)
+	_, e = db.Exec(createPref)
+	if DidFail(e, "vote for post ", postId) {
+		return
 	}
 }
 

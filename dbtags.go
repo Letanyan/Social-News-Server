@@ -13,21 +13,27 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool) {
 	tagRows := SQLFormattedRows(tags, func(s string) string { return "'" + nowTime + "'" })
 	tagArray := SQLFormattedArray(tags)
 	updatedField := ""
+	otherField := ""
 	if isUpvote {
 		updatedField = "upvotes"
+		otherField = "downvotes"
 	} else {
 		updatedField = "downvotes"
+		otherField = "upvotes"
 	}
 	upsertTags := fmt.Sprintf(`INSERT INTO tags (name, updatedAt)
 	VALUES %s ON CONFLICT (name) DO NOTHING;
 	UPDATE tags 
-	SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800.0) / 604800.0,
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + 1,
+	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
 	WHERE name = ANY(%s)
 	RETURNING id
-	`, tagRows, updatedField, updatedField, nowTime, nowTime, tagArray)
+	`, tagRows, updatedField, updatedField, nowTime, otherField, otherField, nowTime, nowTime, tagArray)
 	rows, e := db.Query(upsertTags)
-	DidFail(e, "insert and update tags")
+	if DidFail(e, "insert and update tags") {
+		return
+	}
 
 	tagIndices := []int64{}
 	for rows.Next() {
@@ -44,9 +50,10 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool) {
 	upsertUserTags := fmt.Sprintf(`INSERT INTO User%dPref (pid, sid, kind)
 	VALUES %s ON CONFLICT (kind, pid, sid) DO NOTHING;
 	UPDATE User%dPref 
-	SET %s = %s + 1
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + 1,
+	%s = cooldown(%s, updatedAt, '%s', 31536000)
 	WHERE kind=4 AND pid = ANY(%s)
-	`, userId, tagIndexRows, userId, updatedField, updatedField, tagIndexArray)
+	`, userId, tagIndexRows, userId, updatedField, updatedField, nowTime, otherField, otherField, nowTime, tagIndexArray)
 	_, e = db.Exec(upsertUserTags)
 	DidFail(e, "insert and update tags")
 }

@@ -54,6 +54,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) {
 		sid BIGINT NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		updatedAt TIMESTAMP,
 
 		PRIMARY KEY (kind, pid, sid)
 	);`, userId)
@@ -78,18 +79,34 @@ func DBDeleteUser(db *sql.DB, userId int) {
 }
 
 func DBVoteForUser(db *sql.DB, userId int64, sourceId int64, isUpvote bool) {
+	nowTime := formatNow()
 	updatedField := ""
+	otherField := ""
 	if isUpvote {
 		updatedField = "upvotes"
+		otherField = "downvotes"
 	} else {
 		updatedField = "downvotes"
+		otherField = "upvotes"
 	}
+	updateUser := fmt.Sprintf(`
+	UPDATE users
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + 1,
+	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	updatedAt = '%s'
+	WHERE id = $1
+	RETURNING id
+	`, updatedField, updatedField, nowTime, otherField, otherField, nowTime, nowTime)
+	_, e := db.Query(updateUser, sourceId)
+	DidFail(e, "update user score")
+
 	vote := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid)
 	VALUES (1, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
 	UPDATE User%dPref 
-	SET %s = %s + 1
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + 1,
+	%s = cooldown(%s, updatedAt, '%s', 31536000)
 	WHERE kind=1 AND pid = %d
-	`, userId, sourceId, userId, updatedField, updatedField, sourceId)
-	_, e := db.Query(vote)
+	`, userId, sourceId, userId, updatedField, updatedField, nowTime, otherField, otherField, nowTime, sourceId)
+	_, e = db.Query(vote)
 	DidFail(e, "vote for user")
 }

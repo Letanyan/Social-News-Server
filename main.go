@@ -60,11 +60,10 @@ func main() {
 	// DBCreatePost(db, 1, "Where are we", []string{"lost", "going places"})
 	// DBCreatePost(db, 1, "Returning trip", []string{})
 
-	// DBVotePost(db, 2, 2, true)
-	// DBVotePost(db, 1, 2, true)
-	DBVotePost(db, 1, 4, true)
-	// DBVotePost(db, 1, 4, true)
-	// DBVoteComment(db, 1, 1, 1, true)
+	DBVotePost(db, 1, 2, -2)
+	DBVotePost(db, 1, 4, 2)
+	DBVotePost(db, 1, 4, 2)
+	DBVoteComment(db, 1, 1, 1, 5)
 
 	posts := DBGetPosts(db, 1, []string{}, soCreatedAt, 10, 0, "2022-01-01 00:00:00.00", "2023-01-01 00:00:00.00")
 	for _, p := range posts {

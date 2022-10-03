@@ -9,9 +9,10 @@ func DBSetup(db *sql.DB) {
 	createUsers := `CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL,
 		name VARCHAR(21) NOT NULL,
-		email text NOT NULL,
-		password text NOT NULL,
-		registerDate timestamp DEFAULT now(),
+		email TEXT NOT NULL,
+		password TEXT NOT NULL,
+		registerDate TIMESTAMP DEFAULT now(),
+		updatedAt TIMESTAMP DEFAULT now(),
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 
@@ -23,10 +24,10 @@ func DBSetup(db *sql.DB) {
 	createPosts := `CREATE TABLE IF NOT EXISTS posts (
 		id BIGSERIAL,
 		userId BIGINT,
-		content text,
-		tags text[],
-		createdAt timestamp,
-		updatedAt timestamp,
+		content TEXT,
+		tags TEXT[],
+		createdAt TIMESTAMP DEFAULT now(),
+		updatedAt TIMESTAMP DEFAULT now(),
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0, 
 
@@ -40,7 +41,7 @@ func DBSetup(db *sql.DB) {
 		name TEXT NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP,
+		updatedAt TIMESTAMP DEFAULT now(),
 
 		PRIMARY KEY (name)
 	);`
@@ -48,13 +49,21 @@ func DBSetup(db *sql.DB) {
 	DidFail(e, "create tags table")
 
 	createDateFraction := `
-	CREATE OR REPLACE FUNCTION date_frac(beginDate TIMESTAMP, endDate TIMESTAMP, duration DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	CREATE OR REPLACE FUNCTION dateFrac(beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
 	BEGIN
-		RETURN 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate)), duration) / duration;
+		RETURN LEAST(TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate)), period) / period;
 	END;
-	$$ LANGUAGE plpgsql
-	`
+	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createDateFraction)
+	DidFail(e, "create dateFrac function")
+
+	createCoolingFraction := `
+	CREATE OR REPLACE FUNCTION coolDown(value DOUBLE PRECISION, beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN (1 / (1000 ^ dateFrac(beginDate, endDate, period))) * value;
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createCoolingFraction)
 	DidFail(e, "create dateFrac function")
 }
 
