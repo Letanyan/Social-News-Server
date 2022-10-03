@@ -33,7 +33,8 @@ func DBSetup(db *sql.DB) {
 			createdAt TIMESTAMP DEFAULT now(),
 			updatedAt TIMESTAMP DEFAULT now(),
 			upvotes DOUBLE PRECISION DEFAULT 0.0,
-			downvotes DOUBLE PRECISION DEFAULT 0.0, 
+			downvotes DOUBLE PRECISION DEFAULT 0.0,
+			location TEXT[],
 	
 			PRIMARY KEY (id)
 		);`, year)
@@ -49,8 +50,9 @@ func DBSetup(db *sql.DB) {
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		updatedAt TIMESTAMP DEFAULT now(),
+		location TEXT[] NOT NULL,
 
-		PRIMARY KEY (name)
+		PRIMARY KEY (name, location)
 	);`
 	_, e = db.Exec(createTags)
 	DidFail(e, "create tags table")

@@ -38,6 +38,10 @@ func main() {
 
 	DBSetup(db)
 
+	// loc1 := []string{"Africa", "South Africa", "Gauteng", "Centurion"}
+	// loc2 := []string{"Asia", "Japan", "Tokyo", "Chiyoda"}
+	// loc3 := []string{}
+
 	// createNewUser := func() {
 	// 	name := "Adam"
 	// 	email := "adam@social.com"
@@ -50,25 +54,30 @@ func main() {
 	// }
 	// createNewUser()
 
-	// DBCreatePost(db, 1, "This is a post", []string{})
-	// DBCreatePost(db, 1, "This is another post", []string{})
-	// DBCreatePost(db, 1, "What do you say", []string{})
+	// DBCreatePost(db, 1, "This is a post", []string{}, loc1)
+	// DBCreatePost(db, 1, "This is another post", []string{}, loc3)
+	// DBCreatePost(db, 1, "What do you say", []string{}, loc1)
 
 	// DBCreateComment(db, 1, "This is a comment", 221003162748045645, 0)
 	// DBCreateComment(db, 1, "This is a reply", 221003162748045645, 1)
 
-	// DBCreatePost(db, 1, "Where are we", []string{"lost", "going places"})
-	// DBCreatePost(db, 1, "Returning trip", []string{})
+	// DBCreatePost(db, 1, "Where are we", []string{"lost", "going places"}, loc2)
+	// DBCreatePost(db, 1, "Returning trip", []string{}, loc1)
 
-	// DBVotePost(db, 1, 221003162748013759, -2)
-	// DBVotePost(db, 1, 221003162748045645, 2)
-	// DBVotePost(db, 1, 221003162748045645, 2)
-	// DBVoteComment(db, 1, 221003162748045645, 1, 5)
+	// DBVotePost(db, 1, 221003194241748012, -2, loc1)
+	// DBVotePost(db, 1, 221003194241787611, 2, loc2)
+	// DBVotePost(db, 1, 221003194241787611, 2, loc3)
+	// DBVoteComment(db, 1, 221003194241748012, 1, 5)
 
-	posts := DBGetPosts(db, 1, []string{}, soCreatedAt, 10, 0, "2022-01-01 00:00:00.00", "2023-01-01 00:00:00.00")
+	posts := DBGetPosts(db, 1, []string{}, []string{"Africa"}, soCreatedAt, 10, 0, "2022-01-01 00:00:00.00", "2023-01-01 00:00:00.00")
 	for _, p := range posts {
 		log.Println(p)
 	}
+
+	// tags := DBGetTags(db, []string{}, []string{}, soUpvotes, 10, 0)
+	// for _, t := range tags {
+	// 	log.Println(t)
+	// }
 
 	port := os.Getenv("PORT")
 	if port == "" {
