@@ -52,8 +52,8 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) {
 		kind SMALLINT NOT NULL,
 		pid BIGINT NOT NULL,
 		sid BIGINT NOT NULL,
-		upvotes REAL DEFAULT 0.0,
-		downvotes REAL DEFAULT 0.0,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
 
 		PRIMARY KEY (kind, pid, sid)
 	);`, userId)

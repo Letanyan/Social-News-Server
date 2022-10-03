@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/lib/pq"
@@ -31,8 +30,8 @@ func DBCreatePost(db *sql.DB, userId int, content string, tags []string) {
 		userId BIGINT,
 		replyId BIGINT,
 		content text,
-		upvotes real DEFAULT 0.0,
-		downvotes real DEFAULT 0.0,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		createdAt timestamp,
 		updatedAt timestamp,
 
@@ -76,12 +75,12 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 	}
 	if count == 0 {
 		updateVoteForPost := fmt.Sprintf(`
-			SELECT userId, tags, upvotes, downvotes, updatedAt FROM posts WHERE id = %d;
+			SELECT userId, tags, upvotes, downvotes, updatedAt, date_frac(updatedAt, '%s', 604800) FROM posts WHERE id = %d;
 			UPDATE posts 
-			SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800) / 604800,
+			SET %s = %s + date_frac(updatedAt, '%s', 604800),
 			updatedAt = '%s'
 			WHERE id = %d;
-			`, postId, updateField, updateField, nowTime, nowTime, postId)
+			`, nowTime, postId, updateField, updateField, nowTime, nowTime, postId)
 		rows, e = db.Query(updateVoteForPost)
 		if DidFail(e, "vote for post ", postId) {
 			return
@@ -90,7 +89,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 		var tags []string
 		var posterId int64
 		for rows.Next() {
-			e = rows.Scan(&posterId, pq.Array(&tags), &upvote, &downvote, &updatedAt)
+			e = rows.Scan(&posterId, pq.Array(&tags), &upvote, &downvote, &updatedAt, &voteAmount)
 			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
@@ -98,7 +97,6 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 
 		DBVoteTags(db, userId, tags, isUpvote)
 		DBVoteForUser(db, userId, posterId, isUpvote)
-		voteAmount = 1 - math.Min(epoch(currentTime)-epoch(updatedAt), 604800.0)/604800.0
 		createPref := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid, %s) VALUES(3, $1, -1, $2)`, userId, updateField)
 		_, e = db.Exec(createPref, postId, voteAmount)
 		if DidFail(e, "vote for post ", postId) {
@@ -132,26 +130,25 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, isUpvote bool) {
 			voteAmount = upvote
 		}
 		updateVoteForPost := fmt.Sprintf(`
-			SELECT upvotes, downvotes, updatedAt FROM posts WHERE id = %d;
+			SELECT upvotes, downvotes, updatedAt, date_frac(updatedAt, '%s', 604800.0) FROM posts WHERE id = %d;
 			UPDATE posts 
-			SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800.0) / 604800.0,
+			SET %s = %s + date_frac(updatedAt, '%s', 604800.0),
 			updatedAt = TIMESTAMP '%s',
 			%s = %s - %f
 			WHERE id = %d;
-			`, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, postId)
+			`, nowTime, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, postId)
 		rows, e = db.Query(updateVoteForPost)
 		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 		var updatedAt time.Time
 		for rows.Next() {
-			e = rows.Scan(&upvote, &downvote, &updatedAt)
+			e = rows.Scan(&upvote, &downvote, &updatedAt, &voteAmount)
 			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
 
-		voteAmount = 1.0 - math.Min(epoch(currentTime)-epoch(updatedAt), 604800.0)/604800.0
 		createPref := fmt.Sprintf(`
 			UPDATE User%dPref SET %s = $1, %s = 0 WHERE kind=3 AND pid=$2
 			`, userId, updateField, otherField)
@@ -194,20 +191,6 @@ const (
 )
 
 func DBGetPosts(db *sql.DB, userId int64, tags []string, sortOrder SortOrder, limit int, offset int, startDate string, endDate string) []string {
-	// id BIGSERIAL,
-	// userId BIGINT,
-	// content text,
-	// tags text[],
-	// createdAt timestamp,
-	// updatedAt timestamp,
-	// upvotes real DEFAULT 0.0,
-	// downvotes real DEFAULT 0.0,
-	// PRIMARY KEY (id)
-
-	// let xs = user tag and source values
-	// Select all post in date range
-	// Sort posts by h(f(upvotes, downvotes), g(xs, post.tags | post.source))
-
 	getPosts := fmt.Sprintf(`SELECT id, userId, content, tags, createdAt, cred, upvotes * cred AS score 
 		FROM (SELECT id, userId, content, tags, createdAt, upvotes, COALESCE(upvotes / NULLIF(upvotes + downvotes, 0), 0.0) AS cred FROM posts) compute 
 		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')

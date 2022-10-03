@@ -12,8 +12,8 @@ func DBSetup(db *sql.DB) {
 		email text NOT NULL,
 		password text NOT NULL,
 		registerDate timestamp DEFAULT now(),
-		upvotes real DEFAULT 0.0,
-		downvotes real DEFAULT 0.0,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
 
 		PRIMARY KEY (id)
 	);`
@@ -27,8 +27,8 @@ func DBSetup(db *sql.DB) {
 		tags text[],
 		createdAt timestamp,
 		updatedAt timestamp,
-		upvotes real DEFAULT 0.0,
-		downvotes real DEFAULT 0.0, 
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0, 
 
 		PRIMARY KEY (id)
 	);`
@@ -38,14 +38,24 @@ func DBSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
-		upvotes REAL DEFAULT 0.0,
-		downvotes REAL DEFAULT 0.0,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		updatedAt TIMESTAMP,
 
 		PRIMARY KEY (name)
 	);`
 	_, e = db.Exec(createTags)
 	DidFail(e, "create tags table")
+
+	createDateFraction := `
+	CREATE OR REPLACE FUNCTION date_frac(beginDate TIMESTAMP, endDate TIMESTAMP, duration DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate)), duration) / duration;
+	END;
+	$$ LANGUAGE plpgsql
+	`
+	_, e = db.Exec(createDateFraction)
+	DidFail(e, "create dateFrac function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

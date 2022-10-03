@@ -21,10 +21,11 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool) {
 	upsertTags := fmt.Sprintf(`INSERT INTO tags (name, updatedAt)
 	VALUES %s ON CONFLICT (name) DO NOTHING;
 	UPDATE tags 
-	SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800.0) / 604800.0
+	SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800.0) / 604800.0,
+	updatedAt = '%s'
 	WHERE name = ANY(%s)
 	RETURNING id
-	`, tagRows, updatedField, updatedField, nowTime, tagArray)
+	`, tagRows, updatedField, updatedField, nowTime, nowTime, tagArray)
 	rows, e := db.Query(upsertTags)
 	DidFail(e, "insert and update tags")
 

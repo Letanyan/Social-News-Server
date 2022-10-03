@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"math"
 	"time"
 )
 
@@ -79,12 +78,12 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 	}
 	if count == 0 {
 		updateVoteForComment := fmt.Sprintf(`
-			SELECT userId, upvotes, downvotes, updatedAt FROM post%d WHERE id = %d;
+			SELECT userId, upvotes, downvotes, updatedAt, date_frac(updatedAt, '%s', 604800.0) FROM post%d WHERE id = %d;
 			UPDATE post%d
-			SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800) / 604800,
+			SET %s = %s + date_frac(updatedAt, '%s', 604800.0),
 			updatedAt = '%s'
 			WHERE id = %d;
-			`, postId, commentId, postId, updateField, updateField, nowTime, nowTime, commentId)
+			`, nowTime, postId, commentId, postId, updateField, updateField, nowTime, nowTime, commentId)
 		rows, e = db.Query(updateVoteForComment)
 		if DidFail(e, "vote for post ", postId) {
 			return
@@ -92,14 +91,13 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 		var updatedAt time.Time
 		var posterId int64
 		for rows.Next() {
-			e = rows.Scan(&posterId, &upvote, &downvote, &updatedAt)
+			e = rows.Scan(&posterId, &upvote, &downvote, &updatedAt, &voteAmount)
 			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
 
 		DBVoteForUser(db, userId, posterId, isUpvote)
-		voteAmount = 1 - math.Min(epoch(currentTime)-epoch(updatedAt), 604800.0)/604800.0
 		createPref := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid, %s) VALUES(2, $1, $2, $3)`, userId, updateField)
 		_, e = db.Exec(createPref, postId, commentId, voteAmount)
 		if DidFail(e, "vote for post ", postId) {
@@ -133,26 +131,25 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, isUp
 			voteAmount = upvote
 		}
 		updateVoteForComment := fmt.Sprintf(`
-			SELECT upvotes, downvotes, updatedAt FROM post%d WHERE id = %d;
+			SELECT upvotes, downvotes, updatedAt, date_frac(updatedAt, '%s', 604800.0) FROM post%d WHERE id = %d;
 			UPDATE post%d
-			SET %s = %s + 1 - LEAST(TRUNC(EXTRACT(EPOCH FROM TIMESTAMP '%s')) - TRUNC(EXTRACT(EPOCH FROM updatedAt)), 604800.0) / 604800.0,
+			SET %s = %s + date_frac(updatedAt, '%s', 604800.0),
 			updatedAt = TIMESTAMP '%s',
 			%s = %s - %f
 			WHERE id = %d;
-			`, postId, commentId, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, commentId)
+			`, nowTime, postId, commentId, postId, updateField, updateField, nowTime, nowTime, otherField, otherField, voteAmount, commentId)
 		rows, e = db.Query(updateVoteForComment)
 		if DidFail(e, "vote for post ", postId) {
 			return
 		}
 		var updatedAt time.Time
 		for rows.Next() {
-			e = rows.Scan(&upvote, &downvote, &updatedAt)
+			e = rows.Scan(&upvote, &downvote, &updatedAt, &voteAmount)
 			if DidFail(e, "scan upvote and downvote for post ", postId) {
 				continue
 			}
 		}
 
-		voteAmount = 1.0 - math.Min(epoch(currentTime)-epoch(updatedAt), 604800.0)/604800.0
 		createPref := fmt.Sprintf(`
 			UPDATE User%dPref SET %s = $1, %s = 0 WHERE kind=2 AND pid=$2 AND sid=$3
 			`, userId, updateField, otherField)
