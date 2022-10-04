@@ -3,18 +3,21 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"math/rand"
+	"net/smtp"
 	"time"
 )
 
 type User struct {
-	id           int64
-	name         string
-	email        string
-	password     string
-	registerDate time.Time
-	updatedAt    time.Time
-	upvotes      float64
-	downvotes    float64
+	id            int64
+	name          string
+	email         string
+	password      string
+	registerDate  time.Time
+	updatedAt     time.Time
+	upvotes       float64
+	downvotes     float64
+	validationKey int64
 }
 
 func DBVerifyUserName(name string) bool {
@@ -34,15 +37,17 @@ func DBHashPassword(password string) string {
 }
 
 func DBCreateUser(db *sql.DB, name string, email string, password string) User {
-	insertUser := `INSERT INTO users(name, email, password) 
-	VALUES ($1, $2, $3) RETURNING id, name, email, password, registerDate, updatedAt, upvotes, downvotes`
-	row := db.QueryRow(insertUser, name, email, password)
+	insertUser := `INSERT INTO users(name, email, password, validationKey) 
+	VALUES ($1, $2, $3, $4) RETURNING id, name, email, password, registerDate, updatedAt, upvotes, downvotes, validationKey`
+	rand.Seed(utc().UnixNano())
+	vKey := rand.Int63()
+	row := db.QueryRow(insertUser, name, email, password, vKey)
 	var userId int64
 	var reg time.Time
 	var upt time.Time
 	var upv float64
 	var dwn float64
-	e := row.Scan(&userId, &name, &email, &password, &reg, &upt, &upv, &dwn)
+	e := row.Scan(&userId, &name, &email, &password, &reg, &upt, &upv, &dwn, &vKey)
 	if DidFail(e, "create and get user") {
 		return User{}
 	}
@@ -74,7 +79,32 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 		return User{}
 	}
 
-	return User{userId, name, email, password, reg, upt, upv, dwn}
+	return User{userId, name, email, password, reg, upt, upv, dwn, vKey}
+}
+
+func DBValidateUser(db *sql.DB, userId int64, key int64) bool {
+	validate := `UPDATE users SET validationKey = 0 WHERE id = $1 AND validationKey = $2 RETURNING id, validationKey`
+	row := db.QueryRow(validate, userId, key)
+	e := row.Scan(&userId, &key)
+	if DidFail(e, "validate user ", userId, " with key ", key) {
+		return false
+	}
+	return key == 0
+}
+
+func SendValidationKey(userId int64, email string, key int64) {
+	host := "smtp.gmail.com"
+	port := "587"
+	from := "from email goes here"
+	auth := smtp.PlainAuth("", from, "password for the from email", host)
+	mess := fmt.Sprintf("to verify your email please click the link https://localhost:8080/verify?id=%d&key=%d", userId, key)
+	message := []byte(mess)
+
+	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, message)
+
+	if DidFail(e, "send mail") {
+		return
+	}
 }
 
 func DBDeleteUser(db *sql.DB, userId int64) {
@@ -93,7 +123,7 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 
 // ignore email if userId > 0
 func DBGetUser(db *sql.DB, userId int64, email string) User {
-	getUser := `SELECT id, name, email, password, registerDate, updatedAt, upvotes, downvotes FROM users WHERE `
+	getUser := `SELECT id, name, email, password, registerDate, updatedAt, upvotes, downvotes, validationKey FROM users WHERE `
 	arg := ""
 	if userId > 0 {
 		arg = fmt.Sprint(userId)
@@ -109,12 +139,13 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	var upt time.Time
 	var upv float64
 	var dwn float64
-	e := row.Scan(&userId, &name, &email, &password, &reg, &upt, &upv, &dwn)
+	var vKey int64
+	e := row.Scan(&userId, &name, &email, &password, &reg, &upt, &upv, &dwn, &vKey)
 	if DidFail(e, "get user from email/id", arg) {
 		return User{}
 	}
 
-	return User{userId, name, email, password, reg, upt, upv, dwn}
+	return User{userId, name, email, password, reg, upt, upv, dwn, vKey}
 }
 
 func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
@@ -144,7 +175,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
 	WHERE id = $1
-	RETURNING id, name, email, password, registerDate, updatedAt, upvotes, downvotes
+	RETURNING id, name, email, password, registerDate, updatedAt, upvotes, downvotes, validationKey
 	`, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime)
 	row := db.QueryRow(updateUser, targetId)
 	name := ""
@@ -154,7 +185,8 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	var upt time.Time
 	var upv float64
 	var dwn float64
-	e := row.Scan(&targetId, &name, &email, &password, &reg, &upt, &upv, &dwn)
+	var vKey int64
+	e := row.Scan(&targetId, &name, &email, &password, &reg, &upt, &upv, &dwn, &vKey)
 	DidFail(e, "update user score", targetId)
 
 	vote := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid)
@@ -169,7 +201,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	pref, e := ScanUserPrefRow(row, false)
 	DidFail(e, "vote for user")
 
-	user := User{targetId, name, email, password, reg, upt, upv, dwn}
+	user := User{targetId, name, email, password, reg, upt, upv, dwn, vKey}
 
 	return user, pref
 }

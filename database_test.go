@@ -54,6 +54,7 @@ func TestDatabase(t *testing.T) {
 	users := []User{}
 	for _, tc := range usersTC {
 		user := DBCreateUser(db, tc.name, tc.email, tc.password)
+		DBValidateUser(db, user.id, user.validationKey)
 		users = append(users, user)
 	}
 	for _, source := range users {
@@ -63,6 +64,10 @@ func TestDatabase(t *testing.T) {
 			matchUsers("id matched user", source, user1)
 			user2 := DBGetUser(db, 0, source.email)
 			matchUsers("email matched user", source, user2)
+
+			if user1.validationKey != 0 {
+				t.Errorf("user validation failed")
+			}
 
 			newPassword := users[rand.Intn(len(users))].password
 			DBUpdatePasswordForUser(db, source.id, source.password, newPassword)

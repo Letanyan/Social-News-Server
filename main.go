@@ -72,10 +72,10 @@ func main() {
 	// 	log.Println(p)
 	// }
 
-	prefs := DBGetUserPref(db, 1, soScore, upPost, 0, 0, 10, 0)
-	for _, p := range prefs {
-		log.Printf("%v\n", p)
-	}
+	// prefs := DBGetUserPref(db, 1, soScore, upPost, 0, 0, 10, 0)
+	// for _, p := range prefs {
+	// 	log.Printf("%v\n", p)
+	// }
 
 	// tags := DBGetTags(db, []string{}, []string{}, soUpvotes, 10, 0)
 	// for _, t := range tags {

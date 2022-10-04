@@ -17,6 +17,7 @@ func DBSetup(db *sql.DB) {
 		updatedAt TIMESTAMP DEFAULT now(),
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		validationKey BIGINT NOT NULL,
 
 		PRIMARY KEY (id)
 	);`
