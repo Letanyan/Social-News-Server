@@ -22,6 +22,14 @@ func formatNow() string {
 	return formatTime(t)
 }
 
+func sign(t bool) int64 {
+	if t {
+		return 1
+	} else {
+		return -1
+	}
+}
+
 func SQLFormattedArray(array []string) string {
 	result := "'{"
 	for i, s := range array {

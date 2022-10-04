@@ -30,7 +30,7 @@ func DidFail(e error, message ...interface{}) bool {
 		fail.Println(s)
 		return true
 	} else {
-		info.Println(message...)
+		// info.Println(message...)
 		return false
 	}
 }

@@ -74,6 +74,15 @@ func DBSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createCoolingFraction)
 	DidFail(e, "create dateFrac function")
+
+	createRatio := `
+	CREATE OR REPLACE FUNCTION ratio(x DOUBLE PRECISION, y DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN COALESCE(x / NULLIF(x + y, 0), 0.0);
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createRatio)
+	DidFail(e, "create ratio function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {
@@ -112,6 +121,12 @@ func DBDeleteAllUsers(db *sql.DB) {
 		DBDeleteTable(db, fmt.Sprintf("User%dCont", id))
 	}
 	DBDeleteTable(db, "users")
+}
+
+func DBClearAllTables(db *sql.DB) {
+	DBDeleteAllPosts(db)
+	DBDeleteAllUsers(db)
+	DBDeleteTable(db, "tags")
 }
 
 func BuildUnionForYears(query string, years []int64) string {

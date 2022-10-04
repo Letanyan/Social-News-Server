@@ -32,9 +32,7 @@ func main() {
 	db, _ := sql.Open("postgres", conn)
 	defer db.Close()
 
-	// DBDeleteAllPosts(db)
-	// DBDeleteAllUsers(db)
-	// DBDeleteTable(db, "tags")
+	// DBClearAllTables(db)
 
 	DBSetup(db)
 
@@ -69,9 +67,14 @@ func main() {
 	// DBVotePost(db, 1, 221003194241787611, 2, loc3)
 	// DBVoteComment(db, 1, 221003194241748012, 1, 5)
 
-	posts := DBGetPosts(db, 1, []string{}, []string{"Africa"}, soCreatedAt, 10, 0, "2022-01-01 00:00:00.00", "2023-01-01 00:00:00.00")
-	for _, p := range posts {
-		log.Println(p)
+	// posts := DBGetPosts(db, 1, []string{}, []string{"Africa"}, soCreatedAt, 10, 0, "2022-01-01 00:00:00.00", "2023-01-01 00:00:00.00")
+	// for _, p := range posts {
+	// 	log.Println(p)
+	// }
+
+	prefs := DBGetUserPref(db, 1, soScore, upPost, 0, 0, 10, 0)
+	for _, p := range prefs {
+		log.Printf("%v\n", p)
 	}
 
 	// tags := DBGetTags(db, []string{}, []string{}, soUpvotes, 10, 0)

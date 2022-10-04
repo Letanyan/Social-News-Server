@@ -8,22 +8,41 @@ import (
 	"github.com/lib/pq"
 )
 
-func DBCreatePost(db *sql.DB, userId int, content string, tags []string, location []string) {
+type Post struct {
+	id        int64
+	userId    int64
+	content   string
+	tags      []string
+	createdAt time.Time
+	updatedAt time.Time
+	location  []string
+	upvotes   float64
+	downvotes float64
+}
+
+func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, location []string) Post {
 	t := utc()
 	nowTime := formatNow()
 	year := t.Year()
 	postId := idFromTime(t)
 	insertPost := fmt.Sprintf(`INSERT INTO posts%d(id, userId, content, tags, createdAt, updatedAt, location) 
-	VALUES (%d, $1, $2, %s, '%s', '%s', %s)`, year, postId, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location))
-	_, e := db.Exec(insertPost, userId, content)
+	VALUES (%d, $1, $2, %s, '%s', '%s', %s) RETURNING id, userId, content, tags, createdAt, updatedAt, location, upvotes, downvotes`, year, postId, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location))
+	row := db.QueryRow(insertPost, userId, content)
+
+	var id int64
+	var createdAt time.Time
+	var updatedAt time.Time
+	var up float64
+	var down float64
+	e := row.Scan(&id, &userId, &content, pq.Array(&tags), &createdAt, &updatedAt, pq.Array(&location), &up, &down)
 	if DidFail(e, "create post") {
-		return
+		return Post{}
 	}
 
 	insertPostForUser := fmt.Sprintf(`INSERT INTO User%dCont(postId, commentId) VALUES(%d, -1)`, userId, postId)
 	_, e = db.Exec(insertPostForUser)
 	if DidFail(e, "insert post to user") {
-		return
+		return Post{}
 	}
 
 	createPostTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Post%d (
@@ -41,13 +60,15 @@ func DBCreatePost(db *sql.DB, userId int, content string, tags []string, locatio
 
 	_, e = db.Exec(createPostTable)
 	if DidFail(e, "create post table for user ", postId) {
-		return
+		return Post{}
 	}
 
 	DBCreateTags(db, tags, location)
+
+	return Post{id, userId, content, tags, createdAt, updatedAt, location, up, down}
 }
 
-func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) {
+func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) (Post, User, []Tag, []UserPref) {
 	currentTime := time.Now().UTC()
 	nowTime := formatTime(currentTime)
 	var updateField string
@@ -63,39 +84,54 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	}
 	year := yearFromId(postId)
 	updateVoteForPost := fmt.Sprintf(`
-		SELECT userId, tags FROM posts%d WHERE id = %d;
 		UPDATE posts%d 
 		SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 		%s = cooldown(%s, updatedAt, '%s', 31536000),
 		updatedAt = '%s'
-		WHERE id = %d;
-		`, year, postId, year, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, postId)
+		WHERE id = %d
+		RETURNING id, userId, content, tags, createdAt, updatedAt, location, upvotes, downvotes
+		`, year, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, postId)
 	rows, e := db.Query(updateVoteForPost)
 	if DidFail(e, "vote for post ", postId) {
-		return
+		return Post{}, User{}, []Tag{}, []UserPref{}
 	}
-	var tags []string
 	var posterId int64
+	var content string
+	var tags []string
+	var createdAt time.Time
+	var updatedAt time.Time
+	var loc []string
+	var up float64
+	var down float64
 	for rows.Next() {
-		e = rows.Scan(&posterId, pq.Array(&tags))
+		e = rows.Scan(&postId, &posterId, &content, pq.Array(&tags), &createdAt, &updatedAt, pq.Array(&loc), &up, &down)
 		if DidFail(e, "scan upvote and downvote for post ", postId) {
 			continue
 		}
 	}
 
-	DBVoteTags(db, userId, tags, isUpvote, location)
-	DBVoteForUser(db, userId, posterId, isUpvote)
+	tagResult, tagPrefs := DBVoteTags(db, userId, tags, isUpvote, location)
+	user, userPref := DBVoteForUser(db, userId, posterId, upvoteAmount*sign(isUpvote))
 	createPref := fmt.Sprintf(`
 	INSERT INTO User%dPref (kind, pid, sid) 
 	VALUES(3, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
 	UPDATE User%dPref
-	SET %s = %s + %d
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
+	%s = cooldown(%s, updatedAt, '%s', 31536000)
 	WHERE kind=3 AND pid=%d
-	`, userId, postId, userId, updateField, updateField, upvoteAmount, postId)
-	_, e = db.Exec(createPref)
+	RETURNING kind, pid, sid, upvotes, downvotes
+	`, userId, postId, userId, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, postId)
+	row := db.QueryRow(createPref)
+	userPrefForPost, e := ScanUserPrefRow(row, false)
 	if DidFail(e, "vote for post ", postId) {
-		return
+		return Post{}, User{}, []Tag{}, []UserPref{}
 	}
+
+	post := Post{postId, posterId, content, tags, createdAt, updatedAt, loc, up, down}
+	prefs := []UserPref{userPref, userPrefForPost}
+	prefs = append(prefs, tagPrefs...)
+
+	return post, user, tagResult, prefs
 }
 
 func DBDeletePost(db *sql.DB, postId int64) {
@@ -128,12 +164,37 @@ const (
 	soCreatedAt
 )
 
-func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, sortOrder SortOrder, limit int, offset int, startDate string, endDate string) []string {
-	getPosts := fmt.Sprintf(`SELECT id, userId, content, tags, location, createdAt, upvotes, downvotes, cred, upvotes * cred AS score 
-		FROM (SELECT id, userId, content, tags, location, createdAt, upvotes, downvotes, COALESCE(upvotes / NULLIF(upvotes + downvotes, 0), 0.0) AS cred FROM posts{}) compute 
+func SQLSortOrder(so SortOrder) string {
+	switch so {
+	case soScore:
+		return "ORDER BY score DESC\n"
+	case soCred:
+		return "ORDER BY score DESC\n"
+	case soUpvotes:
+		return "ORDER BY score DESC\n"
+	case soDownvotes:
+		return "ORDER BY score DESC\n"
+	case soControversial:
+		return "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
+	case soCreatedAt:
+		return "ORDER BY createdAt DESC\n"
+	}
+	return ""
+}
+
+// ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
+func DBGetPosts(db *sql.DB, userId int64, id int64, tags []string, location []string, sortOrder SortOrder, limit int, offset int, startDate string, endDate string) []Post {
+	getPosts := fmt.Sprintf(`SELECT id, userId, content, tags, location, createdAt, updatedAt, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
+		FROM posts{} 
 		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')
 		`, startDate, endDate)
 
+	if id != 0 {
+		getPosts += fmt.Sprintf("AND id = %d\n", id)
+	}
+	if userId != 0 {
+		getPosts += fmt.Sprintf("AND userId = %d\n", userId)
+	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
 		getPosts += fmt.Sprintf("AND %s && tags\n", queryTags)
@@ -148,30 +209,17 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, sort
 	years := yearsBetweenDates(sDate, eDate)
 	postQueries := BuildUnionForYears(getPosts, years)
 
-	switch sortOrder {
-	case soScore:
-		postQueries += "ORDER BY score DESC\n"
-	case soCred:
-		postQueries += "ORDER BY score DESC\n"
-	case soUpvotes:
-		postQueries += "ORDER BY score DESC\n"
-	case soDownvotes:
-		postQueries += "ORDER BY score DESC\n"
-	case soControversial:
-		postQueries += "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
-	case soCreatedAt:
-		postQueries += "ORDER BY createdAt DESC\n"
-	}
+	postQueries += SQLSortOrder(sortOrder)
 
 	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(postQueries)
 	if DidFail(e, "get posts") {
-		return []string{}
+		return []Post{}
 	}
 	defer rows.Close()
 
-	result := []string{}
+	result := []Post{}
 	for rows.Next() {
 		var id int64
 		var userId int64
@@ -179,17 +227,18 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, sort
 		var tags []string
 		var loc []string
 		var createdAt time.Time
+		var updatedAt time.Time
 		var upvotes float64
 		var downvotes float64
 		var cred float64
 		var score float64
 
-		e = rows.Scan(&id, &userId, &content, pq.Array(&tags), pq.Array(&loc), &createdAt, &upvotes, &downvotes, &cred, &score)
+		e = rows.Scan(&id, &userId, &content, pq.Array(&tags), pq.Array(&loc), &createdAt, &updatedAt, &upvotes, &downvotes, &cred, &score)
 		if DidFail(e, "read row") {
 			continue
 		}
-
-		result = append(result, fmt.Sprint(id, "][", userId, "][", content, "][", createdAt, "][", cred, "][", score, "]", fmt.Sprintf("%v", loc)))
+		post := Post{id, userId, content, tags, createdAt, updatedAt, location, upvotes, downvotes}
+		result = append(result, post)
 	}
 
 	return result

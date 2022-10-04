@@ -81,7 +81,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 		}
 	}
 
-	DBVoteForUser(db, userId, posterId, isUpvote)
+	DBVoteForUser(db, userId, posterId, upvoteAmount*sign(isUpvote))
 	createPref := fmt.Sprintf(`
 	INSERT INTO User%dPref (kind, pid, sid) 
 	VALUES(2, %d, %d) ON CONFLICT (kind, pid, sid) DO NOTHING;
