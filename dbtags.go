@@ -9,12 +9,12 @@ import (
 )
 
 type Tag struct {
-	id        int64
-	name      string
-	updatedAt time.Time
-	location  []string
-	upvotes   float64
-	downvotes float64
+	ID        int64
+	Name      string
+	UpdatedAt time.Time
+	Location  []string
+	Upvotes   float64
+	Downvotes float64
 }
 
 func DBCreateTags(db *sql.DB, tags []string, location []string) {
@@ -73,7 +73,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool, location
 
 	tagIndices := []int64{}
 	for _, tag := range tagResult {
-		tagIndices = append(tagIndices, tag.id)
+		tagIndices = append(tagIndices, tag.ID)
 	}
 
 	tagIndexRows := SQLFormattedIndexRows(tagIndices, func(i int64) string { return "-1, 4" })
@@ -99,39 +99,73 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool, location
 	return tagResult, tagPrefs
 }
 
-func DBGetTags(db *sql.DB, tags []string, location []string, sortOrder SortOrder, limit int, offset int) []Tag {
-	getTags := `SELECT id, name, location, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
+func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []Tag {
+	getTags := `SELECT id, name, updatedAt, location, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
 	FROM tags 
 	`
-	tagClause := ""
-	if len(tags) > 0 {
-		tagArray := SQLFormattedArray(tags)
-		tagClause = fmt.Sprintf("ARRAY[name] <@ %s", tagArray)
+
+	if id != 0 {
+		getTags += fmt.Sprintf("WHERE id = %d\n", id)
+	} else {
+		tagClause := ""
+		if len(tags) > 0 {
+			tagArray := SQLFormattedArray(tags)
+			tagClause = fmt.Sprintf("ARRAY[name] <@ %s", tagArray)
+		}
+		locClause := ""
+		if len(location) > 0 {
+			locArray := SQLFormattedArray(location)
+			locClause = fmt.Sprintf("location @> %s", locArray)
+		}
+		setCondition := ""
+		if len(tagClause) > 0 && len(locClause) > 0 {
+			setCondition = tagClause + " AND " + locClause
+		} else if len(tagClause) > 0 {
+			setCondition = tagClause
+		} else if len(locClause) > 0 {
+			setCondition = locClause
+		}
+
+		upClause := ""
+		if upvotes > 0 {
+			upClause = fmt.Sprintf("upvotes > %d", upvotes)
+		} else if upvotes < 0 {
+			upClause = fmt.Sprintf("upvotes < %d", -upvotes)
+		}
+		downClause := ""
+		if downvotes > 0 {
+			downClause = fmt.Sprintf("downvotes > %d", downvotes)
+		} else if upvotes < 0 {
+			downClause = fmt.Sprintf("downvotes < %d", -downvotes)
+		}
+		voteCondition := ""
+		if len(upClause) > 0 && len(downClause) > 0 {
+			voteCondition = upClause + " AND " + downClause
+		} else if len(upClause) > 0 {
+			voteCondition = upClause
+		} else if len(downClause) > 0 {
+			voteCondition = downClause
+		}
+
+		condition := ""
+		if len(voteCondition) > 0 && len(setCondition) > 0 {
+			condition = voteCondition + " AND " + setCondition
+		} else if len(voteCondition) > 0 {
+			condition = voteCondition
+		} else if len(setCondition) > 0 {
+			condition = setCondition
+		}
+
+		if len(condition) > 0 {
+			getTags += "WHERE " + condition + "\n"
+		}
+	}
+	if id != 0 {
+		getTags += SQLSortOrder(sortOrder)
+		getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 	}
 
-	locClause := ""
-	if len(location) > 0 {
-		locArray := SQLFormattedArray(location)
-		locClause = fmt.Sprintf("location @> %s", locArray)
-	}
-
-	condition := ""
-	if len(tagClause) > 0 && len(locClause) > 0 {
-		condition = tagClause + " AND " + locClause
-	} else if len(tagClause) > 0 {
-		condition = tagClause
-	} else if len(locClause) > 0 {
-		condition = locClause
-	}
-
-	if len(condition) > 0 {
-		getTags += "WHERE " + condition + "\n"
-	}
-
-	getTags += SQLSortOrder(sortOrder)
-
-	getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
-
+	fmt.Println(getTags)
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags") {
 		return []Tag{}

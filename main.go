@@ -22,19 +22,48 @@ const (
 	dbname   = "socialnewsserverdev"
 )
 
+var (
+	mainDB *sql.DB
+)
+
 func main() {
 	router := gin.Default()
 	router.GET("/", index)
-	router.GET("/albums", getAlbums)
+
+	api := router.Group("/api")
+	v1 := api.Group("/v1")
+	{
+		// Create
+		v1.POST("/users", APICreateUser)
+		v1.POST("/posts", APICreatePost)
+		// Delete
+		v1.DELETE("/users/:uid", APIDeleteUser)
+		v1.DELETE("/posts/:pid", APICreateUser)
+		// Get
+		v1.GET("/users/:uid", APIGetUser)
+		v1.GET("/users/:uid/prefs/users", APIGetUserPrefs(upUser))
+		v1.GET("/users/:uid/prefs/posts", APIGetUserPrefs(upPost))
+		v1.GET("/users/:uid/prefs/comments", APIGetUserPrefs(upComment))
+		v1.GET("/users/:uid/prefs/tags", APIGetUserPrefs(upTag))
+		v1.GET("/users/:uid/content/posts", APIGetUserContent(true))
+		v1.GET("/users/:uid/content/comments", APIGetUserContent(false))
+		v1.GET("/users", APIGetUsers)
+		v1.GET("/posts/:pid", APIGetPost)
+		v1.GET("/posts", APIGetPosts)
+		v1.GET("/posts/:pid/comments/:cid", APIGetComment)
+		v1.GET("/posts/:pid/comments", APIGetComments)
+		v1.GET("/tags/:tid", APIGetTag)
+		v1.GET("/tags", APIGetTags)
+	}
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
-	db, _ := sql.Open("postgres", conn)
-	defer db.Close()
+	mainDB, _ = sql.Open("postgres", conn)
+	defer mainDB.Close()
 
 	// DBClearAllTables(db)
 
-	DBSetup(db)
+	DBSetup(mainDB)
 
 	// loc1 := []string{"Africa", "South Africa", "Gauteng", "Centurion"}
 	// loc2 := []string{"Asia", "Japan", "Tokyo", "Chiyoda"}
@@ -93,9 +122,4 @@ func main() {
 
 func index(c *gin.Context) {
 	c.String(http.StatusOK, "Index")
-}
-
-// getAlbums responds with the list of all albums as JSON.
-func getAlbums(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, "[[Albums]]")
 }

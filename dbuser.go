@@ -11,15 +11,15 @@ import (
 )
 
 type User struct {
-	id            int64
-	name          string
-	email         string
-	password      string
-	registerDate  time.Time
-	updatedAt     time.Time
-	upvotes       float64
-	downvotes     float64
-	validationKey int64
+	ID            int64
+	Name          string
+	Email         string
+	Password      string
+	RegisterDate  time.Time
+	UpdatedAt     time.Time
+	Upvotes       float64
+	Downvotes     float64
+	ValidationKey int64
 }
 
 func DBVerifyUserName(name string) bool {
@@ -159,6 +159,60 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	return User{userId, name, email, password, reg, upt, upv, dwn, vKey}
 }
 
+func DBGetUsers(db *sql.DB, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []User {
+	getUsers := `SELECT id, name, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score  
+	FROM users`
+
+	upClause := ""
+	if upvotes > 0 {
+		upClause = fmt.Sprintf("upvotes > %d", upvotes)
+	} else if upvotes < 0 {
+		upClause = fmt.Sprintf("upvotes < %d", -upvotes)
+	}
+	downClause := ""
+	if downvotes > 0 {
+		downClause = fmt.Sprintf("downvotes > %d", downvotes)
+	} else if upvotes < 0 {
+		downClause = fmt.Sprintf("downvotes < %d", -downvotes)
+	}
+	voteCondition := ""
+	if len(upClause) > 0 && len(downClause) > 0 {
+		voteCondition = upClause + " AND " + downClause
+	} else if len(upClause) > 0 {
+		voteCondition = upClause
+	} else if len(downClause) > 0 {
+		voteCondition = downClause
+	}
+
+	if len(voteCondition) > 0 {
+		getUsers += "WHERE " + voteCondition + "\n"
+	}
+
+	getUsers += SQLSortOrder(sortOrder)
+	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+
+	row, e := db.Query(getUsers)
+	if DidFail(e, "get users") {
+		return []User{}
+	}
+
+	name := ""
+	var userId int64
+	var upv float64
+	var dwn float64
+	result := []User{}
+	for row.Next() {
+		e := row.Scan(&userId, &name, &upv, &dwn)
+		if DidFail(e, "get user from email/id") {
+			continue
+		}
+		u := User{ID: userId, Name: name, Upvotes: upv, Downvotes: dwn}
+		result = append(result, u)
+	}
+
+	return result
+}
+
 func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 	updatePassword := "UPDATE users SET password = $1 WHERE id = $2 AND password = $3"
 	hOld := DBHashPassword(old)
@@ -229,11 +283,11 @@ const (
 )
 
 type UserPref struct {
-	kind      UserPrefKind
-	pid       int64
-	sid       int64
-	upvotes   float64
-	downvotes float64
+	Kind      UserPrefKind
+	PID       int64
+	SID       int64
+	Upvotes   float64
+	Downvotes float64
 }
 
 func ScanUserPrefRow(row *sql.Row, includeScore bool) (UserPref, error) {
@@ -275,7 +329,7 @@ func ScanUserPrefRows(rows *sql.Rows, includeScore bool) ([]UserPref, error) {
 }
 
 // ignore kind if it equals 0. ignore pid if it equals 0. ignore sid if it equals 0
-func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, limit int, offset int) []UserPref {
+func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, upvotes int64, downvotes int64, limit int64, offset int64) []UserPref {
 	query := fmt.Sprintf(`SELECT kind, pid, sid, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score FROM User%dPref
 	`, userId)
 
@@ -285,7 +339,7 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	}
 	if pid > 0 {
 		if len(cond) == 0 {
-			cond = " WHERE "
+			cond += " WHERE "
 		} else {
 			cond += " AND "
 		}
@@ -293,12 +347,37 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	}
 	if sid > 0 {
 		if len(cond) == 0 {
-			cond = " WHERE "
+			cond += " WHERE "
 		} else {
 			cond += " AND "
 		}
 		cond += fmt.Sprintf("sid = %d", sid)
 	}
+	if upvotes != 0 {
+		if len(cond) == 0 {
+			cond += " WHERE "
+		} else {
+			cond += " AND "
+		}
+		if upvotes > 0 {
+			cond += fmt.Sprintf("upvotes > %d", upvotes)
+		} else {
+			cond += fmt.Sprintf("upvotes < %d", -upvotes)
+		}
+	}
+	if downvotes != 0 {
+		if len(cond) == 0 {
+			cond += " WHERE "
+		} else {
+			cond += " AND "
+		}
+		if downvotes > 0 {
+			cond += fmt.Sprintf("downvotes > %d", upvotes)
+		} else {
+			cond += fmt.Sprintf("downvotes < %d", -upvotes)
+		}
+	}
+
 	query += cond + "\n"
 	query += SQLSortOrder(sortOrder)
 

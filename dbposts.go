@@ -2,22 +2,24 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
 )
 
 type Post struct {
-	id        int64
-	userId    int64
-	content   string
-	tags      []string
-	createdAt time.Time
-	updatedAt time.Time
-	location  []string
-	upvotes   float64
-	downvotes float64
+	ID        int64
+	UserID    int64
+	Content   string
+	Tags      []string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Location  []string
+	Upvotes   float64
+	Downvotes float64
 }
 
 func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, location []string) Post {
@@ -164,6 +166,24 @@ const (
 	soCreatedAt
 )
 
+func SortOrderFromString(text string) (SortOrder, error) {
+	switch strings.ToLower(text) {
+	case "score":
+		return soScore, nil
+	case "cred":
+		return soCred, nil
+	case "upvotes":
+		return soUpvotes, nil
+	case "downvotes":
+		return soDownvotes, nil
+	case "controversial":
+		return soControversial, nil
+	case "createdat":
+		return soCreatedAt, nil
+	}
+	return soUpvotes, errors.New("no known order for " + text)
+}
+
 func SQLSortOrder(so SortOrder) string {
 	switch so {
 	case soScore:
@@ -182,16 +202,38 @@ func SQLSortOrder(so SortOrder) string {
 	return ""
 }
 
+func DBGetPost(db *sql.DB, id int64) Post {
+	getPosts := fmt.Sprintf(`SELECT id, userId, content, tags, location, createdAt, updatedAt, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
+	FROM posts%d WHERE id = $1
+	`, yearFromId(id))
+
+	row := db.QueryRow(getPosts, id)
+	var userId int64
+	var content string
+	var tags []string
+	var loc []string
+	var createdAt time.Time
+	var updatedAt time.Time
+	var upvotes float64
+	var downvotes float64
+	var cred float64
+	var score float64
+
+	e := row.Scan(&id, &userId, &content, pq.Array(&tags), pq.Array(&loc), &createdAt, &updatedAt, &upvotes, &downvotes, &cred, &score)
+	if DidFail(e, "read row") {
+		return Post{}
+	}
+
+	post := Post{id, userId, content, tags, createdAt, updatedAt, loc, upvotes, downvotes}
+	return post
+}
+
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
-func DBGetPosts(db *sql.DB, userId int64, id int64, tags []string, location []string, sortOrder SortOrder, limit int, offset int, startDate string, endDate string) []Post {
+func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []Post {
 	getPosts := fmt.Sprintf(`SELECT id, userId, content, tags, location, createdAt, updatedAt, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
 		FROM posts{} 
 		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')
 		`, startDate, endDate)
-
-	if id != 0 {
-		getPosts += fmt.Sprintf("AND id = %d\n", id)
-	}
 	if userId != 0 {
 		getPosts += fmt.Sprintf("AND userId = %d\n", userId)
 	}
@@ -202,6 +244,20 @@ func DBGetPosts(db *sql.DB, userId int64, id int64, tags []string, location []st
 	if len(location) > 0 {
 		queryLoc := SQLFormattedArray(location)
 		getPosts += fmt.Sprintf("AND location @> %s\n", queryLoc)
+	}
+	if upvotes != 0 {
+		if upvotes > 0 {
+			getPosts += fmt.Sprintf("AND upvotes > %d\n", upvotes)
+		} else {
+			getPosts += fmt.Sprintf("AND upvotes < %d\n", -upvotes)
+		}
+	}
+	if downvotes != 0 {
+		if upvotes > 0 {
+			getPosts += fmt.Sprintf("AND downvotes > %d\n", upvotes)
+		} else {
+			getPosts += fmt.Sprintf("AND downvotes < %d\n", -upvotes)
+		}
 	}
 
 	sDate := parseTime(startDate)
@@ -237,7 +293,7 @@ func DBGetPosts(db *sql.DB, userId int64, id int64, tags []string, location []st
 		if DidFail(e, "read row") {
 			continue
 		}
-		post := Post{id, userId, content, tags, createdAt, updatedAt, location, upvotes, downvotes}
+		post := Post{id, userId, content, tags, createdAt, updatedAt, loc, upvotes, downvotes}
 		result = append(result, post)
 	}
 

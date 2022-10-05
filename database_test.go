@@ -3,7 +3,6 @@ package main
 import (
 	"math/rand"
 	"testing"
-	"time"
 )
 
 func TestDatabase(t *testing.T) {
@@ -32,20 +31,20 @@ func TestDatabase(t *testing.T) {
 	}
 
 	matchUsers := func(name string, a User, b User) {
-		if a.id != b.id {
-			t.Errorf("Mismatched id %d != %d", a.id, b.id)
+		if a.ID != b.ID {
+			t.Errorf("Mismatched id %d != %d", a.ID, b.ID)
 		}
-		if a.name != b.name {
-			t.Errorf("Mismatched name %s != %s", a.name, b.name)
+		if a.Name != b.Name {
+			t.Errorf("Mismatched name %s != %s", a.Name, b.Name)
 		}
-		if a.email != b.email {
-			t.Errorf("Mismatched email %s != %s", a.email, b.email)
+		if a.Email != b.Email {
+			t.Errorf("Mismatched email %s != %s", a.Email, b.Email)
 		}
-		if a.password != b.password {
-			t.Errorf("Mismatched password %s != %s", a.password, b.password)
+		if a.Password != b.Password {
+			t.Errorf("Mismatched password %s != %s", a.Password, b.Password)
 		}
-		if a.registerDate != b.registerDate {
-			t.Errorf("Mismatched registerDate %v != %v", a.registerDate, b.registerDate)
+		if a.RegisterDate != b.RegisterDate {
+			t.Errorf("Mismatched registerDate %v != %v", a.RegisterDate, b.RegisterDate)
 		}
 	}
 
@@ -53,56 +52,56 @@ func TestDatabase(t *testing.T) {
 	users := []User{}
 	for _, tc := range usersTC {
 		user := DBCreateUser(db, tc.name, tc.email, tc.password)
-		DBValidateUser(db, user.id, user.validationKey)
-		if !DBCompareHashAndPassword(user.password, tc.password) {
-			t.Errorf("user password hash failed %s != %s", user.password, tc.password)
+		DBValidateUser(db, user.ID, user.ValidationKey)
+		if !DBCompareHashAndPassword(user.Password, tc.password) {
+			t.Errorf("user password hash failed %s != %s", user.Password, tc.password)
 		}
 		users = append(users, user)
 	}
 	for _, source := range users {
-		t.Run(source.name, func(t *testing.T) {
+		t.Run(source.Name, func(t *testing.T) {
 			// t.Logf("%v\n", source)
-			user1 := DBGetUser(db, source.id, "")
+			user1 := DBGetUser(db, source.ID, "")
 			matchUsers("id matched user", source, user1)
-			user2 := DBGetUser(db, 0, source.email)
+			user2 := DBGetUser(db, 0, source.Email)
 			matchUsers("email matched user", source, user2)
 
-			if user1.validationKey != 0 {
+			if user1.ValidationKey != 0 {
 				t.Errorf("user validation failed")
 			}
 
-			newPassword := users[rand.Intn(len(users))].password
-			DBUpdatePasswordForUser(db, source.id, source.password, newPassword)
-			user3 := DBGetUser(db, source.id, "")
-			if DBCompareHashAndPassword(user3.password, newPassword) {
-				t.Errorf("not matching password (%s, %s) after update", user3.password, newPassword)
+			newPassword := users[rand.Intn(len(users))].Password
+			DBUpdatePasswordForUser(db, source.ID, source.Password, newPassword)
+			user3 := DBGetUser(db, source.ID, "")
+			if DBCompareHashAndPassword(user3.Password, newPassword) {
+				t.Errorf("not matching password (%s, %s) after update", user3.Password, newPassword)
 			}
 
 			otherUser := users[rand.Intn(len(users))]
-			user4 := DBGetUser(db, 0, otherUser.email)
+			user4 := DBGetUser(db, 0, otherUser.Email)
 			amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-			srcUser, srcPref := DBVoteForUser(db, source.id, user4.id, amount)
+			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount)
 
-			user5 := DBGetUser(db, user4.id, "")
-			if amount < 0 && user5.downvotes < 0 {
+			user5 := DBGetUser(db, user4.ID, "")
+			if amount < 0 && user5.Downvotes < 0 {
 				t.Errorf("Failed to update user total downvotes")
-			} else if amount > 0 && user5.upvotes < 0 {
+			} else if amount > 0 && user5.Upvotes < 0 {
 				t.Errorf("Failed to update user total upvotes")
 			}
 			matchUsers("match vote and get user", srcUser, user5)
 
-			userPrefs := DBGetUserPref(db, source.id, soScore, upUser, user5.id, 0, 10, 0)
+			userPrefs := DBGetUserPref(db, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
 			if len(userPrefs) != 1 {
-				t.Errorf("failed to get user prefs for user %d", source.id)
+				t.Errorf("failed to get user prefs for user %d", source.ID)
 			} else {
 				p := userPrefs[0]
-				if amount < 0 && p.downvotes < float64(amount) {
+				if amount < 0 && p.Downvotes < float64(amount) {
 					t.Errorf("failed to update user pref downvotes for other user")
-				} else if amount > 0 && p.upvotes < float64(amount) {
+				} else if amount > 0 && p.Upvotes < float64(amount) {
 					t.Errorf("failed to update user pref upvotes for other user")
 				}
-				if p.downvotes != srcPref.downvotes || p.upvotes != srcPref.upvotes ||
-					p.kind != srcPref.kind || p.pid != srcPref.pid || p.sid != srcPref.sid {
+				if p.Downvotes != srcPref.Downvotes || p.Upvotes != srcPref.Upvotes ||
+					p.Kind != srcPref.Kind || p.PID != srcPref.PID || p.SID != srcPref.SID {
 					t.Errorf("mismatch between get user pref and vote user pref")
 				}
 			}
@@ -127,14 +126,14 @@ func TestDatabase(t *testing.T) {
 	}
 
 	matchPost := func(a Post, b Post) {
-		if a.id != b.id {
-			t.Errorf("Mismatch id %d != %d", a.id, b.id)
+		if a.ID != b.ID {
+			t.Errorf("Mismatch id %d != %d", a.ID, b.ID)
 		}
-		if a.content != b.content {
-			t.Errorf("Mismatch content %s != %s", a.content, b.content)
+		if a.Content != b.Content {
+			t.Errorf("Mismatch content %s != %s", a.Content, b.Content)
 		}
-		if a.userId != b.userId {
-			t.Errorf("Mismatch userId %d != %d", a.userId, b.userId)
+		if a.UserID != b.UserID {
+			t.Errorf("Mismatch userId %d != %d", a.UserID, b.UserID)
 		}
 		// if a.tags != b.tags {
 		// 	t.Errorf("Mismatch content %v != %v", a.content, b.content)
@@ -142,72 +141,75 @@ func TestDatabase(t *testing.T) {
 		// if a.location != b.location {
 		// 	t.Errorf("Mismatch id %d != %d", a.id, b.id)
 		// }
-		if a.createdAt != b.createdAt {
-			t.Errorf("Mismatch createdAt %v != %v", a.createdAt, b.createdAt)
+		if a.CreatedAt != b.CreatedAt {
+			t.Errorf("Mismatch createdAt %v != %v", a.CreatedAt, b.CreatedAt)
 		}
-		if a.updatedAt != b.updatedAt {
-			t.Errorf("Mismatch updatedAt %v != %v", a.updatedAt, b.updatedAt)
+		if a.UpdatedAt != b.UpdatedAt {
+			t.Errorf("Mismatch updatedAt %v != %v", a.UpdatedAt, b.UpdatedAt)
 		}
-		if a.upvotes != b.upvotes {
-			t.Errorf("Mismatch upvotes %f != %f", a.upvotes, b.upvotes)
+		if a.Upvotes != b.Upvotes {
+			t.Errorf("Mismatch upvotes %f != %f", a.Upvotes, b.Upvotes)
 		}
-		if a.downvotes != b.downvotes {
-			t.Errorf("Mismatch downvotes %f != %f", a.downvotes, b.downvotes)
+		if a.Downvotes != b.Downvotes {
+			t.Errorf("Mismatch downvotes %f != %f", a.Downvotes, b.Downvotes)
 		}
 	}
 
-	startOfYear := time.Date(utc().Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
-	endOfYear := time.Date(utc().Year(), time.December, 31, 23, 59, 59, 999999, time.UTC)
+	// startOfYear := time.Date(utc().Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
+	// endOfYear := time.Date(utc().Year(), time.December, 31, 23, 59, 59, 999999, time.UTC)
 	for _, tc := range posts {
 		t.Run(tc.content, func(t *testing.T) {
 			source := DBCreatePost(db, tc.userId, tc.content, tc.tags, tc.location)
-			post1 := DBGetPosts(db, 0, source.id, []string{}, []string{}, soScore, 1, 0, formatTime(startOfYear), formatTime(endOfYear))
-			matchPost(source, post1[0])
+			post1 := DBGetPost(db, source.ID)
+			matchPost(source, post1)
 
-			odx := rand.Intn((len(posts)))
-			otherUser := users[odx]
-			other := DBGetUser(db, 0, otherUser.email)
-			loc := posts[odx].location
-			amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-			post2, userPoster, tags, prefs := DBVotePost(db, other.id, source.id, amount, loc)
+			for i := 0; i < rand.Intn(20); i += 2 {
+				odx := rand.Intn(len(users))
+				otherUser := users[odx]
+				other := DBGetUser(db, 0, otherUser.Email)
+				pidx := rand.Intn(len(posts))
+				loc := posts[pidx].location
+				amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
+				post2, userPoster, tags, prefs := DBVotePost(db, other.ID, source.ID, amount, loc)
 
-			if amount < 0 && post2.downvotes < float64(amount) {
-				t.Errorf("Post downvotes not updated")
-			} else if amount > 0 && post2.upvotes < float64(amount) {
-				t.Errorf("Post upvotes not updated")
-			}
-			if amount < 0 && userPoster.downvotes < float64(amount) {
-				t.Errorf("Post downvotes for poster not updated")
-			} else if amount > 0 && userPoster.upvotes < float64(amount) {
-				t.Errorf("Post upvotes for poster not updated")
-			}
-			uPref := prefs[0]
-			if uPref.kind != upUser && uPref.pid != other.id {
-				t.Errorf("User pref not update user voted for")
-			}
-			if amount < 0 && uPref.downvotes < float64(amount) {
-				t.Errorf("User pref downvotes for poster not updated")
-			} else if amount > 0 && uPref.upvotes < float64(amount) {
-				t.Errorf("User pref upvotes for poster not updated")
-			}
-			pPref := prefs[1]
-			if pPref.kind != upPost && pPref.pid != source.id {
-				t.Errorf("User pref not update user voted for")
-			}
-			if amount < 0 && pPref.downvotes < float64(amount) {
-				t.Errorf("User pref downvotes for post not updated")
-			} else if amount > 0 && pPref.upvotes < float64(amount) {
-				t.Errorf("User pref upvotes for post not updated")
-			}
-
-			for i, tag := range tags {
-				if tc.tags[i] != tag.name {
-					t.Errorf("Mismatch of tag names")
+				if amount < 0 && post2.Downvotes < float64(amount) {
+					t.Errorf("Post downvotes not updated")
+				} else if amount > 0 && post2.Upvotes < float64(amount) {
+					t.Errorf("Post upvotes not updated")
 				}
-			}
-			for i := 2; i < len(prefs); i += 1 {
-				if tags[i-2].id != prefs[i].pid && prefs[i].kind != upTag {
-					t.Errorf("Mismatch of tag id and user pref id")
+				if amount < 0 && userPoster.Downvotes < float64(amount) {
+					t.Errorf("Post downvotes for poster not updated")
+				} else if amount > 0 && userPoster.Upvotes < float64(amount) {
+					t.Errorf("Post upvotes for poster not updated")
+				}
+				uPref := prefs[0]
+				if uPref.Kind != upUser && uPref.PID != other.ID {
+					t.Errorf("User pref not update user voted for")
+				}
+				if amount < 0 && uPref.Downvotes < float64(amount) {
+					t.Errorf("User pref downvotes for poster not updated")
+				} else if amount > 0 && uPref.Upvotes < float64(amount) {
+					t.Errorf("User pref upvotes for poster not updated")
+				}
+				pPref := prefs[1]
+				if pPref.Kind != upPost && pPref.PID != source.ID {
+					t.Errorf("User pref not update user voted for")
+				}
+				if amount < 0 && pPref.Downvotes < float64(amount) {
+					t.Errorf("User pref downvotes for post not updated")
+				} else if amount > 0 && pPref.Upvotes < float64(amount) {
+					t.Errorf("User pref upvotes for post not updated")
+				}
+
+				for i, tag := range tags {
+					if tc.tags[i] != tag.Name {
+						t.Errorf("Mismatch of tag names")
+					}
+				}
+				for i := 2; i < len(prefs); i += 1 {
+					if tags[i-2].ID != prefs[i].PID && prefs[i].Kind != upTag {
+						t.Errorf("Mismatch of tag id and user pref id")
+					}
 				}
 			}
 		})
