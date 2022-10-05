@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"net/smtp"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
@@ -33,7 +35,16 @@ func DBIsValidEmail(db *sql.DB, email string) bool {
 }
 
 func DBHashPassword(password string) string {
-	return password + "salt"
+	result, e := bcrypt.GenerateFromPassword([]byte(password), 7)
+	if DidFail(e, "hash password") {
+		return ""
+	}
+	return string(result)
+}
+
+func DBCompareHashAndPassword(hash string, password string) bool {
+	e := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return !DidFail(e, "compare hash and password")
 }
 
 func DBCreateUser(db *sql.DB, name string, email string, password string) User {
@@ -41,7 +52,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	VALUES ($1, $2, $3, $4) RETURNING id, name, email, password, registerDate, updatedAt, upvotes, downvotes, validationKey`
 	rand.Seed(utc().UnixNano())
 	vKey := rand.Int63()
-	row := db.QueryRow(insertUser, name, email, password, vKey)
+	row := db.QueryRow(insertUser, name, email, DBHashPassword(password), vKey)
 	var userId int64
 	var reg time.Time
 	var upt time.Time
@@ -150,7 +161,9 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 
 func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 	updatePassword := "UPDATE users SET password = $1 WHERE id = $2 AND password = $3"
-	_, e := db.Exec(updatePassword, new, userId, old)
+	hOld := DBHashPassword(old)
+	hNew := DBHashPassword(new)
+	_, e := db.Exec(updatePassword, hNew, userId, hOld)
 	if DidFail(e, "update password") {
 		return
 	}

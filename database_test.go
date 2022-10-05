@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -55,6 +54,9 @@ func TestDatabase(t *testing.T) {
 	for _, tc := range usersTC {
 		user := DBCreateUser(db, tc.name, tc.email, tc.password)
 		DBValidateUser(db, user.id, user.validationKey)
+		if !DBCompareHashAndPassword(user.password, tc.password) {
+			t.Errorf("user password hash failed %s != %s", user.password, tc.password)
+		}
 		users = append(users, user)
 	}
 	for _, source := range users {
@@ -72,7 +74,7 @@ func TestDatabase(t *testing.T) {
 			newPassword := users[rand.Intn(len(users))].password
 			DBUpdatePasswordForUser(db, source.id, source.password, newPassword)
 			user3 := DBGetUser(db, source.id, "")
-			if user3.password != newPassword {
+			if DBCompareHashAndPassword(user3.password, newPassword) {
 				t.Errorf("not matching password (%s, %s) after update", user3.password, newPassword)
 			}
 
@@ -204,7 +206,6 @@ func TestDatabase(t *testing.T) {
 				}
 			}
 			for i := 2; i < len(prefs); i += 1 {
-				fmt.Printf("%d : %v\n", i-2, tags[i-2])
 				if tags[i-2].id != prefs[i].pid && prefs[i].kind != upTag {
 					t.Errorf("Mismatch of tag id and user pref id")
 				}
