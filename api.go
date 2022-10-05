@@ -201,7 +201,23 @@ func APIGetUserPrefs(kind UserPrefKind) func(*gin.Context) {
 
 func APIGetUserContent(isPost bool) func(*gin.Context) {
 	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid uid given") {
+			return
+		}
 
+		offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+		if APIFailed(c, e, "invalid offset given") {
+			return
+		}
+
+		limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+		if APIFailed(c, e, "invalid limit given") {
+			return
+		}
+
+		result := DBGetUserCont(mainDB, uid, isPost, limit, offset)
+		APIReturn(c, true, result)
 	}
 }
 
@@ -224,7 +240,7 @@ func APIGetPost(c *gin.Context) {
 
 func APIGetPosts(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.DefaultQuery("uid", "0"), 10, 64)
-	if APIFailed(c, e, "invalid post id") {
+	if APIFailed(c, e, "invalid user id") {
 		return
 	}
 
@@ -266,7 +282,6 @@ func APIGetPosts(c *gin.Context) {
 	lastWeek := now.AddDate(0, 0, -7)
 	startDate := c.DefaultQuery("start", formatTime(lastWeek))
 	endDate := c.DefaultQuery("end", formatTime(now))
-	fmt.Println(startDate, endDate)
 
 	posts := DBGetPosts(mainDB, uid, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
 	APIReturn(c, true, posts)
@@ -276,11 +291,66 @@ func APIGetPosts(c *gin.Context) {
 // Get Comment
 // ------------------------------------------------------------------------
 func APIGetComment(c *gin.Context) {
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
 
+	cid, e := strconv.ParseInt(c.Param("cid"), 10, 64)
+	if APIFailed(c, e, "invalid comment id") {
+		return
+	}
+
+	result := DBGetComment(mainDB, pid, cid)
+	APIReturn(c, true, result)
 }
 
 func APIGetComments(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.DefaultQuery("uid", "0"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
 
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	replyId, e := strconv.ParseInt(c.DefaultQuery("reply", "0"), 10, 64)
+	if APIFailed(c, e, "invalid reply id") {
+		return
+	}
+
+	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid upvotes value given") {
+		return
+	}
+
+	downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid downvotes value given") {
+		return
+	}
+
+	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+	if APIFailed(c, e, "invalid order given") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset given") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit given") {
+		return
+	}
+
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
+
+	result := DBGetComments(mainDB, pid, uid, replyId, startDate, endDate, upvotes, downvotes, order, limit, offset)
+	APIReturn(c, true, result)
 }
 
 // ------------------------------------------------------------------------

@@ -17,24 +17,51 @@ type Tag struct {
 	Downvotes float64
 }
 
-func DBCreateTags(db *sql.DB, tags []string, location []string) {
+func SQLFieldsForTag() string {
+	return "id, name, updatedAt, location, upvotes, downvotes"
+}
+
+func ScanTags(rows *sql.Rows, includeScore bool) []Tag {
+	result := []Tag{}
+	var e error
+	for rows.Next() {
+		var cred float64
+		var score float64
+		tag := Tag{}
+		if includeScore {
+			e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt, pq.Array(&tag.Location), &tag.Upvotes, &tag.Downvotes, &cred, &score)
+		} else {
+			e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt, pq.Array(&tag.Location), &tag.Upvotes, &tag.Downvotes)
+		}
+		if DidFail(e, "read row") {
+			continue
+		}
+		result = append(result, tag)
+	}
+	return result
+}
+
+func DBCreateTags(db *sql.DB, tags []string, location []string) []Tag {
 	if len(tags) <= 0 {
-		return
+		return []Tag{}
 	}
 	nowTime := formatNow()
 	tagRows := SQLFormattedRows(tags, func(s string) string {
 		return "'" + nowTime + "'," + SQLFormattedArray(location)
 	})
 	upsertTags := fmt.Sprintf(`INSERT INTO tags (name, updatedAt, location)
-	VALUES %s ON CONFLICT (name, location) DO NOTHING;
-	`, tagRows)
-	_, e := db.Exec(upsertTags)
+	VALUES %s ON CONFLICT (name, location) DO NOTHING RETURNING %s;
+	`, tagRows, SQLFieldsForTag())
+	rows, e := db.Query(upsertTags)
 	if DidFail(e, "create tags") {
-		return
+		return []Tag{}
 	}
+	result := ScanTags(rows, false)
+
+	return result
 }
 
-func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool, location []string) ([]Tag, []UserPref) {
+func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, location []string) ([]Tag, []UserPref) {
 	if len(tags) <= 0 {
 		return []Tag{}, []UserPref{}
 	}
@@ -45,31 +72,30 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool, location
 	tagArray := SQLFormattedArray(tags)
 	updatedField := ""
 	otherField := ""
+	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updatedField = "upvotes"
 		otherField = "downvotes"
 	} else {
 		updatedField = "downvotes"
 		otherField = "upvotes"
+		upvoteAmount = -upvoteAmount
 	}
 	locArray := SQLFormattedArray(location)
 	upsertTags := fmt.Sprintf(`INSERT INTO tags (name, updatedAt, location)
 	VALUES %s ON CONFLICT (name, location) DO NOTHING;
 	UPDATE tags 
-	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + 1,
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
 	WHERE name = ANY(%s) AND location @> %s
-	RETURNING id, name, updatedAt, location, upvotes, downvotes
-	`, tagRows, updatedField, updatedField, nowTime, otherField, otherField, nowTime, nowTime, tagArray, locArray)
+	RETURNING %s
+	`, tagRows, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, tagArray, locArray, SQLFieldsForTag())
 	rows, e := db.Query(upsertTags)
 	if DidFail(e, "insert and update tags") {
 		return []Tag{}, []UserPref{}
 	}
-	tagResult, e := ScanTagRows(rows, false)
-	if DidFail(e, "insert and update tags") {
-		return []Tag{}, []UserPref{}
-	}
+	tagResult := ScanTags(rows, false)
 
 	tagIndices := []int64{}
 	for _, tag := range tagResult {
@@ -81,17 +107,17 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool, location
 	upsertUserTags := fmt.Sprintf(`INSERT INTO User%dPref (pid, sid, kind)
 	VALUES %s ON CONFLICT (kind, pid, sid) DO NOTHING;
 	UPDATE User%dPref 
-	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + 1,
+	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000)
 	WHERE kind=4 AND pid = ANY(%s)
-	RETURNING kind, pid, sid, upvotes, downvotes
-	`, userId, tagIndexRows, userId, updatedField, updatedField, nowTime, otherField, otherField, nowTime, tagIndexArray)
+	RETURNING %s, 0.0, 0.0
+	`, userId, tagIndexRows, userId, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, tagIndexArray, SQLFieldsForUserPref())
 	rows, e = db.Query(upsertUserTags)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}
 	}
 
-	tagPrefs, e := ScanUserPrefRows(rows, false)
+	tagPrefs := ScanUserPrefRows(rows)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}
 	}
@@ -100,9 +126,9 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, isUpvote bool, location
 }
 
 func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []Tag {
-	getTags := `SELECT id, name, updatedAt, location, upvotes, downvotes, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
+	getTags := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
 	FROM tags 
-	`
+	`, SQLFieldsForTag())
 
 	if id != 0 {
 		getTags += fmt.Sprintf("WHERE id = %d\n", id)
@@ -172,37 +198,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes i
 	}
 	defer rows.Close()
 
-	result, e := ScanTagRows(rows, true)
-	if DidFail(e, "scan tags") {
-		return result
-	}
+	result := ScanTags(rows, true)
 
 	return result
-}
-
-func ScanTagRows(rows *sql.Rows, includeScore bool) ([]Tag, error) {
-	result := []Tag{}
-	var e error
-	for rows.Next() {
-		var id int64
-		var name string
-		var updatedAt time.Time
-		var locs []string
-		var upvotes float64
-		var downvotes float64
-		var cred float64
-		var score float64
-
-		if includeScore {
-			e = rows.Scan(&id, &name, &updatedAt, pq.Array(&locs), &upvotes, &downvotes, &cred, &score)
-		} else {
-			e = rows.Scan(&id, &name, &updatedAt, pq.Array(&locs), &upvotes, &downvotes)
-		}
-		if DidFail(e, "read row") {
-			continue
-		}
-		tag := Tag{id, name, updatedAt, locs, upvotes, downvotes}
-		result = append(result, tag)
-	}
-	return result, e
 }
