@@ -54,6 +54,10 @@ func main() {
 		v1.GET("/posts/:pid/comments", APIGetComments)
 		v1.GET("/tags/:tid", APIGetTag)
 		v1.GET("/tags", APIGetTags)
+		// Vote
+		v1.POST("/users/:uid", APIVoteUser)
+		v1.POST("/posts/:pid", APIVotePost)
+		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
 	}
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)

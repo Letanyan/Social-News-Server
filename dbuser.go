@@ -18,6 +18,7 @@ type User struct {
 	UpdatedAt     time.Time
 	Upvotes       float64
 	Downvotes     float64
+	Credits       int32
 	ValidationKey int64
 }
 
@@ -30,7 +31,7 @@ type UserProfile struct {
 }
 
 func SQLFieldsForUser() string {
-	return "id, name, email, password, registerDate, updatedAt, upvotes, downvotes, validationKey"
+	return "id, name, email, password, registerDate, updatedAt, upvotes, downvotes, credits, validationKey"
 }
 
 func SQLFieldsForUserProfile() string {
@@ -38,15 +39,15 @@ func SQLFieldsForUserProfile() string {
 }
 
 func ScanUser(row *sql.Row) (User, error) {
-	user := User{}
-	e := row.Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.RegisterDate, &user.UpdatedAt, &user.Upvotes, &user.Downvotes, &user.ValidationKey)
-	return user, e
+	u := User{}
+	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.UpdatedAt, &u.Upvotes, &u.Downvotes, &u.Credits, &u.ValidationKey)
+	return u, e
 }
 
 func ScanUserProfile(row *sql.Row) (UserProfile, error) {
-	user := UserProfile{}
-	e := row.Scan(&user.ID, &user.Name, &user.RegisterDate, &user.Upvotes, &user.Downvotes)
-	return user, e
+	u := UserProfile{}
+	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+	return u, e
 }
 
 func ScanUserProfiles(rows *sql.Rows, includeScore bool) []User {
@@ -267,13 +268,16 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	UPDATE users
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	credits = credits + 0.75 * %d
 	updatedAt = '%s'
 	WHERE id = $1
 	RETURNING %s
-	`, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, SQLFieldsForUserProfile())
+	`, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, upvoteAmount, nowTime, SQLFieldsForUserProfile())
 	row := db.QueryRow(updateUser, targetId)
 	user, e := ScanUserProfile(row)
-	DidFail(e, "update user score", targetId)
+	if DidFail(e, "update user score", targetId) {
+		return UserProfile{}, UserPref{}
+	}
 
 	vote := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid)
 	VALUES (1, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
@@ -285,7 +289,32 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	`, userId, targetId, userId, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, targetId)
 	row = db.QueryRow(vote)
 	pref, e := ScanUserPrefRow(row)
-	DidFail(e, "vote for user")
+	if DidFail(e, "vote for user") {
+		return UserProfile{}, UserPref{}
+	}
 
 	return user, pref
+}
+
+func DBCanUpdateCredit(db *sql.DB, userId int64, amount int64) bool {
+	check := fmt.Sprintf(`SELECT credits FROM Users WHERE id = $1 AND credits >= %d`, amount)
+	row := db.QueryRow(check, userId)
+	var result int64
+	e := row.Scan(&result)
+	return e == nil
+}
+
+func DBUpdateUserCredit(db *sql.DB, userId int64, amount int64) int64 {
+	changeAmount := fmt.Sprintf(`UPDATE Users 
+	SET credits = credits - %d 
+	WHERE id = $1 AND credits >= %d
+	RETURNING credits`, amount, amount)
+	row := db.QueryRow(changeAmount, userId)
+	var result int64
+	e := row.Scan(&result)
+	if e != nil {
+		return -1
+	} else {
+		return result
+	}
 }

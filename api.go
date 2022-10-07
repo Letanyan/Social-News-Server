@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -72,6 +73,9 @@ func APICreatePost(c *gin.Context) {
 		return
 	}
 
+	if len(input.location) == 0 {
+		input.location = getAddress(c.ClientIP())
+	}
 	post := DBCreatePost(mainDB, input.userId, input.content, input.tags, input.location)
 	if post.ID != 0 {
 		APIReturn(c, true, post)
@@ -601,4 +605,105 @@ func APIGetTags(c *gin.Context) {
 
 	result := DBGetTags(mainDB, 0, tags, location, upvotes, downvotes, order, limit, offset)
 	APIReturn(c, true, result)
+}
+
+// ------------------------------------------------------------------------
+// Voting
+// ------------------------------------------------------------------------
+
+func APIVoteUser(c *gin.Context) {
+	targetId, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid target user id") {
+		return
+	}
+
+	uid, e := strconv.ParseInt(c.Query("uid"), 10, 64)
+	if APIFailed(c, e, "invalid source user id") {
+		return
+	}
+
+	amount, e := strconv.ParseInt(c.Query("amount"), 10, 64)
+	if APIFailed(c, e, "invalid voting amount") {
+		return
+	}
+
+	if !DBCanUpdateCredit(mainDB, uid, amount) {
+		APIFailed(c, errors.New(""), "not enough credits")
+	}
+
+	profile, pref := DBVoteForUser(mainDB, uid, targetId, amount)
+	remaining := DBUpdateUserCredit(mainDB, uid, amount)
+
+	if remaining >= 0 {
+		APIReturn(c, true, gin.H{"profile": profile, "pref": pref, "credits_remaining": remaining})
+	} else {
+		APIFailed(c, errors.New(""), "could not complete vote")
+	}
+}
+
+func APIVotePost(c *gin.Context) {
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid target user id") {
+		return
+	}
+
+	uid, e := strconv.ParseInt(c.Query("uid"), 10, 64)
+	if APIFailed(c, e, "invalid source user id") {
+		return
+	}
+
+	amount, e := strconv.ParseInt(c.Query("amount"), 10, 64)
+	if APIFailed(c, e, "invalid voting amount") {
+		return
+	}
+
+	if !DBCanUpdateCredit(mainDB, uid, amount) {
+		APIFailed(c, errors.New(""), "not enough credits")
+	}
+
+	addr := getAddress(c.ClientIP())
+
+	post, profile, tag, pref := DBVotePost(mainDB, uid, pid, amount, addr)
+	remaining := DBUpdateUserCredit(mainDB, uid, amount)
+
+	if remaining >= 0 {
+		APIReturn(c, true, gin.H{"post": post, "profile": profile, "tag": tag, "pref": pref, "credits_remaining": remaining})
+	} else {
+		APIFailed(c, errors.New(""), "could not complete vote")
+	}
+}
+
+func APIVoteComment(c *gin.Context) {
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid target user id") {
+		return
+	}
+
+	cid, e := strconv.ParseInt(c.Param("cid"), 10, 64)
+	if APIFailed(c, e, "invalid target user id") {
+		return
+	}
+
+	uid, e := strconv.ParseInt(c.Query("uid"), 10, 64)
+	if APIFailed(c, e, "invalid source user id") {
+		return
+	}
+
+	amount, e := strconv.ParseInt(c.Query("amount"), 10, 64)
+	if APIFailed(c, e, "invalid voting amount") {
+		return
+	}
+
+	if !DBCanUpdateCredit(mainDB, uid, amount) {
+		APIFailed(c, errors.New(""), "not enough credits")
+	}
+
+	comment, profile, pref := DBVoteComment(mainDB, uid, pid, cid, amount)
+	remaining := DBUpdateUserCredit(mainDB, uid, amount)
+
+	if remaining >= 0 {
+		APIReturn(c, true, gin.H{"comment": comment, "profile": profile, "pref": pref, "credits_remaining": remaining})
+	} else {
+		APIFailed(c, errors.New(""), "could not complete vote")
+	}
 }
