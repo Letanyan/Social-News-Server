@@ -6,20 +6,20 @@ func utc() time.Time {
 	return time.Now().UTC()
 }
 
-func idFromTime(t time.Time) int64 {
-	y := int64(t.Year()) % 1000
-	m := int64(t.Month())             // 2
-	d := int64(t.Day())               // 2
-	h := int64(t.Hour())              // 2
-	n := int64(t.Minute())            // 2
-	s := int64(t.Second())            // 2
-	z := int64(t.Nanosecond()) / 1000 // 6
-	return y*1_00_00_00_00_00_000000 + m*1_00_00_00_00_000000 + d*1_00_00_00_000000 +
-		h*1_00_00_000000 + n*1_00_000000 + s*1_000000 + z
-}
+// func idFromTime(t time.Time) int64 {
+// 	y := int64(t.Year()) % 1000
+// 	m := int64(t.Month())             // 2
+// 	d := int64(t.Day())               // 2
+// 	h := int64(t.Hour())              // 2
+// 	n := int64(t.Minute())            // 2
+// 	s := int64(t.Second())            // 2
+// 	z := int64(t.Nanosecond()) / 1000 // 6
+// 	return y*1_00_00_00_00_00_000000 + m*1_00_00_00_00_000000 + d*1_00_00_00_000000 +
+// 		h*1_00_00_000000 + n*1_00_000000 + s*1_000000 + z
+// }
 
 func yearFromId(id int64) int64 {
-	return id/1_00_00_00_00_00_000000 + 2000
+	return id % 10_000
 }
 
 func yearsBetweenDates(sDate time.Time, eDate time.Time) []int64 {

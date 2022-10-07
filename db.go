@@ -28,7 +28,7 @@ func DBSetup(db *sql.DB) {
 	year := time.Now().UTC().Year()
 	createPostsTable := func(year int) {
 		createPosts := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS posts%d (
-			id BIGINT,
+			id BIGSERIAL,
 			userId BIGINT,
 			content TEXT,
 			tags TEXT[],

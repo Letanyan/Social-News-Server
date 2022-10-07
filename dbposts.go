@@ -102,9 +102,8 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 	t := utc()
 	nowTime := formatNow()
 	year := t.Year()
-	postId := idFromTime(t)
 	insertPost := fmt.Sprintf(`INSERT INTO posts%d(id, userId, content, tags, createdAt, updatedAt, location) 
-	VALUES (%d, $1, $2, %s, '%s', '%s', %s) RETURNING %s`, year, postId, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
+	VALUES (nextval('posts%d_id_seq') * 10000 + extract(year from now() at time zone ('utc')), $1, $2, %s, '%s', '%s', %s) RETURNING %s`, year, year, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
 	row := db.QueryRow(insertPost, userId, content)
 
 	post, e := ScanPost(row)
