@@ -45,6 +45,22 @@ func DBSetup(db *sql.DB) {
 	createPostsTable(year)
 	createPostsTable(year + 1)
 
+	createCommentsTable := `CREATE TABLE IF NOT EXISTS Comments (
+		id BIGSERIAL NOT NULL,
+		postId BIGINT,
+		userId BIGINT,
+		replyId BIGINT,
+		content text,
+		createdAt timestamp,
+		updatedAt timestamp,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
+
+		PRIMARY KEY (id)
+	);`
+	_, e = db.Exec(createCommentsTable)
+	DidFail(e, "create comments table")
+
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
@@ -94,16 +110,7 @@ func DBDeleteTable(db *sql.DB, name string) {
 
 func DBDeleteAllPosts(db *sql.DB) {
 	tables := GetTableNamesLike(db, "posts%")
-	query := BuildUnionForNames(`SELECT id FROM {}`, tables)
-	rows, e := db.Query(query)
-	if DidFail(e, "get all posts") {
-		return
-	}
-	for rows.Next() {
-		var id int64
-		rows.Scan(&id)
-		DBDeleteTable(db, fmt.Sprintf("Post%d", id))
-	}
+	DBDeleteTable(db, "Comments")
 	for _, name := range tables {
 		DBDeleteTable(db, name)
 	}

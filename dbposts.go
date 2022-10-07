@@ -118,24 +118,6 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 		return Post{}
 	}
 
-	createPostTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Post%d (
-		id BIGSERIAL NOT NULL,
-		userId BIGINT,
-		replyId BIGINT,
-		content text,
-		createdAt timestamp,
-		updatedAt timestamp,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
-
-		PRIMARY KEY (id)
-	);`, postId)
-
-	_, e = db.Exec(createPostTable)
-	if DidFail(e, "create post table for user ", postId) {
-		return Post{}
-	}
-
 	DBCreateTags(db, tags, location)
 
 	return post
@@ -207,7 +189,7 @@ func DBDeletePost(db *sql.DB, postId int64) {
 	}
 	DidFail(e, "delete post from posts table")
 
-	deletePostTable := fmt.Sprintf(`DROP TABLE Post%d`, postId)
+	deletePostTable := fmt.Sprintf(`DELETE FROM Comments WHERE postId = %d`, postId)
 	_, e = db.Exec(deletePostTable)
 	DidFail(e, "delete post table")
 }
@@ -279,28 +261,28 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, upvo
 		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')
 		`, SQLFieldsForPostResult(), startDate, endDate)
 	if userId != 0 {
-		getPosts += fmt.Sprintf("AND userId = %d\n", userId)
+		getPosts += fmt.Sprintf("AND p.userId = %d\n", userId)
 	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
-		getPosts += fmt.Sprintf("AND %s && tags\n", queryTags)
+		getPosts += fmt.Sprintf("AND %s && p.tags\n", queryTags)
 	}
 	if len(location) > 0 {
 		queryLoc := SQLFormattedArray(location)
-		getPosts += fmt.Sprintf("AND location @> %s\n", queryLoc)
+		getPosts += fmt.Sprintf("AND p.location @> %s\n", queryLoc)
 	}
 	if upvotes != 0 {
 		if upvotes > 0 {
-			getPosts += fmt.Sprintf("AND upvotes > %d\n", upvotes)
+			getPosts += fmt.Sprintf("AND p.upvotes > %d\n", upvotes)
 		} else {
-			getPosts += fmt.Sprintf("AND upvotes < %d\n", -upvotes)
+			getPosts += fmt.Sprintf("AND p.upvotes < %d\n", -upvotes)
 		}
 	}
 	if downvotes != 0 {
 		if upvotes > 0 {
-			getPosts += fmt.Sprintf("AND downvotes > %d\n", upvotes)
+			getPosts += fmt.Sprintf("AND p.downvotes > %d\n", downvotes)
 		} else {
-			getPosts += fmt.Sprintf("AND downvotes < %d\n", -upvotes)
+			getPosts += fmt.Sprintf("AND p.downvotes < %d\n", -downvotes)
 		}
 	}
 
