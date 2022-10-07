@@ -199,10 +199,69 @@ func APIGetUserPrefs(kind UserPrefKind) func(*gin.Context) {
 	}
 }
 
-func APIGetUserContent(isPost bool) func(*gin.Context) {
+func APIGetUserPrefUsers(c *gin.Context) {
+	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid upvotes value given") {
+		return
+	}
+
+	downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid downvotes value given") {
+		return
+	}
+
+	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+	if APIFailed(c, e, "invalid order given") {
+		return
+	}
+
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid uid given") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset given") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit given") {
+		return
+	}
+
+	users := DBGetUserPrefUsers(mainDB, uid, upvotes, downvotes, order, limit, offset)
+	APIReturn(c, true, users)
+}
+
+func APIGetUserPrefPosts(isComment bool) func(*gin.Context) {
 	return func(c *gin.Context) {
-		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
-		if APIFailed(c, e, "invalid uid given") {
+		author, e := strconv.ParseInt(c.DefaultQuery("uid", "0"), 10, 64)
+		if APIFailed(c, e, "invalid user id") {
+			return
+		}
+
+		location := strings.Split(c.DefaultQuery("location", ""), ",")
+		if len(location) == 1 && location[0] == "" {
+			location = []string{}
+		}
+		tags := strings.Split(c.DefaultQuery("tags", ""), ",")
+		if len(tags) == 1 && tags[0] == "" {
+			tags = []string{}
+		}
+
+		upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+		if APIFailed(c, e, "invalid upvotes value given") {
+			return
+		}
+
+		downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+		if APIFailed(c, e, "invalid downvotes value given") {
+			return
+		}
+
+		order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+		if APIFailed(c, e, "invalid order given") {
 			return
 		}
 
@@ -216,7 +275,112 @@ func APIGetUserContent(isPost bool) func(*gin.Context) {
 			return
 		}
 
-		result := DBGetUserCont(mainDB, uid, isPost, limit, offset)
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid uid given") {
+			return
+		}
+
+		now := utc()
+		lastWeek := now.AddDate(0, 0, -7)
+		startDate := c.DefaultQuery("start", formatTime(lastWeek))
+		endDate := c.DefaultQuery("end", formatTime(now))
+
+		posts := DBGetUserPrefPosts(mainDB, uid, isComment, author, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+		APIReturn(c, true, posts)
+	}
+}
+
+func APIGetUserPrefTags(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid uid given") {
+		return
+	}
+
+	location := strings.Split(c.DefaultQuery("location", ""), ",")
+	if len(location) == 1 && location[0] == "" {
+		location = []string{}
+	}
+	tags := strings.Split(c.DefaultQuery("tags", ""), ",")
+	if len(tags) == 1 && tags[0] == "" {
+		tags = []string{}
+	}
+
+	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid upvotes value given") {
+		return
+	}
+
+	downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid downvotes value given") {
+		return
+	}
+
+	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+	if APIFailed(c, e, "invalid order given") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset given") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit given") {
+		return
+	}
+
+	result := DBGetUserPrefTags(mainDB, uid, tags, location, upvotes, downvotes, order, limit, offset)
+	APIReturn(c, true, result)
+}
+
+func APIGetUserContent(isPost bool) func(*gin.Context) {
+	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid uid given") {
+			return
+		}
+
+		location := strings.Split(c.DefaultQuery("location", ""), ",")
+		if len(location) == 1 && location[0] == "" {
+			location = []string{}
+		}
+		tags := strings.Split(c.DefaultQuery("tags", ""), ",")
+		if len(tags) == 1 && tags[0] == "" {
+			tags = []string{}
+		}
+
+		upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+		if APIFailed(c, e, "invalid upvotes value given") {
+			return
+		}
+
+		downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+		if APIFailed(c, e, "invalid downvotes value given") {
+			return
+		}
+
+		order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+		if APIFailed(c, e, "invalid order given") {
+			return
+		}
+
+		offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+		if APIFailed(c, e, "invalid offset given") {
+			return
+		}
+
+		limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+		if APIFailed(c, e, "invalid limit given") {
+			return
+		}
+
+		now := utc()
+		lastWeek := now.AddDate(0, 0, -7)
+		startDate := c.DefaultQuery("start", formatTime(lastWeek))
+		endDate := c.DefaultQuery("end", formatTime(now))
+
+		result := DBGetUserCont(mainDB, uid, isPost, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
 		APIReturn(c, true, result)
 	}
 }

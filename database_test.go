@@ -30,21 +30,29 @@ func TestDatabase(t *testing.T) {
 		{"fat elk", "fatelk@gmail.com", "word"},
 	}
 
-	matchUsers := func(name string, a User, b User, excludedImp bool) {
+	matchUsers := func(name string, a User, b User) {
 		if a.ID != b.ID {
 			t.Errorf("Mismatched id %d != %d", a.ID, b.ID)
 		}
 		if a.Name != b.Name {
 			t.Errorf("Mismatched name %s != %s", a.Name, b.Name)
 		}
-		if !excludedImp && a.Email != b.Email {
+		if a.Email != b.Email {
 			t.Errorf("Mismatched email %s != %s", a.Email, b.Email)
 		}
-		if !excludedImp && a.Password != b.Password {
+		if a.Password != b.Password {
 			t.Errorf("Mismatched password %s != %s", a.Password, b.Password)
 		}
-		if !excludedImp && a.RegisterDate != b.RegisterDate {
+		if a.RegisterDate != b.RegisterDate {
 			t.Errorf("Mismatched registerDate %v != %v", a.RegisterDate, b.RegisterDate)
+		}
+	}
+	matchUserProfile := func(name string, a UserProfile, b User) {
+		if a.ID != b.ID {
+			t.Errorf("Mismatched id %d != %d", a.ID, b.ID)
+		}
+		if a.Name != b.Name {
+			t.Errorf("Mismatched name %s != %s", a.Name, b.Name)
 		}
 	}
 
@@ -62,9 +70,9 @@ func TestDatabase(t *testing.T) {
 		t.Run(source.Name, func(t *testing.T) {
 			// t.Logf("%v\n", source)
 			user1 := DBGetUser(db, source.ID, "")
-			matchUsers("id matched user", source, user1, false)
+			matchUsers("id matched user", source, user1)
 			user2 := DBGetUser(db, 0, source.Email)
-			matchUsers("email matched user", source, user2, false)
+			matchUsers("email matched user", source, user2)
 
 			if user1.ValidationKey != 0 {
 				t.Errorf("user validation failed")
@@ -88,7 +96,7 @@ func TestDatabase(t *testing.T) {
 			} else if amount > 0 && user5.Upvotes < 0 {
 				t.Errorf("Failed to update user total upvotes")
 			}
-			matchUsers("match vote and get user", srcUser, user5, true)
+			matchUserProfile("match vote and get user", srcUser, user5)
 
 			userPrefs := DBGetUserPref(db, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
 			if len(userPrefs) != 1 {
@@ -125,15 +133,15 @@ func TestDatabase(t *testing.T) {
 		{"Whats your go-to radio station to listen or stream", 5, []string{"Music", "Stream", "radio"}, []string{"Africa", "South Africa", "Free State", "Drakensberg"}},
 	}
 
-	matchPost := func(a Post, b Post) {
+	matchPost := func(a Post, b PostResult) {
 		if a.ID != b.ID {
 			t.Errorf("Mismatch id %d != %d", a.ID, b.ID)
 		}
 		if a.Content != b.Content {
 			t.Errorf("Mismatch content %s != %s", a.Content, b.Content)
 		}
-		if a.UserID != b.UserID {
-			t.Errorf("Mismatch userId %d != %d", a.UserID, b.UserID)
+		if a.UserID != b.Author.ID {
+			t.Errorf("Mismatch userId %d != %d", a.UserID, b.Author.ID)
 		}
 		// if a.tags != b.tags {
 		// 	t.Errorf("Mismatch content %v != %v", a.content, b.content)
@@ -162,6 +170,7 @@ func TestDatabase(t *testing.T) {
 			source := DBCreatePost(db, tc.userId, tc.content, tc.tags, tc.location)
 			post1 := DBGetPost(db, source.ID)
 			matchPost(source, post1)
+			matchUserProfile("", post1.Author, users[tc.userId-1])
 
 			for i := 0; i < rand.Intn(20); i += 2 {
 				odx := rand.Intn(len(users))

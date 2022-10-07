@@ -21,24 +21,35 @@ type User struct {
 	ValidationKey int64
 }
 
+type UserProfile struct {
+	ID           int64
+	Name         string
+	RegisterDate time.Time
+	Upvotes      float64
+	Downvotes    float64
+}
+
 func SQLFieldsForUser() string {
 	return "id, name, email, password, registerDate, updatedAt, upvotes, downvotes, validationKey"
 }
 
-func ScanUser(row *sql.Row, excludeImp bool) (User, error) {
+func SQLFieldsForUserProfile() string {
+	return "id, name, registerDate, upvotes, downvotes"
+}
+
+func ScanUser(row *sql.Row) (User, error) {
 	user := User{}
 	e := row.Scan(&user.ID, &user.Name, &user.Email, &user.Password, &user.RegisterDate, &user.UpdatedAt, &user.Upvotes, &user.Downvotes, &user.ValidationKey)
-	if excludeImp {
-		user.Email = ""
-		user.Password = ""
-		user.RegisterDate = time.Time{}
-		user.UpdatedAt = time.Time{}
-		user.ValidationKey = 0
-	}
 	return user, e
 }
 
-func ScanUsers(rows *sql.Rows, includeScore bool, excludeImp bool) []User {
+func ScanUserProfile(row *sql.Row) (UserProfile, error) {
+	user := UserProfile{}
+	e := row.Scan(&user.ID, &user.Name, &user.RegisterDate, &user.Upvotes, &user.Downvotes)
+	return user, e
+}
+
+func ScanUserProfiles(rows *sql.Rows, includeScore bool) []User {
 	result := []User{}
 	var e error
 	for rows.Next() {
@@ -50,13 +61,13 @@ func ScanUsers(rows *sql.Rows, includeScore bool, excludeImp bool) []User {
 		} else {
 			e = rows.Scan(&user.ID, &user.Name, &user.Upvotes, &user.Downvotes, &cred, &score)
 		}
-		if excludeImp {
-			user.Email = ""
-			user.Password = ""
-			user.RegisterDate = time.Time{}
-			user.UpdatedAt = time.Time{}
-			user.ValidationKey = 0
-		}
+		// if excludeImp {
+		// 	user.Email = ""
+		// 	user.Password = ""
+		// 	user.RegisterDate = time.Time{}
+		// 	user.UpdatedAt = time.Time{}
+		// 	user.ValidationKey = 0
+		// }
 		if DidFail(e, "get user from email/id") {
 			continue
 		}
@@ -93,7 +104,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	rand.Seed(utc().UnixNano())
 	vKey := rand.Int63()
 	row := db.QueryRow(insertUser, name, email, DBHashPassword(password), vKey)
-	user, e := ScanUser(row, false)
+	user, e := ScanUser(row)
 	if DidFail(e, "create and get user") {
 		return User{}
 	}
@@ -179,7 +190,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 		getUser += "email = $1"
 	}
 	row := db.QueryRow(getUser, arg)
-	user, e := ScanUser(row, false)
+	user, e := ScanUser(row)
 	if DidFail(e, "get user from email/id", arg) {
 		return User{}
 	}
@@ -189,7 +200,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 
 func DBGetUsers(db *sql.DB, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []User {
 	getUsers := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score  
-	FROM users`, SQLFieldsForUser())
+	FROM users`, SQLFieldsForUserProfile())
 
 	upClause := ""
 	if upvotes > 0 {
@@ -224,7 +235,7 @@ func DBGetUsers(db *sql.DB, upvotes int64, downvotes int64, sortOrder SortOrder,
 		return []User{}
 	}
 
-	result := ScanUsers(rows, true, true)
+	result := ScanUserProfiles(rows, true)
 
 	return result
 }
@@ -239,7 +250,7 @@ func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 	}
 }
 
-func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64) (User, UserPref) {
+func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64) (UserProfile, UserPref) {
 	nowTime := formatNow()
 	updatedField := ""
 	otherField := ""
@@ -259,9 +270,9 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	updatedAt = '%s'
 	WHERE id = $1
 	RETURNING %s
-	`, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, SQLFieldsForUser())
+	`, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, SQLFieldsForUserProfile())
 	row := db.QueryRow(updateUser, targetId)
-	user, e := ScanUser(row, true)
+	user, e := ScanUserProfile(row)
 	DidFail(e, "update user score", targetId)
 
 	vote := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid)
@@ -277,162 +288,4 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	DidFail(e, "vote for user")
 
 	return user, pref
-}
-
-type UserPrefKind int
-
-const (
-	upUser UserPrefKind = iota + 1
-	upComment
-	upPost
-	upTag
-)
-
-type UserPref struct {
-	Kind      UserPrefKind
-	PID       int64
-	SID       int64
-	Upvotes   float64
-	Downvotes float64
-}
-
-func SQLFieldsForUserPref() string {
-	return "kind, pid, sid, upvotes, downvotes"
-}
-
-func ScanUserPrefRow(row *sql.Row) (UserPref, error) {
-	up := UserPref{}
-	e := row.Scan(&up.Kind, &up.PID, &up.SID, &up.Upvotes, &up.Downvotes)
-	return up, e
-}
-
-func ScanUserPrefRows(rows *sql.Rows) []UserPref {
-	result := []UserPref{}
-	var cred float64
-	var score float64
-	var e error
-	for rows.Next() {
-		up := UserPref{}
-		e = rows.Scan(&up.Kind, &up.PID, &up.SID, &up.Upvotes, &up.Downvotes, &cred, &score)
-		if DidFail(e, "scan user pref") {
-			continue
-		}
-		result = append(result, up)
-	}
-	return result
-}
-
-// ignore kind if it equals 0. ignore pid if it equals 0. ignore sid if it equals 0
-func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, upvotes int64, downvotes int64, limit int64, offset int64) []UserPref {
-	query := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score FROM User%dPref
-	`, SQLFieldsForUserPref(), userId)
-
-	cond := ""
-	if kind > 0 {
-		cond = fmt.Sprintf(" WHERE kind = %d", kind)
-	}
-	if pid > 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		cond += fmt.Sprintf("pid = %d", pid)
-	}
-	if sid > 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		cond += fmt.Sprintf("sid = %d", sid)
-	}
-	if upvotes != 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		if upvotes > 0 {
-			cond += fmt.Sprintf("upvotes > %d", upvotes)
-		} else {
-			cond += fmt.Sprintf("upvotes < %d", -upvotes)
-		}
-	}
-	if downvotes != 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		if downvotes > 0 {
-			cond += fmt.Sprintf("downvotes > %d", upvotes)
-		} else {
-			cond += fmt.Sprintf("downvotes < %d", -upvotes)
-		}
-	}
-
-	query += cond + "\n"
-	query += SQLSortOrder(sortOrder)
-
-	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
-	rows, e := db.Query(query)
-	result := []UserPref{}
-	if DidFail(e, "select user prefs for ", userId, " of kind ", kind, " pid:", pid, " sid: ", sid) {
-		return result
-	}
-	result = ScanUserPrefRows(rows)
-
-	return result
-}
-
-type UserCont struct {
-	PostID    int64
-	CommentID int64
-}
-
-func SQLFieldsForUserCont() string {
-	return "postId, commentId"
-}
-
-func ScanUserCont(row *sql.Row) (UserCont, error) {
-	up := UserCont{}
-	e := row.Scan(&up.PostID, &up.CommentID)
-	return up, e
-}
-
-func ScanUserConts(rows *sql.Rows) []UserCont {
-	result := []UserCont{}
-	var e error
-	for rows.Next() {
-		up := UserCont{}
-		e = rows.Scan(&up.PostID, &up.CommentID)
-		if DidFail(e, "scan user pref") {
-			continue
-		}
-		result = append(result, up)
-	}
-	return result
-}
-
-func DBGetUserCont(db *sql.DB, userId int64, isPosts bool, limit int64, offset int64) []UserCont {
-	query := fmt.Sprintf(`SELECT %s FROM User%dPref`, SQLFieldsForUserCont(), userId)
-
-	cond := ""
-	if isPosts {
-		cond = " WHERE commentId > 0"
-	} else {
-		cond = " WHERE commentId <= 0"
-	}
-
-	query += cond + "\n"
-	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
-	rows, e := db.Query(query)
-	result := []UserCont{}
-	if DidFail(e, "get user content") {
-		return result
-	}
-	result = ScanUserConts(rows)
-
-	return result
 }
