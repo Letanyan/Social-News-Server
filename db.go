@@ -110,7 +110,7 @@ func DBDeleteTable(db *sql.DB, name string) {
 }
 
 func DBDeleteAllPosts(db *sql.DB) {
-	tables := GetTableNamesLike(db, "posts%")
+	tables := DBGetTableNamesLike(db, "posts%")
 	DBDeleteTable(db, "Comments")
 	for _, name := range tables {
 		DBDeleteTable(db, name)
@@ -138,6 +138,21 @@ func DBClearAllTables(db *sql.DB) {
 	DBDeleteTable(db, "tags")
 }
 
+func DBGetTableNamesLike(db *sql.DB, query string) []string {
+	cmd := fmt.Sprintf("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%s'", query)
+	rows, e := db.Query(cmd)
+	result := []string{}
+	if DidFail(e, "get all table names like ", query) {
+		return result
+	}
+	for rows.Next() {
+		name := ""
+		rows.Scan(&name)
+		result = append(result, name)
+	}
+	return result
+}
+
 func BuildUnionForYears(query string, years []int64) string {
 	names := []string{}
 	for _, y := range years {
@@ -153,21 +168,6 @@ func BuildUnionForNames(query string, names []string) string {
 		if i < len(names)-1 {
 			result += "\nunion\n"
 		}
-	}
-	return result
-}
-
-func GetTableNamesLike(db *sql.DB, query string) []string {
-	cmd := fmt.Sprintf("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%s'", query)
-	rows, e := db.Query(cmd)
-	result := []string{}
-	if DidFail(e, "get all table names like ", query) {
-		return result
-	}
-	for rows.Next() {
-		name := ""
-		rows.Scan(&name)
-		result = append(result, name)
 	}
 	return result
 }
