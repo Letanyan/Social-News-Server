@@ -40,9 +40,9 @@ func APIFailed(c *gin.Context, e error, reason string) bool {
 // ------------------------------------------------------------------------
 func APICreateUser(c *gin.Context) {
 	type Input struct {
-		name     string
-		email    string
-		password string
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	var input Input
 
@@ -51,7 +51,7 @@ func APICreateUser(c *gin.Context) {
 		return
 	}
 
-	user := DBCreateUser(mainDB, input.name, input.email, input.password)
+	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID != 0 {
 		APIReturn(c, true, user)
 	} else {
@@ -61,10 +61,10 @@ func APICreateUser(c *gin.Context) {
 
 func APICreatePost(c *gin.Context) {
 	type Input struct {
-		userId   int64
-		content  string
-		tags     []string
-		location []string
+		UserID   int64    `json:"userId"`
+		Content  string   `json:"content"`
+		Tags     []string `json:"tags"`
+		Location []string `json:"location"`
 	}
 	var input Input
 
@@ -73,10 +73,10 @@ func APICreatePost(c *gin.Context) {
 		return
 	}
 
-	if len(input.location) == 0 {
-		input.location = getAddress(c.ClientIP())
+	if len(input.Location) == 0 {
+		input.Location = getAddress(c.ClientIP())
 	}
-	post := DBCreatePost(mainDB, input.userId, input.content, input.tags, input.location)
+	post := DBCreatePost(mainDB, input.UserID, input.Content, input.Tags, input.Location)
 	if post.ID != 0 {
 		APIReturn(c, true, post)
 	} else {
@@ -617,22 +617,23 @@ func APIVoteUser(c *gin.Context) {
 		return
 	}
 
-	uid, e := strconv.ParseInt(c.Query("uid"), 10, 64)
-	if APIFailed(c, e, "invalid source user id") {
+	type Input struct {
+		UID    int64 `json:"uid"`
+		Amount int64 `json:"amount"`
+	}
+	var input Input
+	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+		APIFailed(c, e, "invalid input values")
 		return
 	}
 
-	amount, e := strconv.ParseInt(c.Query("amount"), 10, 64)
-	if APIFailed(c, e, "invalid voting amount") {
-		return
-	}
-
-	if !DBCanUpdateCredit(mainDB, uid, amount) {
+	if !DBCanUpdateCredit(mainDB, input.UID, input.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
+		return
 	}
 
-	profile, pref := DBVoteForUser(mainDB, uid, targetId, amount)
-	remaining := DBUpdateUserCredit(mainDB, uid, amount)
+	profile, pref := DBVoteForUser(mainDB, input.UID, targetId, input.Amount)
+	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {
 		APIReturn(c, true, gin.H{"profile": profile, "pref": pref, "credits_remaining": remaining})
@@ -647,24 +648,25 @@ func APIVotePost(c *gin.Context) {
 		return
 	}
 
-	uid, e := strconv.ParseInt(c.Query("uid"), 10, 64)
-	if APIFailed(c, e, "invalid source user id") {
+	type Input struct {
+		UID    int64 `json:"uid"`
+		Amount int64 `json:"amount"`
+	}
+	var input Input
+	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+		APIFailed(c, e, "invalid input values")
 		return
 	}
 
-	amount, e := strconv.ParseInt(c.Query("amount"), 10, 64)
-	if APIFailed(c, e, "invalid voting amount") {
-		return
-	}
-
-	if !DBCanUpdateCredit(mainDB, uid, amount) {
+	if !DBCanUpdateCredit(mainDB, input.UID, input.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
+		return
 	}
 
 	addr := getAddress(c.ClientIP())
 
-	post, profile, tag, pref := DBVotePost(mainDB, uid, pid, amount, addr)
-	remaining := DBUpdateUserCredit(mainDB, uid, amount)
+	post, profile, tag, pref := DBVotePost(mainDB, input.UID, pid, input.Amount, addr)
+	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {
 		APIReturn(c, true, gin.H{"post": post, "profile": profile, "tag": tag, "pref": pref, "credits_remaining": remaining})
@@ -684,26 +686,51 @@ func APIVoteComment(c *gin.Context) {
 		return
 	}
 
-	uid, e := strconv.ParseInt(c.Query("uid"), 10, 64)
-	if APIFailed(c, e, "invalid source user id") {
+	type Input struct {
+		UID    int64 `json:"uid"`
+		Amount int64 `json:"amount"`
+	}
+	var input Input
+	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+		APIFailed(c, e, "invalid input values")
 		return
 	}
 
-	amount, e := strconv.ParseInt(c.Query("amount"), 10, 64)
-	if APIFailed(c, e, "invalid voting amount") {
-		return
-	}
-
-	if !DBCanUpdateCredit(mainDB, uid, amount) {
+	if !DBCanUpdateCredit(mainDB, input.UID, input.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
+		return
 	}
 
-	comment, profile, pref := DBVoteComment(mainDB, uid, pid, cid, amount)
-	remaining := DBUpdateUserCredit(mainDB, uid, amount)
+	comment, profile, pref := DBVoteComment(mainDB, input.UID, pid, cid, input.Amount)
+	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {
 		APIReturn(c, true, gin.H{"comment": comment, "profile": profile, "pref": pref, "credits_remaining": remaining})
 	} else {
 		APIFailed(c, errors.New(""), "could not complete vote")
+	}
+}
+
+func APIPurchaseCredit(c *gin.Context) {
+	type Input struct {
+		Amount int64 `json:"amount"`
+	}
+	var input Input
+	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+		APIFailed(c, e, "invalid input values")
+		return
+	}
+
+	targetId, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid target user id") {
+		return
+	}
+
+	newAmount := DBAddUserCredit(mainDB, targetId, input.Amount)
+
+	if newAmount >= 0 {
+		APIReturn(c, true, gin.H{"credits_remaining": newAmount})
+	} else {
+		APIFailed(c, errors.New(""), "could not complete top up")
 	}
 }

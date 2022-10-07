@@ -268,7 +268,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 	UPDATE users
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	credits = credits + 0.75 * %d
+	credits = credits + 0.75 * %d,
 	updatedAt = '%s'
 	WHERE id = $1
 	RETURNING %s
@@ -304,10 +304,25 @@ func DBCanUpdateCredit(db *sql.DB, userId int64, amount int64) bool {
 	return e == nil
 }
 
-func DBUpdateUserCredit(db *sql.DB, userId int64, amount int64) int64 {
+func DBSubtractUserCredit(db *sql.DB, userId int64, amount int64) int64 {
 	changeAmount := fmt.Sprintf(`UPDATE Users 
 	SET credits = credits - %d 
 	WHERE id = $1 AND credits >= %d
+	RETURNING credits`, amount, amount)
+	row := db.QueryRow(changeAmount, userId)
+	var result int64
+	e := row.Scan(&result)
+	if e != nil {
+		return -1
+	} else {
+		return result
+	}
+}
+
+func DBAddUserCredit(db *sql.DB, userId int64, amount int64) int64 {
+	changeAmount := fmt.Sprintf(`UPDATE Users 
+	SET credits = credits + %d
+	WHERE id = $1 AND credits < 1000000000000000 - %d
 	RETURNING credits`, amount, amount)
 	row := db.QueryRow(changeAmount, userId)
 	var result int64

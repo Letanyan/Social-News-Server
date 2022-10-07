@@ -55,6 +55,7 @@ func main() {
 		v1.GET("/tags/:tid", APIGetTag)
 		v1.GET("/tags", APIGetTags)
 		// Vote
+		v1.POST("/credits/:uid", APIPurchaseCredit)
 		v1.POST("/users/:uid", APIVoteUser)
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
