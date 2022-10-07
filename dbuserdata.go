@@ -206,20 +206,31 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	return result
 }
 
-func DBGetUserPrefUsers(db *sql.DB, userId int64, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefUser {
-	getUsers := fmt.Sprintf(`SELECT %s, RATIO(u.upvotes, u.downvotes) AS cred, u.upvotes * RATIO(u.upvotes, u.downvotes) AS score  
+func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefUser {
+	getUsers := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
 	FROM User%dPref up JOIN users u ON up.pid = u.id WHERE kind = 1
 	`, SQLFieldsForUserPrefUser(), userId)
 
+	if upvoteAmount > 0 {
+		getUsers += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
+	} else if upvoteAmount < 0 {
+		getUsers += fmt.Sprintf("AND up.upvotes < %d ", -upvoteAmount)
+	}
+	if downvoteAmount > 0 {
+		getUsers += fmt.Sprintf("AND up.downvotes > %d ", downvoteAmount)
+	} else if downvoteAmount < 0 {
+		getUsers += fmt.Sprintf("AND up.downvotes < %d ", -downvoteAmount)
+	}
+
 	if upvotes > 0 {
-		getUsers = fmt.Sprintf("AND upvotes > %d ", upvotes)
+		getUsers += fmt.Sprintf("AND u.upvotes > %d ", upvotes)
 	} else if upvotes < 0 {
-		getUsers = fmt.Sprintf("AND upvotes < %d ", -upvotes)
+		getUsers += fmt.Sprintf("AND u.upvotes < %d ", -upvotes)
 	}
 	if downvotes > 0 {
-		getUsers = fmt.Sprintf("AND downvotes > %d ", downvotes)
+		getUsers += fmt.Sprintf("AND u.downvotes > %d ", downvotes)
 	} else if downvotes < 0 {
-		getUsers = fmt.Sprintf("AND downvotes < %d ", -downvotes)
+		getUsers += fmt.Sprintf("AND u.downvotes < %d ", -downvotes)
 	}
 
 	getUsers += SQLSortOrder(sortOrder)
@@ -235,7 +246,7 @@ func DBGetUserPrefUsers(db *sql.DB, userId int64, upvotes int64, downvotes int64
 	return result
 }
 
-func DBGetUserPrefPosts(db *sql.DB, userId int64, isComment bool, authorId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []UserPrefPost {
+func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, isComment bool, authorId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []UserPrefPost {
 	kind := upPost
 	if isComment {
 		kind = upComment
@@ -246,26 +257,37 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, isComment bool, authorId int64
 		JOIN users u ON p.userId = u.id
 		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') AND kind = %d
 		`, SQLFieldsForUserPrefPost(), userId, startDate, endDate, kind)
+
+	if upvoteAmount > 0 {
+		getPosts += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
+	} else if upvoteAmount < 0 {
+		getPosts += fmt.Sprintf("AND up.upvotes < %d ", -upvoteAmount)
+	}
+	if downvoteAmount > 0 {
+		getPosts += fmt.Sprintf("AND up.downvotes > %d ", downvoteAmount)
+	} else if downvoteAmount < 0 {
+		getPosts += fmt.Sprintf("AND up.downvotes < %d ", -downvoteAmount)
+	}
 	if authorId != 0 {
-		getPosts += fmt.Sprintf("AND p.userId = %d\n", authorId)
+		getPosts += fmt.Sprintf("AND p.userId = %d ", authorId)
 	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
-		getPosts += fmt.Sprintf("AND %s && p.tags\n", queryTags)
+		getPosts += fmt.Sprintf("AND %s && p.tags ", queryTags)
 	}
 	if len(location) > 0 {
 		queryLoc := SQLFormattedArray(location)
-		getPosts += fmt.Sprintf("AND p.location @> %s\n", queryLoc)
+		getPosts += fmt.Sprintf("AND p.location @> %s ", queryLoc)
 	}
 	if upvotes > 0 {
-		getPosts += fmt.Sprintf("AND p.upvotes > %d\n", upvotes)
+		getPosts += fmt.Sprintf("AND p.upvotes > %d ", upvotes)
 	} else if upvotes < 0 {
-		getPosts += fmt.Sprintf("AND p.upvotes < %d\n", -upvotes)
+		getPosts += fmt.Sprintf("AND p.upvotes < %d ", -upvotes)
 	}
 	if downvotes > 0 {
-		getPosts += fmt.Sprintf("AND p.downvotes > %d\n", downvotes)
+		getPosts += fmt.Sprintf("AND p.downvotes > %d ", downvotes)
 	} else if downvotes < 0 {
-		getPosts += fmt.Sprintf("AND p.downvotes < %d\n", -downvotes)
+		getPosts += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 
 	sDate := parseTime(startDate)
@@ -287,13 +309,23 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, isComment bool, authorId int64
 	return result
 }
 
-func DBGetUserPrefTags(db *sql.DB, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefTag {
+func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM user%dpref up
 	JOIN tags t ON up.pid = t.id
 	WHERE kind = 4
 	`, SQLFieldsForUserPrefTag(), userId)
 
+	if upvoteAmount > 0 {
+		getTags += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
+	} else if upvoteAmount < 0 {
+		getTags += fmt.Sprintf("AND up.upvotes < %d ", -upvoteAmount)
+	}
+	if downvoteAmount > 0 {
+		getTags += fmt.Sprintf("AND up.downvotes > %d ", downvoteAmount)
+	} else if downvoteAmount < 0 {
+		getTags += fmt.Sprintf("AND up.downvotes < %d ", -downvoteAmount)
+	}
 	if len(tags) > 0 {
 		tagArray := SQLFormattedArray(tags)
 		getTags += fmt.Sprintf("AND ARRAY[name] <@ %s\n", tagArray)

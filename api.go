@@ -210,6 +210,16 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
+	upvoteAmount, e := strconv.ParseInt(c.DefaultQuery("upvoteAmount", "0"), 10, 64)
+	if APIFailed(c, e, "invalid upvote amount given") {
+		return
+	}
+
+	downvoteAmount, e := strconv.ParseInt(c.DefaultQuery("downvoteAmount", "0"), 10, 64)
+	if APIFailed(c, e, "invalid downvote amount given") {
+		return
+	}
+
 	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
 	if APIFailed(c, e, "invalid order given") {
 		return
@@ -230,7 +240,7 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
-	users := DBGetUserPrefUsers(mainDB, uid, upvotes, downvotes, order, limit, offset)
+	users := DBGetUserPrefUsers(mainDB, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, limit, offset)
 	APIReturn(c, true, users)
 }
 
@@ -280,12 +290,22 @@ func APIGetUserPrefPosts(isComment bool) func(*gin.Context) {
 			return
 		}
 
+		upvoteAmount, e := strconv.ParseInt(c.DefaultQuery("upvoteAmount", "0"), 10, 64)
+		if APIFailed(c, e, "invalid upvote amount given") {
+			return
+		}
+
+		downvoteAmount, e := strconv.ParseInt(c.DefaultQuery("downvoteAmount", "0"), 10, 64)
+		if APIFailed(c, e, "invalid downvote amount given") {
+			return
+		}
+
 		now := utc()
 		lastWeek := now.AddDate(0, 0, -7)
 		startDate := c.DefaultQuery("start", formatTime(lastWeek))
 		endDate := c.DefaultQuery("end", formatTime(now))
 
-		posts := DBGetUserPrefPosts(mainDB, uid, isComment, author, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+		posts := DBGetUserPrefPosts(mainDB, uid, upvoteAmount, downvoteAmount, isComment, author, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
 		APIReturn(c, true, posts)
 	}
 }
@@ -293,6 +313,16 @@ func APIGetUserPrefPosts(isComment bool) func(*gin.Context) {
 func APIGetUserPrefTags(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid uid given") {
+		return
+	}
+
+	upvoteAmount, e := strconv.ParseInt(c.DefaultQuery("upvoteAmount", "0"), 10, 64)
+	if APIFailed(c, e, "invalid upvote amount given") {
+		return
+	}
+
+	downvoteAmount, e := strconv.ParseInt(c.DefaultQuery("downvoteAmount", "0"), 10, 64)
+	if APIFailed(c, e, "invalid downvote amount given") {
 		return
 	}
 
@@ -330,7 +360,7 @@ func APIGetUserPrefTags(c *gin.Context) {
 		return
 	}
 
-	result := DBGetUserPrefTags(mainDB, uid, tags, location, upvotes, downvotes, order, limit, offset)
+	result := DBGetUserPrefTags(mainDB, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, limit, offset)
 	APIReturn(c, true, result)
 }
 
