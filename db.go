@@ -87,12 +87,11 @@ func DBSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
-		location TEXT[] NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP DEFAULT now(),
+		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
 
-		PRIMARY KEY (name, location)
+		PRIMARY KEY (name)
 	);`
 	_, e = db.Exec(createTags)
 	DidFail(e, "create tags table")
@@ -123,6 +122,15 @@ func DBSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createRatio)
 	DidFail(e, "create ratio function")
+
+	createScoredRatio := `
+	CREATE OR REPLACE FUNCTION scoredRatio(x DOUBLE PRECISION, y DOUBLE PRECISION, beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN cooldown(ratio(x, y) * (x - y), beginDate, endDate, period);
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createScoredRatio)
+	DidFail(e, "create scored ratio function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

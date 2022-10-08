@@ -89,3 +89,14 @@ func SQLFormattedIndexRows(array []int64, rest func(int64) string) string {
 	}
 	return result
 }
+
+func SQLFormattedIndexList(array []int64, rest func(int64) string) string {
+	result := ""
+	for i, s := range array {
+		result += rest(s)
+		if i < len(array)-1 {
+			result += ","
+		}
+	}
+	return result
+}

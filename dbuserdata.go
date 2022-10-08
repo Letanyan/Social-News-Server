@@ -56,7 +56,7 @@ func SQLFieldsForUserPrefPost() string {
 }
 
 func SQLFieldsForUserPrefTag() string {
-	return "t.id, t.name, t.updatedAt, t.location, t.upvotes AS item_up, t.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "t.id, t.name, t.updatedAt, t.upvotes AS item_up, t.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func ScanUserPrefRow(row *sql.Row) (UserPref, error) {
@@ -132,7 +132,7 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 		tag := Tag{}
 		var up float64
 		var down float64
-		e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt, pq.Array(&tag.Location),
+		e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt,
 			&tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref tag") {
 			continue

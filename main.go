@@ -10,6 +10,7 @@ import (
 
 	"database/sql"
 
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -70,51 +71,35 @@ func main() {
 
 	DBSetup(mainDB)
 
-	// loc1 := []string{"Africa", "South Africa", "Gauteng", "Centurion"}
-	// loc2 := []string{"Asia", "Japan", "Tokyo", "Chiyoda"}
-	// loc3 := []string{}
+	query := fmt.Sprintf(`
+    WITH tv AS (
+        SELECT t.name, ratio(up.upvotes, up.downvotes) AS val
+        FROM user3pref up JOIN tags t ON t.id = up.pid
+        WHERE up.kind = 4
+    )
+    SELECT id, upvotes, tags, 
+        SUM(cooldown(p.upvotes - p.downvotes, p.updatedAt, now() at time zone ('utc'), 31536000) * tv.val),
+        p.upvotes - p.downvotes AS x, tv.val AS y, tv.name
+    FROM posts2022 p JOIN tv ON ARRAY[tv.name] <@ p.tags
+    GROUP BY id, upvotes, tags, x, y, tv.name
+    `)
+	rows, e := mainDB.Query(query)
+	if DidFail(e) {
+		return
+	}
+	for rows.Next() {
+		var p PostResult
+		var s float64
+		var x float64
+		var y float64
+		var name string
+		e = rows.Scan(&p.ID, &p.Content, pq.Array(&p.Tags), &s, &x, &y, &name)
+		if DidFail(e) {
+			return
+		}
 
-	// createNewUser := func() {
-	// 	name := "Adam"
-	// 	email := "adam@social.com"
-	// 	pass := "hfusi"
-	// 	if DBIsValidEmail(db, email) {
-	// 		DBCreateUser(db, name, email, pass)
-	// 	} else {
-	// 		log.Println("Failed to create new user email is taken")
-	// 	}
-	// }
-	// createNewUser()
-
-	// DBCreatePost(db, 1, "This is a post", []string{}, loc1)
-	// DBCreatePost(db, 1, "This is another post", []string{}, loc3)
-	// DBCreatePost(db, 1, "What do you say", []string{}, loc1)
-
-	// DBCreateComment(db, 1, "This is a comment", 221003162748045645, 0)
-	// DBCreateComment(db, 1, "This is a reply", 221003162748045645, 1)
-
-	// DBCreatePost(db, 1, "Where are we", []string{"lost", "going places"}, loc2)
-	// DBCreatePost(db, 1, "Returning trip", []string{}, loc1)
-
-	// DBVotePost(db, 1, 221003194241748012, -2, loc1)
-	// DBVotePost(db, 1, 221003194241787611, 2, loc2)
-	// DBVotePost(db, 1, 221003194241787611, 2, loc3)
-	// DBVoteComment(db, 1, 221003194241748012, 1, 5)
-
-	// posts := DBGetPosts(db, 1, []string{}, []string{"Africa"}, soCreatedAt, 10, 0, "2022-01-01 00:00:00.00", "2023-01-01 00:00:00.00")
-	// for _, p := range posts {
-	// 	log.Println(p)
-	// }
-
-	// prefs := DBGetUserPref(db, 1, soScore, upPost, 0, 0, 10, 0)
-	// for _, p := range prefs {
-	// 	log.Printf("%v\n", p)
-	// }
-
-	// tags := DBGetTags(db, []string{}, []string{}, soUpvotes, 10, 0)
-	// for _, t := range tags {
-	// 	log.Println(t)
-	// }
+		fmt.Println(p.ID, p.Content, p.Tags, s, x, y, name)
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {

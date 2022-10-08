@@ -128,7 +128,7 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 		return Post{}
 	}
 
-	DBCreateTags(db, tags, location)
+	DBCreateTags(db, tags)
 
 	return post
 }
