@@ -112,9 +112,9 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
 func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, location []string) Post {
 	t := utc()
 	nowTime := formatTime(t)
-	year := t.Year()
-	insertPost := fmt.Sprintf(`INSERT INTO posts%d(id, userId, content, tags, createdAt, updatedAt, location) 
-	VALUES (nextval('posts%d_id_seq') * 10000 + extract(year from now() at time zone ('utc')), $1, $2, %s, '%s', '%s', %s) RETURNING %s`, year, year, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
+	// year := t.Year()
+	insertPost := fmt.Sprintf(`INSERT INTO posts(id, userId, content, tags, createdAt, updatedAt, location) 
+	VALUES (nextval('posts_id_seq') * 10000 + extract(year from now() at time zone ('utc')), $1, $2, %s, '%s', '%s', %s) RETURNING %s`, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
 	row := db.QueryRow(insertPost, userId, content)
 
 	post, e := ScanPost(row)
@@ -147,28 +147,27 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	year := yearFromId(postId)
 	locArray := SQLFormattedArray(location)
 	updateVoteForPost := fmt.Sprintf(`
-	INSERT INTO votes%d(kind, pid, sid, location) VALUES(3, %d, -1, %s)
+	INSERT INTO votes(kind, pid, sid, location) VALUES(3, %d, -1, %s)
 	ON CONFLICT (kind, pid, sid, location) DO NOTHING;
-	UPDATE votes%d SET
+	UPDATE votes SET
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
 	WHERE kind=3 AND pid=%d AND location=%s;
 
-	UPDATE posts%d SET
+	UPDATE posts SET
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
 	WHERE id = %d
 	RETURNING %s
-	`, year, postId, locArray, year,
+	`, postId, locArray,
 		updateField, updateField, nowTime, upvoteAmount,
 		otherField, otherField, nowTime, nowTime,
 		postId, locArray,
-		year, updateField, updateField, nowTime, upvoteAmount,
+		updateField, updateField, nowTime, upvoteAmount,
 		otherField, otherField, nowTime, nowTime, postId, SQLFieldsForPost())
 	row := db.QueryRow(updateVoteForPost)
 	post, e := ScanPost(row)
@@ -204,9 +203,9 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 }
 
 func DBDeletePost(db *sql.DB, postId int64) {
-	year := yearFromId(postId)
+	// year := yearFromId(postId)
 
-	deleteFromPosts := fmt.Sprintf(`DELETE FROM posts%d WHERE id=$1 RETURNING userId`, year)
+	deleteFromPosts := `DELETE FROM posts WHERE id=$1 RETURNING userId`
 	row := db.QueryRow(deleteFromPosts, postId)
 	var userId int64
 	e := row.Scan(&userId)
@@ -271,8 +270,8 @@ func SQLSortOrder(so SortOrder) string {
 
 func DBGetPost(db *sql.DB, id int64) PostResult {
 	getPosts := fmt.Sprintf(`SELECT %s
-	FROM posts%d p JOIN users u ON p.userId = u.id  WHERE p.id = $1
-	`, SQLFieldsForPostResult(), yearFromId(id))
+	FROM posts p JOIN users u ON p.userId = u.id  WHERE p.id = $1
+	`, SQLFieldsForPostResult())
 
 	row := db.QueryRow(getPosts, id)
 	post, e := ScanPostResult(row)
@@ -289,7 +288,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 		voteTable = "v"
 	}
 	getPosts := fmt.Sprintf(`SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
-	FROM posts{year} p 
+	FROM posts p 
 	JOIN users u ON p.userId = u.id
 	`, SQLFieldsForPostResultAlias())
 
@@ -322,7 +321,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	if len(popularIn) > 0 {
 		queryLoc := SQLFormattedArray(popularIn)
 		cond += fmt.Sprintf("AND v.kind=3 AND v.location @> %s\n", queryLoc)
-		getPosts += "JOIN votes{year} v ON v.pid = p.id\n"
+		getPosts += "JOIN votes v ON v.pid = p.id\n"
 	}
 
 	getPosts += cond
@@ -333,17 +332,12 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 		getPosts = strings.ReplaceAll(getPosts, "{agg}", "")
 	}
 
-	sDate := parseTime(startDate)
-	eDate := parseTime(endDate)
-	years := yearsBetweenDates(sDate, eDate)
-	postQueries := BuildUnionForYears(getPosts, years)
+	getPosts += SQLSortOrder(sortOrder)
+	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
-	postQueries += SQLSortOrder(sortOrder)
-	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
-
-	rows, e := db.Query(postQueries)
+	rows, e := db.Query(getPosts)
 	result := []PostResult{}
-	if DidFail(e, "get posts\n", postQueries) {
+	if DidFail(e, "get posts\n", getPosts) {
 		return result
 	}
 	defer rows.Close()

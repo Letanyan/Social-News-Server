@@ -99,12 +99,11 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool) []CommentResult {
 func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, replyId int64) (Comment, UserCont) {
 	t := utc()
 	nowTime := formatTime(t)
-	year := yearFromId(int64(postId))
 
 	insertComment := fmt.Sprintf(`
-	INSERT INTO Comments%d(id, userId, postId, replyId, content, createdAt, updatedAt) 
-	VALUES(nextval('comments%d_id_seq') * 10000 + extract(year from now() at time zone ('utc')), %d, $3, %d, $1, $2, $2) 
-	RETURNING %s`, year, year, userId, replyId, SQLFieldsForComment())
+	INSERT INTO Comments(id, userId, postId, replyId, content, createdAt, updatedAt) 
+	VALUES(nextval('comments_id_seq') * 10000 + extract(year from now() at time zone ('utc')), %d, $3, %d, $1, $2, $2) 
+	RETURNING %s`, userId, replyId, SQLFieldsForComment())
 	row := db.QueryRow(insertComment, content, nowTime, postId)
 	comment, e := ScanComment(row)
 	if DidFail(e, "insert comment") {
@@ -125,8 +124,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 }
 
 func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
-	year := yearFromId(postId)
-	deleteFromPostComments := fmt.Sprintf(`DELETE FROM comments%d WHERE id=$1 RETURNING userId`, year)
+	deleteFromPostComments := `DELETE FROM comments WHERE id=$1 RETURNING userId`
 	row := db.QueryRow(deleteFromPostComments, commentId)
 	var userId int64
 	e := row.Scan(&userId)
@@ -140,9 +138,8 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 }
 
 func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) Comment {
-	year := yearFromId(postId)
-	updateFromPostComments := fmt.Sprintf(`UPDATE comments%d SET content=$1 WHERE id=$2
-	RETURNING %s`, year, SQLFieldsForComment())
+	updateFromPostComments := fmt.Sprintf(`UPDATE comments SET content=$1 WHERE id=$2
+	RETURNING %s`, SQLFieldsForComment())
 	row := db.QueryRow(updateFromPostComments, content, commentId)
 	comment, e := ScanComment(row)
 	if DidFail(e, "update comment ", commentId, " from post ", postId, " comments table") {
@@ -156,7 +153,6 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	nowTime := formatTime(currentTime)
 	var updateField string
 	var otherField string
-	year := yearFromId(postId)
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updateField = "upvotes"
@@ -168,24 +164,24 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	}
 	locArray := SQLFormattedArray(location)
 	updateVoteForPost := fmt.Sprintf(`
-		INSERT INTO votes%d(kind, pid, sid, location) VALUES(2, %d, %d, %s)
+		INSERT INTO votes(kind, pid, sid, location) VALUES(2, %d, %d, %s)
 		ON CONFLICT (kind, pid, sid, location) DO NOTHING;
-		UPDATE votes%d SET
+		UPDATE votes SET
 		%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 		%s = cooldown(%s, updatedAt, '%s', 31536000),
 		updatedAt = '%s'
 		WHERE kind=2 AND pid=%d AND sid=%d AND location=%s;
 
-		UPDATE Comments%d SET 
+		UPDATE Comments SET 
 		%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 		%s = cooldown(%s, updatedAt, '%s', 31536000),
 		updatedAt = '%s'
 		WHERE id = %d
 		RETURNING %s
-		`, year, postId, commentId, locArray, year,
+		`, postId, commentId, locArray,
 		updateField, updateField, nowTime, upvoteAmount,
 		otherField, otherField, nowTime, nowTime, postId, commentId, locArray,
-		year, updateField, updateField, nowTime, upvoteAmount,
+		updateField, updateField, nowTime, upvoteAmount,
 		otherField, otherField, nowTime, nowTime, commentId, SQLFieldsForComment())
 	row := db.QueryRow(updateVoteForPost)
 	comment, e := ScanComment(row)
@@ -216,8 +212,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 }
 
 func DBGetComment(db *sql.DB, postId int64, commentId int64) CommentResult {
-	year := yearFromId(postId)
-	getComment := fmt.Sprintf(`SELECT %s FROM Comments%d p JOIN users u ON p.userId = u.id WHERE id = %d`, SQLFieldsForCommentResult(), year, commentId)
+	getComment := fmt.Sprintf(`SELECT %s FROM Comments p JOIN users u ON p.userId = u.id WHERE id = %d`, SQLFieldsForCommentResult(), commentId)
 	row := db.QueryRow(getComment)
 	comment, e := ScanCommentResult(row)
 	if DidFail(e, "get comment ", commentId, " for post ", postId) {
@@ -228,15 +223,14 @@ func DBGetComment(db *sql.DB, postId int64, commentId int64) CommentResult {
 
 // ignore userId if 0, ignore replyId if 0, start < CreatedAt < end ignore if empty, ignore upvotes if 0
 func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start string, end string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []CommentResult {
-	year := yearFromId(postId)
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
 	}
 	getComments := fmt.Sprintf(`SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
-	FROM Comments%d p 
+	FROM Comments p 
 	JOIN users u ON p.userId = u.id
-	`, SQLFieldsForCommentResultAlias(), year)
+	`, SQLFieldsForCommentResultAlias())
 
 	cond := fmt.Sprintf("WHERE postId = %d\n", postId)
 	if userId != 0 {
@@ -269,7 +263,7 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 	if len(popularIn) > 0 {
 		queryLoc := SQLFormattedArray(popularIn)
 		cond += fmt.Sprintf("AND v.kind=2 AND v.location @> %s\n", queryLoc)
-		getComments += "JOIN votes{year} v ON v.pid = p.id\n"
+		getComments += "JOIN votes v ON v.pid = p.id\n"
 	}
 
 	getComments += cond + "\n"

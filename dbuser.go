@@ -246,7 +246,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 		} else {
 			voteCondition += " " + locCond
 		}
-		getUsers += "JOIN {votes} v ON v.pid = u.id\n"
+		getUsers += "JOIN Votes v ON v.pid = u.id\n"
 	}
 	if len(voteCondition) > 0 {
 		getUsers += "WHERE " + voteCondition + "\n"
@@ -257,9 +257,6 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 		getUsers = strings.ReplaceAll(getUsers, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 	} else {
 		getUsers = strings.ReplaceAll(getUsers, "{agg}", "")
-	}
-	if len(popularIn) > 0 {
-		getUsers = BuildUnionForNames(getUsers, "{votes}", DBGetTableNamesLike(db, "votes%"))
 	}
 
 	getUsers += SQLSortOrder(sortOrder)
@@ -299,12 +296,11 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	year := utc().Year()
 	locArray := SQLFormattedArray(location)
 	updateUser := fmt.Sprintf(`
-	INSERT INTO votes%d(kind, pid, sid, location) VALUES(1, %d, -1, %s)
+	INSERT INTO votes(kind, pid, sid, location) VALUES(1, %d, -1, %s)
 	ON CONFLICT (kind, pid, sid, location) DO NOTHING;
-	UPDATE votes%d SET
+	UPDATE votes SET
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
@@ -317,7 +313,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 	updatedAt = '%s'
 	WHERE id = %d
 	RETURNING %s
-	`, year, targetId, locArray, year,
+	`, targetId, locArray,
 		updatedField, updatedField, nowTime, upvoteAmount,
 		otherField, otherField, nowTime, nowTime, targetId, locArray,
 		updatedField, updatedField, nowTime, upvoteAmount,

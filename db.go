@@ -8,7 +8,7 @@ import (
 )
 
 func DBSetup(db *sql.DB) {
-	createUsers := `CREATE TABLE IF NOT EXISTS users (
+	createUsers := `CREATE TABLE IF NOT EXISTS Users (
 		id BIGSERIAL,
 		name VARCHAR(21) NOT NULL,
 		email TEXT NOT NULL,
@@ -26,63 +26,89 @@ func DBSetup(db *sql.DB) {
 	DidFail(e, "create users table")
 
 	year := time.Now().UTC().Year()
+	createPosts := `CREATE TABLE IF NOT EXISTS Posts (
+		id BIGSERIAL NOT NULL,
+		userId BIGINT NOT NULL,
+		content TEXT,
+		tags TEXT[],
+		createdAt TIMESTAMP,
+		updatedAt TIMESTAMP,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		location TEXT[],
+
+		PRIMARY KEY (id, createdAt)
+	) PARTITION BY RANGE(createdAt);`
+	_, e = db.Exec(createPosts)
+	DidFail(e, "create posts table")
+
 	createPostsTable := func(year int) {
-		createPosts := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS posts%d (
-			id BIGSERIAL NOT NULL,
-			userId BIGINT NOT NULL,
-			content TEXT,
-			tags TEXT[],
-			createdAt TIMESTAMP,
-			updatedAt TIMESTAMP,
-			upvotes DOUBLE PRECISION DEFAULT 0.0,
-			downvotes DOUBLE PRECISION DEFAULT 0.0,
-			location TEXT[],
-	
-			PRIMARY KEY (id)
-		);`, year)
-		_, e = db.Exec(createPosts)
-		DidFail(e, "create posts table")
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE posts%d PARTITION OF posts
+		FOR VALUES FROM (TIMESTAMP '%d-01-01' at time zone ('utc')) TO (TIMESTAMP '%d-01-01' at time zone ('utc'));
+		CREATE INDEX posts%d_createdAt ON posts%d (id, createdAt);
+		`, year, year, year+1, year, year)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create posts instance")
 	}
 	createPostsTable(year)
 	createPostsTable(year + 1)
 
-	createCommentsTable := func(year int) {
-		createComments := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Comments%d(
-			id BIGSERIAL NOT NULL,
-			postId BIGINT,
-			userId BIGINT,
-			replyId BIGINT,
-			content TEXT,
-			createdAt TIMESTAMP,
-			updatedAt TIMESTAMP,
-			upvotes DOUBLE PRECISION DEFAULT 0.0,
-			downvotes DOUBLE PRECISION DEFAULT 0.0,
-	
-			PRIMARY KEY (id)
-		);`, year)
-		_, e = db.Exec(createComments)
-		DidFail(e, "create comments table")
-	}
-	createCommentsTable(year)
-	createCommentsTable(year + 1)
+	createComments := `CREATE TABLE IF NOT EXISTS Comments (
+		id BIGSERIAL NOT NULL,
+		postId BIGINT,
+		userId BIGINT,
+		replyId BIGINT,
+		content TEXT,
+		createdAt TIMESTAMP,
+		updatedAt TIMESTAMP,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
 
-	createVotesTable := func(year int) {
-		createVotes := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Votes%d(
-			kind SMALLINT NOT NULL,
-			pid BIGINT NOT NULL,
-			sid BIGINT NOT NULL,
-			location TEXT[],
-			upvotes DOUBLE PRECISION DEFAULT 0.0,
-			downvotes DOUBLE PRECISION DEFAULT 0.0,
-			updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
-	
-			PRIMARY KEY (kind, pid, sid, location)
-		);`, year)
-		_, e = db.Exec(createVotes)
-		DidFail(e, "create comments table")
+		PRIMARY KEY (id, postId)
+	) PARTITION BY HASH(postId);`
+	_, e = db.Exec(createComments)
+	DidFail(e, "create comments table")
+	createCommentsTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE Comments%d 
+		PARTITION OF Comments
+		FOR VALUES WITH (modulus %d, remainder %d)
+		`, rem, mod, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create posts instance")
 	}
-	createVotesTable(year)
-	createVotesTable(year + 1)
+	mod := 20
+	for i := 0; i < mod; i += 1 {
+		createCommentsTable(mod, i)
+	}
+
+	createVotes := `CREATE TABLE IF NOT EXISTS Votes (
+		kind SMALLINT NOT NULL,
+		pid BIGINT NOT NULL,
+		sid BIGINT NOT NULL,
+		location TEXT[],
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
+
+		PRIMARY KEY (kind, pid, sid, location)
+	) PARTITION BY LIST(kind);`
+	_, e = db.Exec(createVotes)
+	DidFail(e, "create votes table")
+	createVotesTable := func(kind int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE Votes%d
+		PARTITION OF Votes
+		FOR VALUES IN (%d)
+		`, kind, kind)
+		_, e = db.Exec(makeInstance)
+		DidFail(e, "create votes table instance")
+	}
+	createVotesTable(int(upUser))
+	createVotesTable(int(upComment))
+	createVotesTable(int(upPost))
+	createVotesTable(int(upTag))
 
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
@@ -140,24 +166,15 @@ func DBDeleteTable(db *sql.DB, name string) {
 }
 
 func DBDeleteAllPosts(db *sql.DB) {
-	tables := DBGetTableNamesLike(db, "posts%")
-	for _, name := range tables {
-		DBDeleteTable(db, name)
-	}
+	DBDeleteTable(db, "Posts")
 }
 
 func DBDeleteAllComments(db *sql.DB) {
-	tables := DBGetTableNamesLike(db, "comments%")
-	for _, name := range tables {
-		DBDeleteTable(db, name)
-	}
+	DBDeleteTable(db, "Comments")
 }
 
 func DBDeleteAllVotes(db *sql.DB) {
-	tables := DBGetTableNamesLike(db, "votes%")
-	for _, name := range tables {
-		DBDeleteTable(db, name)
-	}
+	DBDeleteTable(db, "Votes")
 }
 
 func DBDeleteAllUsers(db *sql.DB) {
@@ -215,4 +232,33 @@ func BuildUnionForNames(query string, placeholder string, names []string) string
 		}
 	}
 	return result
+}
+
+func DBCreateTriggers(db *sql.DB) {
+	year := utc().Year()
+
+	postsInsertTriggerFunc := fmt.Sprintf(`
+	CREATE OR REPLACE FUNCTION posts_insert_trigger()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		INSERT INTO posts%d VALUES (NEW.*);
+		RETURN NULL;
+	END;
+	$$
+	LANGUAGE plpgsql;
+	`, year)
+	_, e := db.Exec(postsInsertTriggerFunc)
+	if DidFail(e, "create posts insert trigger function") {
+		return
+	}
+
+	// postsInsertTrigger := `
+	// CREATE TRIGGER insert_posts_trigger
+	// BEFORE INSERT ON posts
+	// FOR EACH ROW EXECUTE FUNCTION posts_insert_trigger();
+	// `
+	// _, e = db.Exec(postsInsertTrigger)
+	// if DidFail(e, "create post insert trigger") {
+	// 	return
+	// }
 }
