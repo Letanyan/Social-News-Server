@@ -48,15 +48,15 @@ func SQLFieldsForUserPref() string {
 }
 
 func SQLFieldsForUserPrefUser() string {
-	return "u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes, up.downvotes"
+	return "u.id, u.name, u.registerDate, u.upvotes AS item_up, u.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.sid, up.upvotes, up.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.sid, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefTag() string {
-	return "t.id, t.name, t.updatedAt, t.location, t.upvotes, t.downvotes, up.upvotes, up.downvotes"
+	return "t.id, t.name, t.updatedAt, t.location, t.upvotes AS item_up, t.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func ScanUserPrefRow(row *sql.Row) (UserPref, error) {
@@ -193,7 +193,7 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	}
 
 	query += cond + "\n"
-	query += SQLSortOrder(sortOrder, "")
+	query += SQLSortOrder(sortOrder)
 
 	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 	rows, e := db.Query(query)
@@ -233,7 +233,7 @@ func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 		getUsers += fmt.Sprintf("AND u.downvotes < %d ", -downvotes)
 	}
 
-	getUsers += SQLSortOrder(sortOrder, "up")
+	getUsers += SQLSortOrder(sortOrder)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getUsers)
@@ -295,7 +295,7 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 	years := yearsBetweenDates(sDate, eDate)
 	postQueries := BuildUnionForYears(getPosts, years)
 
-	postQueries += SQLSortOrder(sortOrder, "up")
+	postQueries += SQLSortOrder(sortOrder)
 
 	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -345,7 +345,7 @@ func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmo
 		getTags += fmt.Sprintf("t.downvotes < %d\n", -downvotes)
 	}
 
-	getTags += SQLSortOrder(sortOrder, "up")
+	getTags += SQLSortOrder(sortOrder)
 	getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	fmt.Println(getTags)
@@ -471,7 +471,7 @@ func DBGetUserCont(db *sql.DB, userId int64, isPosts bool, tags []string, locati
 	years := yearsBetweenDates(sDate, eDate)
 	query = BuildUnionForYears(query, years)
 
-	query += SQLSortOrder(sortOrder, "up")
+	query += SQLSortOrder(sortOrder)
 
 	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 

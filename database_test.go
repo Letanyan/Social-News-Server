@@ -89,7 +89,7 @@ func TestDatabase(t *testing.T) {
 			otherUser := users[rand.Intn(len(users))]
 			user4 := DBGetUser(db, 0, otherUser.Email)
 			amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount)
+			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount, []string{})
 
 			user5 := DBGetUser(db, user4.ID, "")
 			if amount < 0 && user5.Downvotes < 0 {

@@ -152,7 +152,12 @@ func APIGetUsers(c *gin.Context) {
 		return
 	}
 
-	users := DBGetUsers(mainDB, upvotes, downvotes, order, limit, offset)
+	popularIn := strings.Split(c.DefaultQuery("popularIn", ""), ",")
+	if len(popularIn) == 1 && popularIn[0] == "" {
+		popularIn = []string{}
+	}
+
+	users := DBGetUsers(mainDB, popularIn, upvotes, downvotes, order, limit, offset)
 	APIReturn(c, true, users)
 }
 
@@ -643,7 +648,9 @@ func APIVoteUser(c *gin.Context) {
 		return
 	}
 
-	profile, pref := DBVoteForUser(mainDB, input.UID, targetId, input.Amount)
+	addr := getAddress(c.ClientIP())
+
+	profile, pref := DBVoteForUser(mainDB, input.UID, targetId, input.Amount, addr)
 	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {

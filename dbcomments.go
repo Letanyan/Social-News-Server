@@ -39,6 +39,10 @@ func SQLFieldsForCommentResult() string {
 	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.updatedAt, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
+func SQLFieldsForCommentResultAlias() string {
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.updatedAt, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+}
+
 func ScanComment(row *sql.Row) (Comment, error) {
 	c := Comment{}
 	e := row.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.UpdatedAt, &c.Upvotes, &c.Downvotes)
@@ -189,7 +193,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 		return Comment{}, UserProfile{}, []UserPref{}
 	}
 
-	user, uPref := DBVoteForUser(db, userId, comment.UserID, upvoteAmount*sign(isUpvote))
+	user, uPref := DBVoteForUser(db, userId, comment.UserID, upvoteAmount*sign(isUpvote), location)
 	createPref := fmt.Sprintf(`
 	INSERT INTO User%dPref (kind, pid, sid) 
 	VALUES(2, %d, %d) ON CONFLICT (kind, pid, sid) DO NOTHING;
@@ -226,10 +230,10 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 	if len(popularIn) > 0 {
 		voteTable = "v"
 	}
-	getComments := fmt.Sprintf(`SELECT %s{agg}, RATIO(%s.upvotes, %s.downvotes) AS cred, %s.upvotes * RATIO(%s.upvotes, %s.downvotes) AS score 
+	getComments := fmt.Sprintf(`SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
 	FROM Comments%d p 
 	JOIN users u ON p.userId = u.id
-	`, SQLFieldsForCommentResult(), voteTable, voteTable, voteTable, voteTable, voteTable, year)
+	`, SQLFieldsForCommentResultAlias(), year)
 
 	cond := fmt.Sprintf("WHERE postId = %d\n", postId)
 	if userId != 0 {
@@ -247,16 +251,16 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 	}
 	if upvotes != 0 {
 		if upvotes > 0 {
-			cond += fmt.Sprintf("AND p.upvotes > %d\n", upvotes)
+			cond += fmt.Sprintf("AND %s.upvotes > %d\n", voteTable, upvotes)
 		} else {
-			cond += fmt.Sprintf("AND p.upvotes < %d\n", -upvotes)
+			cond += fmt.Sprintf("AND %s.upvotes < %d\n", voteTable, -upvotes)
 		}
 	}
 	if downvotes != 0 {
 		if downvotes > 0 {
-			cond += fmt.Sprintf("AND p.downvotes > %d\n", downvotes)
+			cond += fmt.Sprintf("AND %s.downvotes > %d\n", voteTable, downvotes)
 		} else {
-			cond += fmt.Sprintf("AND p.downvotes < %d\n", -downvotes)
+			cond += fmt.Sprintf("AND %s.downvotes < %d\n", voteTable, -downvotes)
 		}
 	}
 	if len(popularIn) > 0 {
@@ -268,16 +272,12 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 	getComments += cond + "\n"
 	if len(popularIn) > 0 {
 		getComments += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForPostResult())
-		getComments = strings.ReplaceAll(getComments, "{agg}", ", SUM(v.upvotes) AS up, SUM(v.downvotes) AS down")
+		getComments = strings.ReplaceAll(getComments, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 	} else {
 		getComments = strings.ReplaceAll(getComments, "{agg}", "")
 	}
 
-	if sortOrder != soCreatedAt {
-		getComments += SQLSortOrder(sortOrder, "p")
-	} else {
-		getComments += SQLSortOrder(sortOrder, voteTable)
-	}
+	getComments += SQLSortOrder(sortOrder)
 	getComments += fmt.Sprintf("LIMIT %d OFFSET %d\n", limit, offset)
 
 	rows, e := db.Query(getComments)

@@ -201,7 +201,7 @@ func BuildUnionForYears(query string, years []int64) string {
 func BuildUnionForNames(query string, placeholder string, names []string) string {
 	result := ""
 	for i, y := range names {
-		result += strings.ReplaceAll(query, placeholder, fmt.Sprint(y))
+		result += "(" + strings.ReplaceAll(query, placeholder, fmt.Sprint(y)) + ")"
 		if i < len(names)-1 {
 			result += "\nunion\n"
 		}

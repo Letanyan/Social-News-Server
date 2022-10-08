@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/smtp"
+	"strings"
 	"time"
 )
 
@@ -35,7 +36,11 @@ func SQLFieldsForUser() string {
 }
 
 func SQLFieldsForUserProfile() string {
-	return "id, name, registerDate, upvotes, downvotes"
+	return "u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+}
+
+func SQLFieldsForUserProfileAlias() string {
+	return "u.id, u.name, u.registerDate, u.upvotes AS item_up, u.downvotes AS item_down"
 }
 
 func ScanUser(row *sql.Row) (User, error) {
@@ -50,29 +55,32 @@ func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	return u, e
 }
 
-func ScanUserProfiles(rows *sql.Rows, includeScore bool) []User {
+func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []User {
 	result := []User{}
 	var e error
 	for rows.Next() {
-		user := User{}
+		u := User{}
 		var score float64
 		var cred float64
-		if includeScore {
-			e = rows.Scan(&user.ID, &user.Name, &user.Upvotes, &user.Downvotes)
+		var up float64
+		var down float64
+		if hasVotes {
+			if includeScore {
+				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+			} else {
+				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
+			}
 		} else {
-			e = rows.Scan(&user.ID, &user.Name, &user.Upvotes, &user.Downvotes, &cred, &score)
+			if includeScore {
+				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score)
+			} else {
+				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+			}
 		}
-		// if excludeImp {
-		// 	user.Email = ""
-		// 	user.Password = ""
-		// 	user.RegisterDate = time.Time{}
-		// 	user.UpdatedAt = time.Time{}
-		// 	user.ValidationKey = 0
-		// }
 		if DidFail(e, "get user from email/id") {
 			continue
 		}
-		result = append(result, user)
+		result = append(result, u)
 	}
 	return result
 }
@@ -181,7 +189,7 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 
 // ignore email if userId > 0
 func DBGetUser(db *sql.DB, userId int64, email string) User {
-	getUser := fmt.Sprintf(`SELECT %s FROM users WHERE `, SQLFieldsForUser())
+	getUser := fmt.Sprintf(`SELECT %s FROM users u WHERE `, SQLFieldsForUser())
 	arg := ""
 	if userId > 0 {
 		arg = fmt.Sprint(userId)
@@ -199,21 +207,27 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	return user
 }
 
-func DBGetUsers(db *sql.DB, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []User {
-	getUsers := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score  
-	FROM users`, SQLFieldsForUserProfile())
+func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []User {
+	voteTable := "u"
+	if len(popularIn) > 0 {
+		voteTable = "v"
+	}
+	getUsers := fmt.Sprintf(`
+	SELECT %s{agg}, RATIO(u.upvotes, u.downvotes) AS cred, u.upvotes * RATIO(u.upvotes, u.downvotes) AS score  
+	FROM users u
+	`, SQLFieldsForUserProfileAlias())
 
 	upClause := ""
 	if upvotes > 0 {
-		upClause = fmt.Sprintf("upvotes > %d", upvotes)
+		upClause = fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes)
 	} else if upvotes < 0 {
-		upClause = fmt.Sprintf("upvotes < %d", -upvotes)
+		upClause = fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes)
 	}
 	downClause := ""
 	if downvotes > 0 {
-		downClause = fmt.Sprintf("downvotes > %d", downvotes)
+		downClause = fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes)
 	} else if upvotes < 0 {
-		downClause = fmt.Sprintf("downvotes < %d", -downvotes)
+		downClause = fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes)
 	}
 	voteCondition := ""
 	if len(upClause) > 0 && len(downClause) > 0 {
@@ -224,19 +238,40 @@ func DBGetUsers(db *sql.DB, upvotes int64, downvotes int64, sortOrder SortOrder,
 		voteCondition = downClause
 	}
 
+	if len(popularIn) > 0 {
+		queryLoc := SQLFormattedArray(popularIn)
+		locCond := fmt.Sprintf("v.kind=1 AND v.location @> %s\n", queryLoc)
+		if len(voteCondition) > 0 {
+			voteCondition += " AND " + locCond
+		} else {
+			voteCondition += " " + locCond
+		}
+		getUsers += "JOIN {votes} v ON v.pid = u.id\n"
+	}
 	if len(voteCondition) > 0 {
 		getUsers += "WHERE " + voteCondition + "\n"
 	}
 
-	getUsers += SQLSortOrder(sortOrder, "")
+	if len(popularIn) > 0 {
+		getUsers += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForUserProfile())
+		getUsers = strings.ReplaceAll(getUsers, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
+	} else {
+		getUsers = strings.ReplaceAll(getUsers, "{agg}", "")
+	}
+	if len(popularIn) > 0 {
+		getUsers = BuildUnionForNames(getUsers, "{votes}", DBGetTableNamesLike(db, "votes%"))
+	}
+
+	getUsers += SQLSortOrder(sortOrder)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
+	fmt.Println(getUsers)
 	rows, e := db.Query(getUsers)
-	if DidFail(e, "get users") {
+	if DidFail(e, "get users", getUsers) {
 		return []User{}
 	}
 
-	result := ScanUserProfiles(rows, true)
+	result := ScanUserProfiles(rows, true, len(popularIn) > 0)
 
 	return result
 }
@@ -251,7 +286,7 @@ func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 	}
 }
 
-func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64) (UserProfile, UserPref) {
+func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string) (UserProfile, UserPref) {
 	nowTime := formatNow()
 	updatedField := ""
 	otherField := ""
@@ -264,16 +299,30 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64)
 		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
+	year := utc().Year()
+	locArray := SQLFormattedArray(location)
 	updateUser := fmt.Sprintf(`
-	UPDATE users
-	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
+	INSERT INTO votes%d(kind, pid, sid, location) VALUES(1, %d, -1, %s)
+	ON CONFLICT (kind, pid, sid, location) DO NOTHING;
+	UPDATE votes%d SET
+	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
+	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	updatedAt = '%s'
+	WHERE kind=1 AND pid=%d AND location=%s;
+	
+	UPDATE users u SET 
+	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	credits = credits + 0.75 * %d,
 	updatedAt = '%s'
-	WHERE id = $1
+	WHERE id = %d
 	RETURNING %s
-	`, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, upvoteAmount, nowTime, SQLFieldsForUserProfile())
-	row := db.QueryRow(updateUser, targetId)
+	`, year, targetId, locArray, year,
+		updatedField, updatedField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime, targetId, locArray,
+		updatedField, updatedField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, upvoteAmount, nowTime, targetId, SQLFieldsForUserProfile())
+	row := db.QueryRow(updateUser)
 	user, e := ScanUserProfile(row)
 	if DidFail(e, "update user score", targetId) {
 		return UserProfile{}, UserPref{}
