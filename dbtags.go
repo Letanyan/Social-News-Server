@@ -114,12 +114,13 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	VALUES %s ON CONFLICT (kind, pid, sid) DO NOTHING;
 	UPDATE User%dPref 
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000)
+	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	updatedAt = '%s'
 	WHERE kind=4 AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
 	`, userId, tagIndexRows, userId,
 		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, tagIndexArray, SQLFieldsForUserPref())
+		otherField, otherField, nowTime, nowTime, tagIndexArray, SQLFieldsForUserPref())
 	rows, e = db.Query(upsertUserTags)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}

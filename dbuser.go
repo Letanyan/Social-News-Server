@@ -136,7 +136,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 		sid BIGINT NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP,
+		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
 
 		PRIMARY KEY (kind, pid, sid)
 	);`, user.ID)
@@ -332,10 +332,13 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 	VALUES (1, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
 	UPDATE User%dPref 
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000)
+	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	updatedAt = '%s'
 	WHERE kind=1 AND pid = %d
 	RETURNING kind, pid, sid, upvotes, downvotes
-	`, userId, targetId, userId, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, targetId)
+	`, userId, targetId, userId,
+		updatedField, updatedField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime, targetId)
 	row = db.QueryRow(vote)
 	pref, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for user") {

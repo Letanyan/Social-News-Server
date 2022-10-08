@@ -184,12 +184,13 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 
 	UPDATE User%dPref
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000)
+	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	updatedAt = '%s'
 	WHERE kind=3 AND pid=%d
 	RETURNING %s
 	`, userId, postId,
 		userId, updateField, updateField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, postId, SQLFieldsForUserPref())
+		otherField, otherField, nowTime, nowTime, postId, SQLFieldsForUserPref())
 	row = db.QueryRow(createPref)
 	userPrefForPost, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -350,17 +351,3 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	result = ScanPostResults(rows, len(popularIn) > 0)
 	return result
 }
-
-/*
-(SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
-	FROM posts2022 p
-	JOIN users u ON p.userId = u.id
-	JOIN votes2022 v ON v.pid = p.id
-WHERE createdAt BETWEEN (TIMESTAMP '2022-10-01 07:50:33.118114') AND (TIMESTAMP '2022-10-08 07:50:33.118114')AND p.location @> '{"Africa"}'
-AND v.kind=3 AND v.location @> '{"Africa"}'
-GROUP BY p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, cred, score
-)LIMIT 50 OFFSET 0
-
-(SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score FROM posts2022 p JOIN users u ON p.userId = u.id WHERE createdAt BETWEEN (TIMESTAMP '2022-10-08 06:17:47.516032') AND (TIMESTAMP '2023-10-08 06:17:47.516032')ORDER BY score DESC)union(SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score FROM posts2023 p JOIN users u ON p.userId = u.id WHERE createdAt BETWEEN (TIMESTAMP '2022-10-08 06:17:47.516032') AND (TIMESTAMP '2023-10-08 06:17:47.516032')ORDER BY score DESC)LIMIT 50 OFFSET 0
-
-*/

@@ -200,9 +200,12 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	UPDATE User%dPref SET 
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
+	updatedAt = '%s'
 	WHERE kind=2 AND pid=%d AND sid=%d
 	RETURNING %s
-	`, userId, postId, commentId, userId, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, postId, commentId, SQLFieldsForUserPref())
+	`, userId, postId, commentId, userId,
+		updateField, updateField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime, postId, commentId, SQLFieldsForUserPref())
 	row = db.QueryRow(createPref)
 	cPref, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for post ", postId) {
