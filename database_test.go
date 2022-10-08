@@ -172,7 +172,29 @@ func TestDatabase(t *testing.T) {
 			matchPost(source, post1)
 			matchUserProfile("", post1.Author, users[tc.userId-1])
 
-			for i := 0; i < rand.Intn(20); i += 2 {
+			for i := 0; i < rand.Intn(5); i += 1 {
+				odx := rand.Intn(len(users))
+				otherUser := users[odx]
+				other := DBGetUser(db, 0, otherUser.Email)
+				pidx := rand.Intn(len(posts))
+
+				comt, cont := DBCreateComment(db, other.ID, posts[pidx].content, post1.ID, 0)
+
+				if comt.Content != posts[pidx].content {
+					t.Errorf("comment content not correct")
+				}
+				if comt.UserID != other.ID {
+					t.Errorf("comment user id not correct")
+				}
+				if cont.CommentID != comt.ID {
+					t.Errorf("comment id not correct on user cont")
+				}
+				if cont.PostID != comt.PostID {
+					t.Errorf("comment post id not correct on user cont")
+				}
+			}
+
+			for i := 0; i < rand.Intn(10); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
 				other := DBGetUser(db, 0, otherUser.Email)

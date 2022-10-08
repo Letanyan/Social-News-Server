@@ -28,8 +28,8 @@ func DBSetup(db *sql.DB) {
 	year := time.Now().UTC().Year()
 	createPostsTable := func(year int) {
 		createPosts := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS posts%d (
-			id BIGSERIAL,
-			userId BIGINT,
+			id BIGSERIAL NOT NULL,
+			userId BIGINT NOT NULL,
 			content TEXT,
 			tags TEXT[],
 			createdAt TIMESTAMP DEFAULT now(),
@@ -46,21 +46,25 @@ func DBSetup(db *sql.DB) {
 	createPostsTable(year)
 	createPostsTable(year + 1)
 
-	createCommentsTable := `CREATE TABLE IF NOT EXISTS Comments (
-		id BIGSERIAL NOT NULL,
-		postId BIGINT,
-		userId BIGINT,
-		replyId BIGINT,
-		content text,
-		createdAt timestamp,
-		updatedAt timestamp,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
-
-		PRIMARY KEY (id)
-	);`
-	_, e = db.Exec(createCommentsTable)
-	DidFail(e, "create comments table")
+	createCommentsTable := func(year int) {
+		createCommentsTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Comments%d(
+			id BIGSERIAL NOT NULL,
+			postId BIGINT,
+			userId BIGINT,
+			replyId BIGINT,
+			content text,
+			createdAt timestamp,
+			updatedAt timestamp,
+			upvotes DOUBLE PRECISION DEFAULT 0.0,
+			downvotes DOUBLE PRECISION DEFAULT 0.0,
+	
+			PRIMARY KEY (id)
+		);`, year)
+		_, e = db.Exec(createCommentsTable)
+		DidFail(e, "create comments table")
+	}
+	createCommentsTable(year)
+	createCommentsTable(year + 1)
 
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
@@ -111,7 +115,13 @@ func DBDeleteTable(db *sql.DB, name string) {
 
 func DBDeleteAllPosts(db *sql.DB) {
 	tables := DBGetTableNamesLike(db, "posts%")
-	DBDeleteTable(db, "Comments")
+	for _, name := range tables {
+		DBDeleteTable(db, name)
+	}
+}
+
+func DBDeleteAllComments(db *sql.DB) {
+	tables := DBGetTableNamesLike(db, "comments%")
 	for _, name := range tables {
 		DBDeleteTable(db, name)
 	}
@@ -135,6 +145,7 @@ func DBDeleteAllUsers(db *sql.DB) {
 func DBClearAllTables(db *sql.DB) {
 	DBDeleteAllPosts(db)
 	DBDeleteAllUsers(db)
+	DBDeleteAllComments(db)
 	DBDeleteTable(db, "tags")
 }
 

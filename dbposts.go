@@ -100,7 +100,7 @@ func ScanPostResults(rows *sql.Rows) []PostResult {
 
 func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, location []string) Post {
 	t := utc()
-	nowTime := formatNow()
+	nowTime := formatTime(t)
 	year := t.Year()
 	insertPost := fmt.Sprintf(`INSERT INTO posts%d(id, userId, content, tags, createdAt, updatedAt, location) 
 	VALUES (nextval('posts%d_id_seq') * 10000 + extract(year from now() at time zone ('utc')), $1, $2, %s, '%s', '%s', %s) RETURNING %s`, year, year, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
