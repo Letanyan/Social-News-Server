@@ -90,7 +90,9 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	updatedAt = '%s'
 	WHERE name = ANY(%s) AND location @> %s
 	RETURNING %s
-	`, tagRows, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, tagArray, locArray, SQLFieldsForTag())
+	`, tagRows,
+		updatedField, updatedField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime, tagArray, locArray, SQLFieldsForTag())
 	rows, e := db.Query(upsertTags)
 	if DidFail(e, "insert and update tags") {
 		return []Tag{}, []UserPref{}
@@ -111,7 +113,9 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	%s = cooldown(%s, updatedAt, '%s', 31536000)
 	WHERE kind=4 AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
-	`, userId, tagIndexRows, userId, updatedField, updatedField, nowTime, upvoteAmount, otherField, otherField, nowTime, tagIndexArray, SQLFieldsForUserPref())
+	`, userId, tagIndexRows, userId,
+		updatedField, updatedField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, tagIndexArray, SQLFieldsForUserPref())
 	rows, e = db.Query(upsertUserTags)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}

@@ -176,7 +176,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		return Post{}, UserProfile{}, []Tag{}, []UserPref{}
 	}
 
-	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount, location)
+	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location)
 	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location)
 	createPref := fmt.Sprintf(`
 	INSERT INTO User%dPref (kind, pid, sid) 
