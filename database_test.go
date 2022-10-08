@@ -174,7 +174,7 @@ func TestDatabase(t *testing.T) {
 			matchPost(source, post1)
 			matchUserProfile("", post1.Author, users[tc.userId-1])
 
-			for i := 0; i < rand.Intn(5); i += 1 {
+			for i := 0; i < rand.Intn(10); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
 				other := DBGetUser(db, 0, otherUser.Email)
@@ -196,7 +196,7 @@ func TestDatabase(t *testing.T) {
 				}
 			}
 
-			for i := 0; i < rand.Intn(10); i += 1 {
+			for i := 0; i < rand.Intn(50); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
 				other := DBGetUser(db, 0, otherUser.Email)

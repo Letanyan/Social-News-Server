@@ -337,7 +337,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	years := yearsBetweenDates(sDate, eDate)
 	postQueries := BuildUnionForYears(getPosts, years)
 
-	getPosts += SQLSortOrder(sortOrder)
+	postQueries += SQLSortOrder(sortOrder)
 	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(postQueries)
@@ -352,6 +352,14 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 }
 
 /*
+(SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
+	FROM posts2022 p
+	JOIN users u ON p.userId = u.id
+	JOIN votes2022 v ON v.pid = p.id
+WHERE createdAt BETWEEN (TIMESTAMP '2022-10-01 07:50:33.118114') AND (TIMESTAMP '2022-10-08 07:50:33.118114')AND p.location @> '{"Africa"}'
+AND v.kind=3 AND v.location @> '{"Africa"}'
+GROUP BY p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, cred, score
+)LIMIT 50 OFFSET 0
 
 (SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score FROM posts2022 p JOIN users u ON p.userId = u.id WHERE createdAt BETWEEN (TIMESTAMP '2022-10-08 06:17:47.516032') AND (TIMESTAMP '2023-10-08 06:17:47.516032')ORDER BY score DESC)union(SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score FROM posts2023 p JOIN users u ON p.userId = u.id WHERE createdAt BETWEEN (TIMESTAMP '2022-10-08 06:17:47.516032') AND (TIMESTAMP '2023-10-08 06:17:47.516032')ORDER BY score DESC)LIMIT 50 OFFSET 0
 
