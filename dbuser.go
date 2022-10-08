@@ -228,7 +228,7 @@ func DBGetUsers(db *sql.DB, upvotes int64, downvotes int64, sortOrder SortOrder,
 		getUsers += "WHERE " + voteCondition + "\n"
 	}
 
-	getUsers += SQLSortOrder(sortOrder)
+	getUsers += SQLSortOrder(sortOrder, "")
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getUsers)

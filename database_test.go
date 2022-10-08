@@ -69,6 +69,7 @@ func TestDatabase(t *testing.T) {
 	for i, source := range users {
 		t.Run(source.Name, func(t *testing.T) {
 			// t.Logf("%v\n", source)
+			rand.Seed(int64(i))
 			user1 := DBGetUser(db, source.ID, "")
 			matchUsers("id matched user", source, user1)
 			user2 := DBGetUser(db, 0, source.Email)
@@ -165,8 +166,9 @@ func TestDatabase(t *testing.T) {
 
 	// startOfYear := time.Date(utc().Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
 	// endOfYear := time.Date(utc().Year(), time.December, 31, 23, 59, 59, 999999, time.UTC)
-	for _, tc := range posts {
+	for i, tc := range posts {
 		t.Run(tc.content, func(t *testing.T) {
+			rand.Seed(int64(i))
 			source := DBCreatePost(db, tc.userId, tc.content, tc.tags, tc.location)
 			post1 := DBGetPost(db, source.ID)
 			matchPost(source, post1)

@@ -76,7 +76,7 @@ func ScanPosts(rows *sql.Rows) []Post {
 	return result
 }
 
-func ScanPostResults(rows *sql.Rows) []PostResult {
+func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
 	result := []PostResult{}
 	var e error
 
@@ -86,8 +86,15 @@ func ScanPostResults(rows *sql.Rows) []PostResult {
 		var score float64
 		var cred float64
 		var userID int64
-		e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
-			&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score)
+		var up float64
+		var down float64
+		if hasVotes {
+			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+				&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+		} else {
+			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+				&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score)
+		}
 		if DidFail(e, "scan post") {
 			continue
 		}
@@ -137,14 +144,29 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		upvoteAmount = -upvoteAmount
 	}
 	year := yearFromId(postId)
+	locArray := SQLFormattedArray(location)
+	fmt.Printf("%d: %s + %d %s\n", postId, updateField, upvoteAmount, locArray)
 	updateVoteForPost := fmt.Sprintf(`
-		UPDATE posts%d 
-		SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
+		INSERT INTO votes%d(kind, pid, sid, location) VALUES(3, %d, -1, %s)
+		ON CONFLICT (kind, pid, sid, location) DO NOTHING;
+		UPDATE votes%d SET
+		%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
+		%s = cooldown(%s, updatedAt, '%s', 31536000),
+		updatedAt = '%s'
+		WHERE kind=3 AND pid=%d AND location=%s;
+
+		UPDATE posts%d SET
+		%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 		%s = cooldown(%s, updatedAt, '%s', 31536000),
 		updatedAt = '%s'
 		WHERE id = %d
 		RETURNING %s
-		`, year, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, nowTime, postId, SQLFieldsForPost())
+		`, year, postId, locArray, year,
+		updateField, updateField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime,
+		postId, locArray,
+		year, updateField, updateField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime, postId, SQLFieldsForPost())
 	row := db.QueryRow(updateVoteForPost)
 	post, e := ScanPost(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -156,12 +178,15 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	createPref := fmt.Sprintf(`
 	INSERT INTO User%dPref (kind, pid, sid) 
 	VALUES(3, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
+
 	UPDATE User%dPref
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000)
 	WHERE kind=3 AND pid=%d
 	RETURNING %s
-	`, userId, postId, userId, updateField, updateField, nowTime, upvoteAmount, otherField, otherField, nowTime, postId, SQLFieldsForUserPref())
+	`, userId, postId,
+		userId, updateField, updateField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, postId, SQLFieldsForUserPref())
 	row = db.QueryRow(createPref)
 	userPrefForPost, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -222,20 +247,20 @@ func SortOrderFromString(text string) (SortOrder, error) {
 	return soUpvotes, errors.New("no known order for " + text)
 }
 
-func SQLSortOrder(so SortOrder) string {
+func SQLSortOrder(so SortOrder, tableName string) string {
 	switch so {
 	case soScore:
 		return "ORDER BY score DESC\n"
 	case soCred:
-		return "ORDER BY score DESC\n"
+		return "ORDER BY cred DESC\n"
 	case soUpvotes:
-		return "ORDER BY score DESC\n"
+		return fmt.Sprintf("ORDER BY %s.upvotes DESC\n", tableName)
 	case soDownvotes:
-		return "ORDER BY score DESC\n"
+		return fmt.Sprintf("ORDER BY %s.downvotes DESC\n", tableName)
 	case soControversial:
 		return "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
 	case soCreatedAt:
-		return "ORDER BY createdAt DESC\n"
+		return fmt.Sprintf("ORDER BY %s.createdAt DESC\n") // FIXME: make sure callers make correct change
 	}
 	return ""
 }
@@ -254,35 +279,54 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 }
 
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
-func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []Post {
-	getPosts := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
-		FROM posts{} p JOIN users u ON p.userId = u.id
-		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')
-		`, SQLFieldsForPostResult(), startDate, endDate)
+func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []PostResult {
+	voteTable := "p"
+	if len(popularIn) > 0 {
+		voteTable = "v"
+	}
+	getPosts := fmt.Sprintf(`SELECT %s{agg}, RATIO(%s.upvotes, %s.downvotes) AS cred, %s.upvotes * RATIO(%s.upvotes, %s.downvotes) AS score 
+	FROM posts{year} p 
+	JOIN users u ON p.userId = u.id
+	`, SQLFieldsForPostResult(), voteTable, voteTable, voteTable, voteTable, voteTable)
+
+	cond := fmt.Sprintf(`WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')`, startDate, endDate)
 	if userId != 0 {
-		getPosts += fmt.Sprintf("AND p.userId = %d\n", userId)
+		cond += fmt.Sprintf("AND p.userId = %d\n", userId)
 	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
-		getPosts += fmt.Sprintf("AND %s && p.tags\n", queryTags)
+		cond += fmt.Sprintf("AND %s && p.tags\n", queryTags)
 	}
-	if len(location) > 0 {
-		queryLoc := SQLFormattedArray(location)
-		getPosts += fmt.Sprintf("AND p.location @> %s\n", queryLoc)
+	if len(origin) > 0 {
+		queryLoc := SQLFormattedArray(origin)
+		cond += fmt.Sprintf("AND p.location @> %s\n", queryLoc)
 	}
 	if upvotes != 0 {
 		if upvotes > 0 {
-			getPosts += fmt.Sprintf("AND p.upvotes > %d\n", upvotes)
+			cond += fmt.Sprintf("AND %s.upvotes > %d\n", voteTable, upvotes)
 		} else {
-			getPosts += fmt.Sprintf("AND p.upvotes < %d\n", -upvotes)
+			cond += fmt.Sprintf("AND %s.upvotes < %d\n", voteTable, -upvotes)
 		}
 	}
 	if downvotes != 0 {
 		if upvotes > 0 {
-			getPosts += fmt.Sprintf("AND p.downvotes > %d\n", downvotes)
+			cond += fmt.Sprintf("AND %s.downvotes > %d\n", voteTable, downvotes)
 		} else {
-			getPosts += fmt.Sprintf("AND p.downvotes < %d\n", -downvotes)
+			cond += fmt.Sprintf("AND %s.downvotes < %d\n", voteTable, -downvotes)
 		}
+	}
+	if len(popularIn) > 0 {
+		queryLoc := SQLFormattedArray(popularIn)
+		cond += fmt.Sprintf("AND v.kind=3 AND v.location @> %s\n", queryLoc)
+		getPosts += "JOIN votes{year} v ON v.pid = p.id\n"
+	}
+
+	getPosts += cond
+	if len(popularIn) > 0 {
+		getPosts += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForPostResult())
+		getPosts = strings.ReplaceAll(getPosts, "{agg}", ", SUM(v.upvotes) AS up, SUM(v.downvotes) AS down")
+	} else {
+		getPosts = strings.ReplaceAll(getPosts, "{agg}", "")
 	}
 
 	sDate := parseTime(startDate)
@@ -290,16 +334,27 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, location []string, upvo
 	years := yearsBetweenDates(sDate, eDate)
 	postQueries := BuildUnionForYears(getPosts, years)
 
-	postQueries += SQLSortOrder(sortOrder)
+	if sortOrder != soCreatedAt {
+		postQueries += SQLSortOrder(sortOrder, "p")
+	} else {
+		postQueries += SQLSortOrder(sortOrder, voteTable)
+	}
 
 	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(postQueries)
-	if DidFail(e, "get posts") {
-		return []Post{}
+	result := []PostResult{}
+	if DidFail(e, "get posts\n", postQueries) {
+		return result
 	}
 	defer rows.Close()
 
-	result := ScanPosts(rows)
+	result = ScanPostResults(rows, len(popularIn) > 0)
 	return result
 }
+
+/*
+
+SELECT p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, SUM(v.upvotes) AS up, SUM(v.downvotes) AS down, RATIO(v.upvotes, v.downvotes) AS cred, v.upvotes * RATIO(v.upvotes, v.downvotes) AS score FROM posts2022 p JOIN users u ON p.userId = u.id JOIN votes2022 v ON v.pid = p.id WHERE v.kind = 3 AND createdAt BETWEEN (TIMESTAMP '2022-10-01 02:55:57.69524') AND (TIMESTAMP '2022-10-08 02:55:57.69524') AND v.location @> '{"South America"}' GROUP BY p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, cred, score ORDER BY score DESC LIMIT 50 OFFSET 0
+
+*/

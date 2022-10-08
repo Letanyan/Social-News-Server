@@ -442,10 +442,16 @@ func APIGetPosts(c *gin.Context) {
 		return
 	}
 
-	location := strings.Split(c.DefaultQuery("location", ""), ",")
-	if len(location) == 1 && location[0] == "" {
-		location = []string{}
+	origin := strings.Split(c.DefaultQuery("origin", ""), ",")
+	if len(origin) == 1 && origin[0] == "" {
+		origin = []string{}
 	}
+
+	popularIn := strings.Split(c.DefaultQuery("popularIn", ""), ",")
+	if len(popularIn) == 1 && popularIn[0] == "" {
+		popularIn = []string{}
+	}
+
 	tags := strings.Split(c.DefaultQuery("tags", ""), ",")
 	if len(tags) == 1 && tags[0] == "" {
 		tags = []string{}
@@ -481,7 +487,7 @@ func APIGetPosts(c *gin.Context) {
 	startDate := c.DefaultQuery("start", formatTime(lastWeek))
 	endDate := c.DefaultQuery("end", formatTime(now))
 
-	posts := DBGetPosts(mainDB, uid, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	posts := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate)
 	APIReturn(c, true, posts)
 }
 

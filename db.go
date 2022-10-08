@@ -13,8 +13,8 @@ func DBSetup(db *sql.DB) {
 		name VARCHAR(21) NOT NULL,
 		email TEXT NOT NULL,
 		password TEXT NOT NULL,
-		registerDate TIMESTAMP DEFAULT now(),
-		updatedAt TIMESTAMP DEFAULT now(),
+		registerDate TIMESTAMP DEFAULT (now() at time zone ('utc')),
+		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		credits INTEGER DEFAULT 25,
@@ -32,8 +32,8 @@ func DBSetup(db *sql.DB) {
 			userId BIGINT NOT NULL,
 			content TEXT,
 			tags TEXT[],
-			createdAt TIMESTAMP DEFAULT now(),
-			updatedAt TIMESTAMP DEFAULT now(),
+			createdAt TIMESTAMP,
+			updatedAt TIMESTAMP,
 			upvotes DOUBLE PRECISION DEFAULT 0.0,
 			downvotes DOUBLE PRECISION DEFAULT 0.0,
 			location TEXT[],
@@ -47,32 +47,50 @@ func DBSetup(db *sql.DB) {
 	createPostsTable(year + 1)
 
 	createCommentsTable := func(year int) {
-		createCommentsTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Comments%d(
+		createComments := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Comments%d(
 			id BIGSERIAL NOT NULL,
 			postId BIGINT,
 			userId BIGINT,
 			replyId BIGINT,
-			content text,
-			createdAt timestamp,
-			updatedAt timestamp,
+			content TEXT,
+			createdAt TIMESTAMP,
+			updatedAt TIMESTAMP,
 			upvotes DOUBLE PRECISION DEFAULT 0.0,
 			downvotes DOUBLE PRECISION DEFAULT 0.0,
 	
 			PRIMARY KEY (id)
 		);`, year)
-		_, e = db.Exec(createCommentsTable)
+		_, e = db.Exec(createComments)
 		DidFail(e, "create comments table")
 	}
 	createCommentsTable(year)
 	createCommentsTable(year + 1)
 
+	createVotesTable := func(year int) {
+		createVotes := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS Votes%d(
+			kind SMALLINT NOT NULL,
+			pid BIGINT NOT NULL,
+			sid BIGINT NOT NULL,
+			location TEXT[],
+			upvotes DOUBLE PRECISION DEFAULT 0.0,
+			downvotes DOUBLE PRECISION DEFAULT 0.0,
+			updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
+	
+			PRIMARY KEY (kind, pid, sid, location)
+		);`, year)
+		_, e = db.Exec(createVotes)
+		DidFail(e, "create comments table")
+	}
+	createVotesTable(year)
+	createVotesTable(year + 1)
+
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
+		location TEXT[] NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		updatedAt TIMESTAMP DEFAULT now(),
-		location TEXT[] NOT NULL,
 
 		PRIMARY KEY (name, location)
 	);`
@@ -127,6 +145,13 @@ func DBDeleteAllComments(db *sql.DB) {
 	}
 }
 
+func DBDeleteAllVotes(db *sql.DB) {
+	tables := DBGetTableNamesLike(db, "votes%")
+	for _, name := range tables {
+		DBDeleteTable(db, name)
+	}
+}
+
 func DBDeleteAllUsers(db *sql.DB) {
 	query := `SELECT id FROM users`
 	rows, e := db.Query(query)
@@ -145,6 +170,7 @@ func DBDeleteAllUsers(db *sql.DB) {
 func DBClearAllTables(db *sql.DB) {
 	DBDeleteAllPosts(db)
 	DBDeleteAllUsers(db)
+	DBDeleteAllVotes(db)
 	DBDeleteAllComments(db)
 	DBDeleteTable(db, "tags")
 }
@@ -169,13 +195,13 @@ func BuildUnionForYears(query string, years []int64) string {
 	for _, y := range years {
 		names = append(names, fmt.Sprint(y))
 	}
-	return BuildUnionForNames(query, names)
+	return BuildUnionForNames(query, "{year}", names)
 }
 
-func BuildUnionForNames(query string, names []string) string {
+func BuildUnionForNames(query string, placeholder string, names []string) string {
 	result := ""
 	for i, y := range names {
-		result += strings.Replace(query, "{}", fmt.Sprint(y), 1)
+		result += strings.ReplaceAll(query, placeholder, fmt.Sprint(y))
 		if i < len(names)-1 {
 			result += "\nunion\n"
 		}

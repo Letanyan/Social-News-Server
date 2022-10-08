@@ -26,5 +26,5 @@ func getAddress(ip string) []string {
 	// if DidFail(e, "parse ip-api json result to Address") {
 	// 	return []string{}
 	// }
-	// return []string{addr.ContinentCode, addr.CountryCode, addr.RegionName, addr.City, addr.Zip}
+	// return []string{addr.CountryCode, addr.RegionName, addr.City}
 }
