@@ -233,32 +233,3 @@ func BuildUnionForNames(query string, placeholder string, names []string) string
 	}
 	return result
 }
-
-func DBCreateTriggers(db *sql.DB) {
-	year := utc().Year()
-
-	postsInsertTriggerFunc := fmt.Sprintf(`
-	CREATE OR REPLACE FUNCTION posts_insert_trigger()
-	RETURNS TRIGGER AS $$
-	BEGIN
-		INSERT INTO posts%d VALUES (NEW.*);
-		RETURN NULL;
-	END;
-	$$
-	LANGUAGE plpgsql;
-	`, year)
-	_, e := db.Exec(postsInsertTriggerFunc)
-	if DidFail(e, "create posts insert trigger function") {
-		return
-	}
-
-	// postsInsertTrigger := `
-	// CREATE TRIGGER insert_posts_trigger
-	// BEFORE INSERT ON posts
-	// FOR EACH ROW EXECUTE FUNCTION posts_insert_trigger();
-	// `
-	// _, e = db.Exec(postsInsertTrigger)
-	// if DidFail(e, "create post insert trigger") {
-	// 	return
-	// }
-}
