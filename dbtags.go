@@ -21,6 +21,10 @@ func SQLFieldsForTag() string {
 	return "id, name, updatedAt, location, upvotes, downvotes"
 }
 
+func SQLFieldsForTagAlias() string {
+	return "id, name, updatedAt, location, upvotes AS item_up, downvotes AS item_down"
+}
+
 func ScanTags(rows *sql.Rows, includeScore bool) []Tag {
 	result := []Tag{}
 	var e error
@@ -130,22 +134,22 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 }
 
 func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []Tag {
-	getTags := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
-	FROM tags 
-	`, SQLFieldsForTag())
+	getTags := fmt.Sprintf(`SELECT %s, RATIO(t.upvotes, t.downvotes) AS cred, t.upvotes * RATIO(t.upvotes, t.downvotes) AS score 
+	FROM tags t
+	`, SQLFieldsForTagAlias())
 
 	if id != 0 {
-		getTags += fmt.Sprintf("WHERE id = %d\n", id)
+		getTags += fmt.Sprintf("WHERE t.id = %d\n", id)
 	} else {
 		tagClause := ""
 		if len(tags) > 0 {
 			tagArray := SQLFormattedArray(tags)
-			tagClause = fmt.Sprintf("ARRAY[name] <@ %s", tagArray)
+			tagClause = fmt.Sprintf("ARRAY[t.name] <@ %s", tagArray)
 		}
 		locClause := ""
 		if len(location) > 0 {
 			locArray := SQLFormattedArray(location)
-			locClause = fmt.Sprintf("location @> %s", locArray)
+			locClause = fmt.Sprintf("t.location @> %s", locArray)
 		}
 		setCondition := ""
 		if len(tagClause) > 0 && len(locClause) > 0 {
@@ -158,15 +162,15 @@ func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes i
 
 		upClause := ""
 		if upvotes > 0 {
-			upClause = fmt.Sprintf("upvotes > %d", upvotes)
+			upClause = fmt.Sprintf("t.upvotes > %d", upvotes)
 		} else if upvotes < 0 {
-			upClause = fmt.Sprintf("upvotes < %d", -upvotes)
+			upClause = fmt.Sprintf("t.upvotes < %d", -upvotes)
 		}
 		downClause := ""
 		if downvotes > 0 {
-			downClause = fmt.Sprintf("downvotes > %d", downvotes)
-		} else if upvotes < 0 {
-			downClause = fmt.Sprintf("downvotes < %d", -downvotes)
+			downClause = fmt.Sprintf("t.downvotes > %d", downvotes)
+		} else if downvotes < 0 {
+			downClause = fmt.Sprintf("t.downvotes < %d", -downvotes)
 		}
 		voteCondition := ""
 		if len(upClause) > 0 && len(downClause) > 0 {
@@ -190,12 +194,11 @@ func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes i
 			getTags += "WHERE " + condition + "\n"
 		}
 	}
-	if id != 0 {
+	if id == 0 {
 		getTags += SQLSortOrder(sortOrder)
 		getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 	}
 
-	fmt.Println(getTags)
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags") {
 		return []Tag{}
