@@ -145,7 +145,6 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	}
 	year := yearFromId(postId)
 	locArray := SQLFormattedArray(location)
-	fmt.Printf("%d: %s + %d %s\n", postId, updateField, upvoteAmount, locArray)
 	updateVoteForPost := fmt.Sprintf(`
 		INSERT INTO votes%d(kind, pid, sid, location) VALUES(3, %d, -1, %s)
 		ON CONFLICT (kind, pid, sid, location) DO NOTHING;
@@ -260,7 +259,7 @@ func SQLSortOrder(so SortOrder, tableName string) string {
 	case soControversial:
 		return "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
 	case soCreatedAt:
-		return fmt.Sprintf("ORDER BY %s.createdAt DESC\n") // FIXME: make sure callers make correct change
+		return fmt.Sprintf("ORDER BY %s.createdAt DESC\n", tableName) // FIXME: make sure callers make correct change
 	}
 	return ""
 }
@@ -339,7 +338,6 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	} else {
 		postQueries += SQLSortOrder(sortOrder, voteTable)
 	}
-
 	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(postQueries)

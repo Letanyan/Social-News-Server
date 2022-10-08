@@ -187,7 +187,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes i
 		}
 	}
 	if id != 0 {
-		getTags += SQLSortOrder(sortOrder)
+		getTags += SQLSortOrder(sortOrder, "")
 		getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 	}
 

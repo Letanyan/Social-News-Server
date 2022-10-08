@@ -550,10 +550,15 @@ func APIGetComments(c *gin.Context) {
 		return
 	}
 
+	popularIn := strings.Split(c.DefaultQuery("popularIn", ""), ",")
+	if len(popularIn) == 1 && popularIn[0] == "" {
+		popularIn = []string{}
+	}
+
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, startDate, endDate, upvotes, downvotes, order, limit, offset)
+	result := DBGetComments(mainDB, pid, uid, replyId, startDate, endDate, popularIn, upvotes, downvotes, order, limit, offset)
 	APIReturn(c, true, result)
 }
 
@@ -707,7 +712,9 @@ func APIVoteComment(c *gin.Context) {
 		return
 	}
 
-	comment, profile, pref := DBVoteComment(mainDB, input.UID, pid, cid, input.Amount)
+	addr := getAddress(c.ClientIP())
+
+	comment, profile, pref := DBVoteComment(mainDB, input.UID, pid, cid, input.Amount, addr)
 	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {
