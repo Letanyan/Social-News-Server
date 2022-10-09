@@ -112,9 +112,17 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
 func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, location []string) Post {
 	t := utc()
 	nowTime := formatTime(t)
+
+	tagObjects := DBCreateTags(db, tags)
+	tagIndices := []int64{}
+	for _, t := range tagObjects {
+		tagIndices = append(tagIndices, t.ID)
+	}
+
 	// year := t.Year()
-	insertPost := fmt.Sprintf(`INSERT INTO posts(id, userId, content, tags, createdAt, updatedAt, location) 
-	VALUES (nextval('posts_id_seq') * 10000 + extract(year from now() at time zone ('utc')), $1, $2, %s, '%s', '%s', %s) RETURNING %s`, SQLFormattedArray(tags), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
+	insertPost := fmt.Sprintf(`
+	INSERT INTO posts(userId, content, tags, createdAt, updatedAt, location) 
+	VALUES ($1, $2, %s, '%s', '%s', %s) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
 	row := db.QueryRow(insertPost, userId, content)
 
 	post, e := ScanPost(row)
@@ -127,8 +135,6 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 	if DidFail(e, "insert post to user") {
 		return Post{}
 	}
-
-	DBCreateTags(db, tags)
 
 	return post
 }
