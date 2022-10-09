@@ -148,7 +148,7 @@ func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) 
 	return comment
 }
 
-func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvoteAmount int64, location []string) (Comment, UserProfile, []UserPref) {
+func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvoteAmount int64, location []string, date string) (Comment, UserProfile, []UserPref) {
 	var updateField string
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
@@ -159,11 +159,11 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	}
 	locArray := SQLFormattedArray(location)
 	updateVoteForPost := fmt.Sprintf(`
-		INSERT INTO votes(kind, pid, sid, location) VALUES(2, %d, %d, %s)
+		INSERT INTO votes(kind, pid, sid, location{date}) VALUES(2, %d, %d, %s{date_value})
 		ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 		UPDATE votes SET
 		%s = %s + %d
-		WHERE kind=2 AND pid=%d AND sid=%d AND location=%s;
+		WHERE kind=2 AND pid=%d AND sid=%d AND location=%s AND updatedAt={date_value_res};
 
 		UPDATE Comments SET 
 		%s = %s + %d
@@ -174,13 +174,15 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 		postId, commentId, locArray,
 		updateField, updateField, upvoteAmount,
 		commentId, SQLFieldsForComment())
+
+	updateVoteForPost = ReplaceDateValues(updateVoteForPost, date)
 	row := db.QueryRow(updateVoteForPost)
 	comment, e := ScanComment(row)
 	if DidFail(e, "vote for post ", postId) {
 		return Comment{}, UserProfile{}, []UserPref{}
 	}
 
-	user, uPref := DBVoteForUser(db, userId, comment.UserID, upvoteAmount*sign(isUpvote), location)
+	user, uPref := DBVoteForUser(db, userId, comment.UserID, upvoteAmount*sign(isUpvote), location, date)
 	createPref := fmt.Sprintf(`
 	INSERT INTO UserPref (uid, kind, pid, sid) 
 	VALUES(%d, 2, %d, %d) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
@@ -211,7 +213,7 @@ func DBGetComment(db *sql.DB, postId int64, commentId int64) CommentResult {
 }
 
 // ignore userId if 0, ignore replyId if 0, start < CreatedAt < end ignore if empty, ignore upvotes if 0
-func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start string, end string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []CommentResult {
+func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start string, end string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []CommentResult {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -249,14 +251,27 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 			cond += fmt.Sprintf("AND %s.downvotes < %d\n", voteTable, -downvotes)
 		}
 	}
+	if len(startDate) > 0 && len(endDate) > 0 {
+		cond += fmt.Sprintf("AND v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')\n", startDate, endDate)
+	} else if len(startDate) > 0 {
+		cond += fmt.Sprintf("AND TIMESTAMP '%s' <= v.updatedAt\n", startDate)
+	} else if len(endDate) > 0 {
+		cond += fmt.Sprintf("AND TIMESTAMP '%s' > v.updatedAt\n", endDate)
+	}
+
 	if len(popularIn) > 0 {
 		queryLoc := SQLFormattedArray(popularIn)
-		cond += fmt.Sprintf("AND v.kind=2 AND v.location @> %s\n", queryLoc)
-		getComments += "JOIN votes v ON v.pid = p.id\n"
+		cond += fmt.Sprintf("AND v.location @> %s\n", queryLoc)
+	}
+
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
+		getComments += "JOIN Votes v ON v.pid = p.id\n"
 	}
 
 	getComments += cond + "\n"
-	if len(popularIn) > 0 {
+	if usingVotesTable {
+		getComments += "AND kind=2\n"
 		getComments += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForPostResult())
 		getComments = strings.ReplaceAll(getComments, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 	} else {
@@ -271,6 +286,6 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 		return []CommentResult{}
 	}
 
-	result := ScanCommentResults(rows, len(popularIn) > 0)
+	result := ScanCommentResults(rows, usingVotesTable)
 	return result
 }

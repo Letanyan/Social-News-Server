@@ -157,7 +157,10 @@ func APIGetUsers(c *gin.Context) {
 		popularIn = []string{}
 	}
 
-	users := DBGetUsers(mainDB, popularIn, upvotes, downvotes, order, limit, offset)
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
+
+	users := DBGetUsers(mainDB, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate)
 	APIReturn(c, true, users)
 }
 
@@ -487,12 +490,12 @@ func APIGetPosts(c *gin.Context) {
 		return
 	}
 
-	now := utc()
-	lastWeek := now.AddDate(0, 0, -7)
-	startDate := c.DefaultQuery("start", formatTime(lastWeek))
-	endDate := c.DefaultQuery("end", formatTime(now))
+	start := c.DefaultQuery("startCreated", "")
+	end := c.DefaultQuery("endCreated", "")
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
 
-	posts := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	posts := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes, order, limit, offset, start, end, startDate, endDate)
 	APIReturn(c, true, posts)
 }
 
@@ -560,10 +563,12 @@ func APIGetComments(c *gin.Context) {
 		popularIn = []string{}
 	}
 
+	start := c.DefaultQuery("startCreated", "")
+	end := c.DefaultQuery("endCreated", "")
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, startDate, endDate, popularIn, upvotes, downvotes, order, limit, offset)
+	result := DBGetComments(mainDB, pid, uid, replyId, start, end, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate)
 	APIReturn(c, true, result)
 }
 
@@ -576,7 +581,7 @@ func APIGetTag(c *gin.Context) {
 		return
 	}
 
-	tag := DBGetTags(mainDB, tid, []string{}, []string{}, 0, 0, soScore, 1, 0)
+	tag := DBGetTags(mainDB, tid, []string{}, []string{}, 0, 0, soScore, 1, 0, "", "")
 	if len(tag) == 1 {
 		APIReturn(c, true, tag[0])
 	} else {
@@ -619,7 +624,10 @@ func APIGetTags(c *gin.Context) {
 		return
 	}
 
-	result := DBGetTags(mainDB, 0, tags, location, upvotes, downvotes, order, limit, offset)
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
+
+	result := DBGetTags(mainDB, 0, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
 	APIReturn(c, true, result)
 }
 
@@ -650,7 +658,7 @@ func APIVoteUser(c *gin.Context) {
 
 	addr := getAddress(c.ClientIP())
 
-	profile, pref := DBVoteForUser(mainDB, input.UID, targetId, input.Amount, addr)
+	profile, pref := DBVoteForUser(mainDB, input.UID, targetId, input.Amount, addr, "")
 	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {
@@ -683,7 +691,7 @@ func APIVotePost(c *gin.Context) {
 
 	addr := getAddress(c.ClientIP())
 
-	post, profile, tag, pref := DBVotePost(mainDB, input.UID, pid, input.Amount, addr)
+	post, profile, tag, pref := DBVotePost(mainDB, input.UID, pid, input.Amount, addr, "")
 	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {
@@ -721,7 +729,7 @@ func APIVoteComment(c *gin.Context) {
 
 	addr := getAddress(c.ClientIP())
 
-	comment, profile, pref := DBVoteComment(mainDB, input.UID, pid, cid, input.Amount, addr)
+	comment, profile, pref := DBVoteComment(mainDB, input.UID, pid, cid, input.Amount, addr, "")
 	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
 
 	if remaining >= 0 {

@@ -139,7 +139,7 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 	return post
 }
 
-func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) (Post, UserProfile, []Tag, []UserPref) {
+func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string, date string) (Post, UserProfile, []Tag, []UserPref) {
 	var updateField string
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
@@ -150,11 +150,11 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	}
 	locArray := SQLFormattedArray(location)
 	updateVoteForPost := fmt.Sprintf(`
-	INSERT INTO votes(kind, pid, sid, location) VALUES(3, %d, -1, %s)
+	INSERT INTO votes(kind, pid, sid, location{date}) VALUES(3, %d, -1, %s{date_value})
 	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = %s + %d
-	WHERE kind=3 AND pid=%d AND location=%s;
+	WHERE kind=3 AND pid=%d AND location=%s AND updatedAt={date_value_res};
 
 	UPDATE posts SET
 	%s = %s + %d
@@ -165,14 +165,16 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		postId, locArray,
 		updateField, updateField, upvoteAmount,
 		postId, SQLFieldsForPost())
+
+	updateVoteForPost = ReplaceDateValues(updateVoteForPost, date)
 	row := db.QueryRow(updateVoteForPost)
 	post, e := ScanPost(row)
 	if DidFail(e, "vote for post ", postId) {
 		return Post{}, UserProfile{}, []Tag{}, []UserPref{}
 	}
 
-	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location)
-	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location)
+	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location, date)
+	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location, date)
 	createPref := fmt.Sprintf(`
 	INSERT INTO UserPref (uid, kind, pid, sid) 
 	VALUES(%d, 3, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
@@ -276,7 +278,7 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 }
 
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
-func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []PostResult {
+func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, start string, end string, startDate string, endDate string) []PostResult {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -286,40 +288,58 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	JOIN users u ON p.userId = u.id
 	`, SQLFieldsForPostResultAlias())
 
-	cond := fmt.Sprintf(`WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')`, startDate, endDate)
+	cond := []string{}
+	if len(start) > 0 && len(end) > 0 {
+		cond = append(cond, fmt.Sprintf("p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", start, end))
+	} else if len(start) > 0 {
+		cond = append(cond, fmt.Sprintf("(TIMESTAMP '%s') < p.createdAt", start))
+	} else if len(end) > 0 {
+		cond = append(cond, fmt.Sprintf("p.createdAt < (TIMESTAMP '%s')", end))
+	}
 	if userId != 0 {
-		cond += fmt.Sprintf("AND p.userId = %d\n", userId)
+		cond = append(cond, fmt.Sprintf("p.userId = %d", userId))
 	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
-		cond += fmt.Sprintf("AND %s && p.tags\n", queryTags)
+		cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 	}
 	if len(origin) > 0 {
 		queryLoc := SQLFormattedArray(origin)
-		cond += fmt.Sprintf("AND p.location @> %s\n", queryLoc)
+		cond = append(cond, fmt.Sprintf("p.location @> %s", queryLoc))
 	}
-	if upvotes != 0 {
-		if upvotes > 0 {
-			cond += fmt.Sprintf("AND %s.upvotes > %d\n", voteTable, upvotes)
-		} else {
-			cond += fmt.Sprintf("AND %s.upvotes < %d\n", voteTable, -upvotes)
-		}
+	if upvotes > 0 {
+		cond = append(cond, fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes))
+	} else if upvotes < 0 {
+		cond = append(cond, fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes))
 	}
-	if downvotes != 0 {
-		if upvotes > 0 {
-			cond += fmt.Sprintf("AND %s.downvotes > %d\n", voteTable, downvotes)
-		} else {
-			cond += fmt.Sprintf("AND %s.downvotes < %d\n", voteTable, -downvotes)
-		}
+	if downvotes > 0 {
+		cond = append(cond, fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes))
+	} else if downvotes < 0 {
+		cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
+	}
+
+	if len(startDate) > 0 && len(endDate) > 0 {
+		cond = append(cond, fmt.Sprintf("v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", startDate, endDate))
+	} else if len(startDate) > 0 {
+		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' <= v.updatedAt", startDate))
+	} else if len(endDate) > 0 {
+		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' > v.updatedAt", endDate))
 	}
 	if len(popularIn) > 0 {
 		queryLoc := SQLFormattedArray(popularIn)
-		cond += fmt.Sprintf("AND v.kind=3 AND v.location @> %s\n", queryLoc)
-		getPosts += "JOIN votes v ON v.pid = p.id\n"
+		cond = append(cond, fmt.Sprintf("v.kind=3 AND v.location @> %s\n", queryLoc))
+	}
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
+		getPosts += "JOIN Votes v ON v.pid = p.id\n"
+		cond = append(cond, "kind=3")
 	}
 
-	getPosts += cond
-	if len(popularIn) > 0 {
+	if len(cond) > 0 {
+		getPosts += "WHERE " + JoinStrings(cond, " AND ") + "\n"
+	}
+
+	if usingVotesTable {
 		getPosts += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForPostResult())
 		getPosts = strings.ReplaceAll(getPosts, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 	} else {
@@ -329,6 +349,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	getPosts += SQLSortOrder(sortOrder)
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
+	fmt.Println(getPosts)
 	rows, e := db.Query(getPosts)
 	result := []PostResult{}
 	if DidFail(e, "get posts\n", getPosts) {
@@ -336,6 +357,6 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	}
 	defer rows.Close()
 
-	result = ScanPostResults(rows, len(popularIn) > 0)
+	result = ScanPostResults(rows, usingVotesTable)
 	return result
 }

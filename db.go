@@ -133,7 +133,7 @@ func DBCommentsSetup(db *sql.DB) {
 	DidFail(e, "create comments table")
 	createCommentsTable := func(mod int, rem int) {
 		makeInstance := fmt.Sprintf(`
-		CREATE TABLE Comments%d 
+		CREATE TABLE IF NOT EXISTS Comments%d 
 		PARTITION OF Comments
 		FOR VALUES WITH (modulus %d, remainder %d);
 		CREATE INDEX IF NOT EXISTS Comments%d_index ON Comments%d (id, postId)

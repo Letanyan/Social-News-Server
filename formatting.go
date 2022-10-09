@@ -95,3 +95,27 @@ func SQLFormattedIndexList(array []int64, rest func(int64) string) string {
 	}
 	return result
 }
+
+func ReplaceDateValues(query string, date string) string {
+	if len(date) > 0 {
+		query = strings.ReplaceAll(query, "{date}", ", updatedAt")
+		query = strings.ReplaceAll(query, "{date_value}", ", '"+date+"'")
+		query = strings.ReplaceAll(query, "{date_value_res}", "'"+date+"'")
+	} else {
+		query = strings.ReplaceAll(query, "{date}", "")
+		query = strings.ReplaceAll(query, "{date_value}", "")
+		query = strings.ReplaceAll(query, "{date_value_res}", "'"+utc().Format("2006-01-02")+"'")
+	}
+	return query
+}
+
+func JoinStrings(list []string, joiner string) string {
+	result := ""
+	for i, s := range list {
+		result += fmt.Sprintf("%s", s)
+		if i < len(list)-1 {
+			result += joiner
+		}
+	}
+	return result
+}

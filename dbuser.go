@@ -180,7 +180,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	return user
 }
 
-func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []User {
+func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []User {
 	voteTable := "u"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -199,7 +199,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 	downClause := ""
 	if downvotes > 0 {
 		downClause = fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes)
-	} else if upvotes < 0 {
+	} else if downvotes < 0 {
 		downClause = fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes)
 	}
 	voteCondition := ""
@@ -219,13 +219,39 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 		} else {
 			voteCondition += " " + locCond
 		}
+	}
+	updatedCond := ""
+	if len(startDate) > 0 && len(endDate) > 0 {
+		updatedCond = fmt.Sprintf(" v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", startDate, endDate)
+	} else if len(startDate) > 0 {
+		updatedCond = fmt.Sprintf(" TIMESTAMP '%s' <= v.updatedAt", startDate)
+	} else if len(endDate) > 0 {
+		updatedCond = fmt.Sprintf(" TIMESTAMP '%s' > v.updatedAt", endDate)
+	}
+	if len(updatedCond) > 0 {
+		if len(voteCondition) > 0 {
+			voteCondition += " AND" + updatedCond
+		} else {
+			voteCondition += updatedCond
+		}
+	}
+
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+
+	if usingVotesTable {
 		getUsers += "JOIN Votes v ON v.pid = u.id\n"
 	}
+
 	if len(voteCondition) > 0 {
 		getUsers += "WHERE " + voteCondition + "\n"
 	}
 
-	if len(popularIn) > 0 {
+	if usingVotesTable {
+		if len(voteCondition) > 0 {
+			getUsers += " AND kind=1 "
+		} else {
+			getUsers += " WHERE kind=1 "
+		}
 		getUsers += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForUserProfile())
 		getUsers = strings.ReplaceAll(getUsers, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 	} else {
@@ -235,13 +261,12 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 	getUsers += SQLSortOrder(sortOrder)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
-	fmt.Println(getUsers)
 	rows, e := db.Query(getUsers)
 	if DidFail(e, "get users", getUsers) {
 		return []User{}
 	}
 
-	result := ScanUserProfiles(rows, true, len(popularIn) > 0)
+	result := ScanUserProfiles(rows, true, usingVotesTable)
 
 	return result
 }
@@ -256,7 +281,7 @@ func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 	}
 }
 
-func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string) (UserProfile, UserPref) {
+func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string, date string) (UserProfile, UserPref) {
 	updatedField := ""
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
@@ -267,22 +292,24 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 	}
 	locArray := SQLFormattedArray(location)
 	updateUser := fmt.Sprintf(`
-	INSERT INTO votes(kind, pid, sid, location) VALUES(1, %d, -1, %s)
+	INSERT INTO votes(kind, pid, sid, location{date}) VALUES(1, %d, -1, %s{date_value})
 	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = %s + %d
-	WHERE kind=1 AND pid=%d AND location=%s;
+	WHERE kind=1 AND pid=%d AND location=%s AND updatedAt={date_value_res};
 	
 	UPDATE users u SET 
 	%s = %s + %d,
 	credits = credits + 0.75 * %d
 	WHERE id = %d
-	RETURNING %s
-	`, targetId, locArray,
+	RETURNING %s`,
+		targetId, locArray,
 		updatedField, updatedField, upvoteAmount,
 		targetId, locArray,
 		updatedField, updatedField, upvoteAmount,
 		upvoteAmount, targetId, SQLFieldsForUserProfile())
+
+	updateUser = ReplaceDateValues(updateUser, date)
 	row := db.QueryRow(updateUser)
 	user, e := ScanUserProfile(row)
 	if DidFail(e, "update user score", targetId) {
