@@ -16,10 +16,11 @@ var (
 func init() {
 	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if isDebug || err != nil {
-		file = os.Stderr
+		fail = log.New(os.Stderr, "[ERROR]: ", log.Ldate|log.Ltime)
+	} else {
+		fail = log.New(file, "[ERROR]: ", log.Ldate|log.Ltime)
 	}
 	info = log.New(file, "[INFO]: ", log.Ldate|log.Ltime)
-	fail = log.New(file, "[ERROR]: ", log.Ldate|log.Ltime)
 }
 
 func DidFail(e error, message ...interface{}) bool {
@@ -30,7 +31,10 @@ func DidFail(e error, message ...interface{}) bool {
 		fail.Println(s)
 		return true
 	} else {
-		// info.Println(message...)
+		_, file, line, _ := runtime.Caller(1)
+		_, filename := filepath.Split(file)
+		s := filename + ":" + fmt.Sprint(line) + ":" + fmt.Sprint(message...)
+		info.Println(s)
 		return false
 	}
 }

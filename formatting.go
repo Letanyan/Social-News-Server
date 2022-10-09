@@ -17,11 +17,6 @@ func parseTime(t string) time.Time {
 	return result
 }
 
-func formatNow() string {
-	t := time.Now().UTC()
-	return formatTime(t)
-}
-
 func sign(t bool) int64 {
 	if t {
 		return 1
