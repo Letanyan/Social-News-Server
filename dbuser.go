@@ -257,16 +257,12 @@ func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 }
 
 func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string) (UserProfile, UserPref) {
-	nowTime := formatNow()
 	updatedField := ""
-	otherField := ""
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updatedField = "upvotes"
-		otherField = "downvotes"
 	} else {
 		updatedField = "downvotes"
-		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
 	locArray := SQLFormattedArray(location)
@@ -274,23 +270,19 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 	INSERT INTO votes(kind, pid, sid, location) VALUES(1, %d, -1, %s)
 	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
-	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	%s = %s + %d
 	WHERE kind=1 AND pid=%d AND location=%s;
 	
 	UPDATE users u SET 
-	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	credits = credits + 0.75 * %d,
-	updatedAt = '%s'
+	%s = %s + %d,
+	credits = credits + 0.75 * %d
 	WHERE id = %d
 	RETURNING %s
 	`, targetId, locArray,
-		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, targetId, locArray,
-		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, upvoteAmount, nowTime, targetId, SQLFieldsForUserProfile())
+		updatedField, updatedField, upvoteAmount,
+		targetId, locArray,
+		updatedField, updatedField, upvoteAmount,
+		upvoteAmount, targetId, SQLFieldsForUserProfile())
 	row := db.QueryRow(updateUser)
 	user, e := ScanUserProfile(row)
 	if DidFail(e, "update user score", targetId) {
@@ -299,15 +291,13 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 
 	vote := fmt.Sprintf(`INSERT INTO UserPref (uid, kind, pid, sid)
 	VALUES (%d, 1, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
-	UPDATE UserPref 
-	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	UPDATE UserPref SET
+	%s = %s + %d
 	WHERE kind=1 AND uid = %d AND pid = %d
 	RETURNING kind, pid, sid, upvotes, downvotes
 	`, userId, targetId,
-		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, userId, targetId)
+		updatedField, updatedField, upvoteAmount,
+		userId, targetId)
 	row = db.QueryRow(vote)
 	pref, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for user") {

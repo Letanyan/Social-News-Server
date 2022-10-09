@@ -140,17 +140,12 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 }
 
 func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) (Post, UserProfile, []Tag, []UserPref) {
-	currentTime := time.Now().UTC()
-	nowTime := formatTime(currentTime)
 	var updateField string
-	var otherField string
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updateField = "upvotes"
-		otherField = "downvotes"
 	} else {
 		updateField = "downvotes"
-		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
 	locArray := SQLFormattedArray(location)
@@ -158,23 +153,18 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	INSERT INTO votes(kind, pid, sid, location) VALUES(3, %d, -1, %s)
 	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
-	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	%s = %s + %d
 	WHERE kind=3 AND pid=%d AND location=%s;
 
 	UPDATE posts SET
-	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	%s = %s + %d
 	WHERE id = %d
 	RETURNING %s
 	`, postId, locArray,
-		updateField, updateField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime,
+		updateField, updateField, upvoteAmount,
 		postId, locArray,
-		updateField, updateField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, postId, SQLFieldsForPost())
+		updateField, updateField, upvoteAmount,
+		postId, SQLFieldsForPost())
 	row := db.QueryRow(updateVoteForPost)
 	post, e := ScanPost(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -187,15 +177,13 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	INSERT INTO UserPref (uid, kind, pid, sid) 
 	VALUES(%d, 3, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
 
-	UPDATE UserPref
-	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	UPDATE UserPref SET 
+	%s = %s + %d
 	WHERE kind=3 AND uid=%d AND pid=%d
 	RETURNING %s
 	`, userId, postId,
-		updateField, updateField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, userId, postId, SQLFieldsForUserPref())
+		updateField, updateField, upvoteAmount,
+		userId, postId, SQLFieldsForUserPref())
 	row = db.QueryRow(createPref)
 	userPrefForPost, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for post ", postId) {

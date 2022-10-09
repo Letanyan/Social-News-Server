@@ -69,35 +69,29 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	if len(tags) <= 0 {
 		return []Tag{}, []UserPref{}
 	}
-	nowTime := formatNow()
 	// tagRows := SQLFormattedRows(tags, func(s string) string {
 	// 	return ""
 	// })
 	tagArray := SQLFormattedIndexArray(tags)
 	updatedField := ""
-	otherField := ""
 	locArray := SQLFormattedArray(location)
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updatedField = "upvotes"
-		otherField = "downvotes"
 	} else {
 		updatedField = "downvotes"
-		otherField = "upvotes"
 		upvoteAmount = -upvoteAmount
 	}
 	// INSERT INTO tags (name)
 	// VALUES %s ON CONFLICT (name) DO NOTHING;
 	upsertTags := fmt.Sprintf(`
 	UPDATE tags SET 
-	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	%s = %s + %d
 	WHERE id = ANY(%s)
 	RETURNING %s;
 	`, //tagRows,
-		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, tagArray, SQLFieldsForTag(),
+		updatedField, updatedField, upvoteAmount,
+		tagArray, SQLFieldsForTag(),
 	)
 	rows, e := db.Query(upsertTags)
 	if DidFail(e, "insert and update tags") {
@@ -121,25 +115,21 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	INSERT INTO votes(kind, pid, sid, location) 
 	VALUES %s ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
-	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	%s = %s + %d
 	WHERE kind=4 AND pid=ANY(%s) AND location=%s;
 
 	INSERT INTO UserPref (uid, pid, sid, kind)
 	VALUES %s ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
-	UPDATE UserPref 
-	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
-	%s = cooldown(%s, updatedAt, '%s', 31536000),
-	updatedAt = '%s'
+	UPDATE UserPref SET 
+	%s = %s + %d
 	WHERE kind=4 AND uid=%d AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
 	`, tagVoteRows,
-		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, tagIndexArray, locArray,
+		updatedField, updatedField, upvoteAmount,
+		tagIndexArray, locArray,
 		tagIndexRows,
-		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, userId, tagIndexArray, SQLFieldsForUserPref())
+		updatedField, updatedField, upvoteAmount,
+		userId, tagIndexArray, SQLFieldsForUserPref())
 	rows, e = db.Query(upsertUserTags)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}
