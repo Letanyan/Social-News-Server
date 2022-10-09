@@ -51,8 +51,10 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	tagRows := SQLFormattedRows(tags, func(s string) string {
 		return ""
 	})
-	upsertTags := fmt.Sprintf(`INSERT INTO tags (name)
-	VALUES %s ON CONFLICT (name) DO NOTHING RETURNING %s;
+	upsertTags := fmt.Sprintf(`
+	INSERT INTO tags (name)
+	VALUES %s ON CONFLICT (name) DO NOTHING 
+	RETURNING %s;
 	`, tagRows, SQLFieldsForTag())
 	rows, e := db.Query(upsertTags)
 	if DidFail(e, "create tags") {
@@ -63,7 +65,7 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	return result
 }
 
-func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, location []string) ([]Tag, []UserPref) {
+func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, location []string) ([]Tag, []UserPref) {
 	if len(tags) <= 0 {
 		return []Tag{}, []UserPref{}
 	}
@@ -71,7 +73,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	// tagRows := SQLFormattedRows(tags, func(s string) string {
 	// 	return ""
 	// })
-	tagArray := SQLFormattedArray(tags)
+	tagArray := SQLFormattedIndexArray(tags)
 	updatedField := ""
 	otherField := ""
 	locArray := SQLFormattedArray(location)
@@ -91,7 +93,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
-	WHERE name = ANY(%s)
+	WHERE id = ANY(%s)
 	RETURNING %s;
 	`, //tagRows,
 		updatedField, updatedField, nowTime, upvoteAmount,
@@ -117,7 +119,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	tagIndexArray := SQLFormattedIndexArray(tagIndices)
 	upsertUserTags := fmt.Sprintf(`
 	INSERT INTO votes(kind, pid, sid, location) 
-	VALUES %s ON CONFLICT (kind, pid, sid, location) DO NOTHING;
+	VALUES %s ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),

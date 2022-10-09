@@ -14,7 +14,7 @@ type Post struct {
 	ID        int64
 	UserID    int64
 	Content   string
-	Tags      []string
+	Tags      []int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Location  []string
@@ -26,7 +26,7 @@ type PostResult struct {
 	ID        int64
 	Author    UserProfile
 	Content   string
-	Tags      []string
+	Tags      []int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Location  []string
@@ -156,7 +156,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	locArray := SQLFormattedArray(location)
 	updateVoteForPost := fmt.Sprintf(`
 	INSERT INTO votes(kind, pid, sid, location) VALUES(3, %d, -1, %s)
-	ON CONFLICT (kind, pid, sid, location) DO NOTHING;
+	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),

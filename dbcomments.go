@@ -165,7 +165,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	locArray := SQLFormattedArray(location)
 	updateVoteForPost := fmt.Sprintf(`
 		INSERT INTO votes(kind, pid, sid, location) VALUES(2, %d, %d, %s)
-		ON CONFLICT (kind, pid, sid, location) DO NOTHING;
+		ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 		UPDATE votes SET
 		%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 		%s = cooldown(%s, updatedAt, '%s', 31536000),

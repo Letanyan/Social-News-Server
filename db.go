@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 )
 
 func DBSetup(db *sql.DB) {
@@ -85,7 +84,7 @@ func DBUsersSetup(db *sql.DB) {
 }
 
 func DBPostsSetup(db *sql.DB) {
-	year := time.Now().UTC().Year()
+	year := utc().Year()
 	createPosts := `CREATE TABLE IF NOT EXISTS Posts (
 		id BIGSERIAL NOT NULL,
 		userId BIGINT NOT NULL,
@@ -149,6 +148,7 @@ func DBCommentsSetup(db *sql.DB) {
 }
 
 func DBVotesSetup(db *sql.DB) {
+	year := utc().Year()
 	createVotes := `CREATE TABLE IF NOT EXISTS Votes (
 		kind SMALLINT NOT NULL,
 		pid BIGINT NOT NULL,
@@ -158,24 +158,44 @@ func DBVotesSetup(db *sql.DB) {
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		updatedAt DATE DEFAULT (now() at time zone ('utc')),
 
-		PRIMARY KEY (kind, pid, sid, location)
-	) PARTITION BY LIST(kind);`
+		PRIMARY KEY (kind, pid, sid, location, updatedAt)
+	) PARTITION BY RANGE(updatedAt);`
 	_, e := db.Exec(createVotes)
 	DidFail(e, "create votes table")
-	createVotesTable := func(kind int) {
+
+	DBCreateVotesPartitionTable(db, year)
+	DBCreateVotesPartitionTable(db, year+1)
+}
+
+func DBCreateVotesPartitionTable(db *sql.DB, year int) {
+	tableName := fmt.Sprintf("Votes%d", year)
+	createVotesTable := func() {
 		makeInstance := fmt.Sprintf(`
-		CREATE TABLE IF NOT EXISTS Votes%d
+		CREATE TABLE IF NOT EXISTS %s
 		PARTITION OF Votes
-		FOR VALUES IN (%d);
-		CREATE INDEX IF NOT EXISTS Votes%d_index ON Votes%d (kind, pid, sid, location)
-		`, kind, kind, kind, kind)
-		_, e = db.Exec(makeInstance)
+		FOR VALUES FROM ('%d-01-01') TO ('%d-01-01')
+		PARTITION BY LIST(kind);
+		CREATE INDEX IF NOT EXISTS %s_index ON %s (kind, pid, sid, location, updatedAt)
+		`, tableName, year, year+1, tableName, tableName)
+		_, e := db.Exec(makeInstance)
 		DidFail(e, "create votes table instance")
 	}
-	createVotesTable(int(upUser))
-	createVotesTable(int(upComment))
-	createVotesTable(int(upPost))
-	createVotesTable(int(upTag))
+	createVotesKindTable := func(kind int) {
+		kindTableName := fmt.Sprintf("%sk%d", tableName, kind)
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s
+		PARTITION OF %s
+		FOR VALUES IN (%d);
+		CREATE INDEX IF NOT EXISTS %s_index ON %s (kind, pid, sid, location, updatedAt)
+		`, kindTableName, tableName, kind, kindTableName, tableName)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create votes table instance")
+	}
+	createVotesTable()
+	createVotesKindTable(int(upUser))
+	createVotesKindTable(int(upComment))
+	createVotesKindTable(int(upPost))
+	createVotesKindTable(int(upTag))
 }
 
 func DBTagsSetup(db *sql.DB) {
