@@ -144,52 +144,29 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 
 // ignore kind if it equals 0. ignore pid if it equals 0. ignore sid if it equals 0
 func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, upvotes int64, downvotes int64, limit int64, offset int64) []UserPref {
-	query := fmt.Sprintf(`SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
-	FROM User%dPref`, SQLFieldsForUserPref(), userId)
+	query := fmt.Sprintf(`
+	SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
+	FROM UserPref WHERE uid=%d `, SQLFieldsForUserPref(), userId)
 
 	cond := ""
 	if kind > 0 {
-		cond = fmt.Sprintf(" WHERE kind = %d", kind)
+		cond = fmt.Sprintf("AND kind = %d ", kind)
 	}
 	if pid > 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		cond += fmt.Sprintf("pid = %d", pid)
+		cond += fmt.Sprintf("AND pid = %d ", pid)
 	}
 	if sid > 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		cond += fmt.Sprintf("sid = %d", sid)
+		cond += fmt.Sprintf("AND sid = %d ", sid)
 	}
-	if upvotes != 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		if upvotes > 0 {
-			cond += fmt.Sprintf("upvotes > %d", upvotes)
-		} else {
-			cond += fmt.Sprintf("upvotes < %d", -upvotes)
-		}
+	if upvotes > 0 {
+		cond += fmt.Sprintf("AND upvotes > %d ", upvotes)
+	} else if upvotes < 0 {
+		cond += fmt.Sprintf("AND upvotes < %d ", -upvotes)
 	}
-	if downvotes != 0 {
-		if len(cond) == 0 {
-			cond += " WHERE "
-		} else {
-			cond += " AND "
-		}
-		if downvotes > 0 {
-			cond += fmt.Sprintf("downvotes > %d", downvotes)
-		} else {
-			cond += fmt.Sprintf("downvotes < %d", -downvotes)
-		}
+	if downvotes > 0 {
+		cond += fmt.Sprintf("AND downvotes > %d ", downvotes)
+	} else if downvotes < 0 {
+		cond += fmt.Sprintf("AND downvotes < %d ", -downvotes)
 	}
 
 	query += cond + "\n"
@@ -207,8 +184,11 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 }
 
 func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefUser {
-	getUsers := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
-	FROM User%dPref up JOIN users u ON up.pid = u.id WHERE kind = 1
+	getUsers := fmt.Sprintf(`
+	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
+	FROM UserPref up 
+	JOIN users u ON up.pid = u.id 
+	WHERE kind = 1 AND up.uid = %d
 	`, SQLFieldsForUserPrefUser(), userId)
 
 	if upvoteAmount > 0 {
@@ -252,11 +232,12 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 		kind = upComment
 	}
 	getPosts := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
-		FROM user%dpref up 
-		JOIN posts{} p ON up.pid = p.id
+		FROM UserPref up 
+		JOIN posts p ON up.pid = p.id
 		JOIN users u ON p.userId = u.id
-		WHERE createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') AND kind = %d
-		`, SQLFieldsForUserPrefPost(), userId, startDate, endDate, kind)
+		WHERE p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') 
+		AND up.kind = %d AND up.uid = %d
+		`, SQLFieldsForUserPrefPost(), startDate, endDate, kind, userId)
 
 	if upvoteAmount > 0 {
 		getPosts += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
@@ -290,16 +271,11 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 		getPosts += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 
-	sDate := parseTime(startDate)
-	eDate := parseTime(endDate)
-	years := yearsBetweenDates(sDate, eDate)
-	postQueries := BuildUnionForYears(getPosts, years)
+	getPosts += SQLSortOrder(sortOrder)
 
-	postQueries += SQLSortOrder(sortOrder)
+	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
-	postQueries += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
-
-	rows, e := db.Query(postQueries)
+	rows, e := db.Query(getPosts)
 	if DidFail(e, "get posts") {
 		return []UserPrefPost{}
 	}
@@ -311,9 +287,9 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 
 func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
-	FROM user%dpref up
+	FROM UserPref up
 	JOIN tags t ON up.pid = t.id
-	WHERE kind = 4
+	WHERE up.kind = 4 AND up.uid = %d
 	`, SQLFieldsForUserPrefTag(), userId)
 
 	if upvoteAmount > 0 {
@@ -433,36 +409,37 @@ func ScanUserContResults(rows *sql.Rows) []UserContResult {
 
 func DBGetUserCont(db *sql.DB, userId int64, isPosts bool, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []UserContResult {
 	query := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
-	FROM User%dCont up 
-	JOIN posts{} p ON up.postId = p.id 
+	FROM UserCont up 
+	JOIN posts p ON up.postId = p.id 
 	JOIN users u ON p.userId = u.id
+	WHERE up.userId = %d 
 	`, SQLFieldsForUserContResult(), userId)
 
 	if isPosts {
-		query += "WHERE up.commentId <= 0\n"
+		query += "AND up.commentId <= 0 "
 	} else {
-		query += "WHERE up.commentId > 0\n"
+		query += "AND up.commentId > 0 "
 	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
-		query += fmt.Sprintf("AND %s && p.tags\n", queryTags)
+		query += fmt.Sprintf("AND %s && p.tags ", queryTags)
 	}
 	if len(location) > 0 {
 		queryLoc := SQLFormattedArray(location)
-		query += fmt.Sprintf("AND p.location @> %s\n", queryLoc)
+		query += fmt.Sprintf("AND p.location @> %s ", queryLoc)
 	}
 	if upvotes != 0 {
 		if upvotes > 0 {
-			query += fmt.Sprintf("AND p.upvotes > %d\n", upvotes)
+			query += fmt.Sprintf("AND p.upvotes > %d ", upvotes)
 		} else {
-			query += fmt.Sprintf("AND p.upvotes < %d\n", -upvotes)
+			query += fmt.Sprintf("AND p.upvotes < %d ", -upvotes)
 		}
 	}
 	if downvotes != 0 {
 		if upvotes > 0 {
-			query += fmt.Sprintf("AND p.downvotes > %d\n", upvotes)
+			query += fmt.Sprintf("AND p.downvotes > %d ", upvotes)
 		} else {
-			query += fmt.Sprintf("AND p.downvotes < %d\n", -upvotes)
+			query += fmt.Sprintf("AND p.downvotes < %d ", -upvotes)
 		}
 	}
 

@@ -74,7 +74,6 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 	tagArray := SQLFormattedArray(tags)
 	updatedField := ""
 	otherField := ""
-	year := utc().Year()
 	locArray := SQLFormattedArray(location)
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
@@ -109,34 +108,36 @@ func DBVoteTags(db *sql.DB, userId int64, tags []string, upvoteAmount int64, loc
 		tagIndices = append(tagIndices, tag.ID)
 	}
 
-	tagIndexRows := SQLFormattedIndexRows(tagIndices, func(i int64) string { return "-1, 4" })
+	tagIndexRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
+		return fmt.Sprintf("(%d, 4, %d, -1)", userId, i)
+	})
 	tagVoteRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
 		return fmt.Sprintf("(4, %d, -1, %s)", i, locArray)
 	})
 	tagIndexArray := SQLFormattedIndexArray(tagIndices)
 	upsertUserTags := fmt.Sprintf(`
-	INSERT INTO votes%d(kind, pid, sid, location) 
+	INSERT INTO votes(kind, pid, sid, location) 
 	VALUES %s ON CONFLICT (kind, pid, sid, location) DO NOTHING;
-	UPDATE votes%d SET
+	UPDATE votes SET
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
 	WHERE kind=4 AND pid=ANY(%s) AND location=%s;
 
-	INSERT INTO User%dPref (pid, sid, kind)
-	VALUES %s ON CONFLICT (kind, pid, sid) DO NOTHING;
-	UPDATE User%dPref 
+	INSERT INTO UserPref (uid, pid, sid, kind)
+	VALUES %s ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
+	UPDATE UserPref 
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
-	WHERE kind=4 AND pid = ANY(%s)
+	WHERE kind=4 AND uid=%d AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
-	`, year, tagVoteRows, year,
+	`, tagVoteRows,
 		updatedField, updatedField, nowTime, upvoteAmount,
 		otherField, otherField, nowTime, nowTime, tagIndexArray, locArray,
-		userId, tagIndexRows, userId,
+		tagIndexRows,
 		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, tagIndexArray, SQLFieldsForUserPref())
+		otherField, otherField, nowTime, nowTime, userId, tagIndexArray, SQLFieldsForUserPref())
 	rows, e = db.Query(upsertUserTags)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}
@@ -213,7 +214,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes i
 		}
 
 		if len(location) > 0 {
-			getTags += "JOIN {votes} v ON v.pid = t.id\n"
+			getTags += "JOIN votes v ON v.pid = t.id\n"
 		}
 		if len(condition) > 0 {
 			getTags += "WHERE " + condition + "\n"
@@ -224,9 +225,6 @@ func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes i
 			getTags = strings.ReplaceAll(getTags, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 		} else {
 			getTags = strings.ReplaceAll(getTags, "{agg}", "")
-		}
-		if len(location) > 0 {
-			getTags = BuildUnionForNames(getTags, "{votes}", DBGetTableNamesLike(db, "votes%"))
 		}
 		getTags += SQLSortOrder(sortOrder)
 		getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)

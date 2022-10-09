@@ -8,6 +8,15 @@ import (
 )
 
 func DBSetup(db *sql.DB) {
+	DBUsersSetup(db)
+	DBPostsSetup(db)
+	DBCommentsSetup(db)
+	DBVotesSetup(db)
+	DBTagsSetup(db)
+	DBFunctionSetup(db)
+}
+
+func DBUsersSetup(db *sql.DB) {
 	createUsers := `CREATE TABLE IF NOT EXISTS Users (
 		id BIGSERIAL,
 		name VARCHAR(21) NOT NULL,
@@ -25,6 +34,55 @@ func DBSetup(db *sql.DB) {
 	_, e := db.Exec(createUsers)
 	DidFail(e, "create users table")
 
+	createUserContentTable := `CREATE TABLE IF NOT EXISTS UserCont (
+		userId BIGINT NOT NULL,
+		postId BIGINT NOT NULL,
+		commentId BIGINT NOT NULL,
+
+		PRIMARY KEY (userId, postId, commentId)
+	) PARTITION BY HASH(userId);`
+	_, e = db.Exec(createUserContentTable)
+	DidFail(e, "create user content table")
+
+	// kind (1=user, 2=comment, 3=post, 4=tag)
+	createUserPrefTable := `CREATE TABLE IF NOT EXISTS UserPref (
+		uid BIGINT NOT NULL,
+		kind SMALLINT NOT NULL,
+		pid BIGINT NOT NULL,
+		sid BIGINT NOT NULL,
+		upvotes DOUBLE PRECISION DEFAULT 0.0,
+		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
+
+		PRIMARY KEY (uid, kind, pid, sid)
+	) PARTITION BY HASH(uid);`
+	_, e = db.Exec(createUserPrefTable)
+	DidFail(e, "create user preference table")
+
+	createUsersTable := func(mod int, rem int) {
+		makePrefInstance := fmt.Sprintf(`
+		CREATE TABLE UserPref%d 
+		PARTITION OF UserPref
+		FOR VALUES WITH (modulus %d, remainder %d)
+		`, rem, mod, rem)
+		_, e := db.Exec(makePrefInstance)
+		DidFail(e, "create user pref instance")
+
+		makeContInstance := fmt.Sprintf(`
+		CREATE TABLE UserCont%d 
+		PARTITION OF UserCont
+		FOR VALUES WITH (modulus %d, remainder %d)
+		`, rem, mod, rem)
+		_, e = db.Exec(makeContInstance)
+		DidFail(e, "create user cont instance")
+	}
+	mod := 20
+	for i := 0; i < mod; i += 1 {
+		createUsersTable(mod, i)
+	}
+}
+
+func DBPostsSetup(db *sql.DB) {
 	year := time.Now().UTC().Year()
 	createPosts := `CREATE TABLE IF NOT EXISTS Posts (
 		id BIGSERIAL NOT NULL,
@@ -39,7 +97,7 @@ func DBSetup(db *sql.DB) {
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
-	_, e = db.Exec(createPosts)
+	_, e := db.Exec(createPosts)
 	DidFail(e, "create posts table")
 
 	createPostsTable := func(year int) {
@@ -53,7 +111,9 @@ func DBSetup(db *sql.DB) {
 	}
 	createPostsTable(year)
 	createPostsTable(year + 1)
+}
 
+func DBCommentsSetup(db *sql.DB) {
 	createComments := `CREATE TABLE IF NOT EXISTS Comments (
 		id BIGSERIAL NOT NULL,
 		postId BIGINT,
@@ -67,7 +127,7 @@ func DBSetup(db *sql.DB) {
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`
-	_, e = db.Exec(createComments)
+	_, e := db.Exec(createComments)
 	DidFail(e, "create comments table")
 	createCommentsTable := func(mod int, rem int) {
 		makeInstance := fmt.Sprintf(`
@@ -82,7 +142,9 @@ func DBSetup(db *sql.DB) {
 	for i := 0; i < mod; i += 1 {
 		createCommentsTable(mod, i)
 	}
+}
 
+func DBVotesSetup(db *sql.DB) {
 	createVotes := `CREATE TABLE IF NOT EXISTS Votes (
 		kind SMALLINT NOT NULL,
 		pid BIGINT NOT NULL,
@@ -94,7 +156,7 @@ func DBSetup(db *sql.DB) {
 
 		PRIMARY KEY (kind, pid, sid, location)
 	) PARTITION BY LIST(kind);`
-	_, e = db.Exec(createVotes)
+	_, e := db.Exec(createVotes)
 	DidFail(e, "create votes table")
 	createVotesTable := func(kind int) {
 		makeInstance := fmt.Sprintf(`
@@ -109,7 +171,9 @@ func DBSetup(db *sql.DB) {
 	createVotesTable(int(upComment))
 	createVotesTable(int(upPost))
 	createVotesTable(int(upTag))
+}
 
+func DBTagsSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
@@ -119,16 +183,18 @@ func DBSetup(db *sql.DB) {
 
 		PRIMARY KEY (name)
 	);`
-	_, e = db.Exec(createTags)
+	_, e := db.Exec(createTags)
 	DidFail(e, "create tags table")
+}
 
+func DBFunctionSetup(db *sql.DB) {
 	createDateFraction := `
 	CREATE OR REPLACE FUNCTION dateFrac(beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
 	BEGIN
 		RETURN LEAST(TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate)), period) / period;
 	END;
 	$$ LANGUAGE plpgsql`
-	_, e = db.Exec(createDateFraction)
+	_, e := db.Exec(createDateFraction)
 	DidFail(e, "create dateFrac function")
 
 	createCoolingFraction := `
@@ -178,18 +244,9 @@ func DBDeleteAllVotes(db *sql.DB) {
 }
 
 func DBDeleteAllUsers(db *sql.DB) {
-	query := `SELECT id FROM users`
-	rows, e := db.Query(query)
-	if DidFail(e, "get all posts") {
-		return
-	}
-	for rows.Next() {
-		var id int64
-		rows.Scan(&id)
-		DBDeleteTable(db, fmt.Sprintf("User%dPref", id))
-		DBDeleteTable(db, fmt.Sprintf("User%dCont", id))
-	}
-	DBDeleteTable(db, "users")
+	DBDeleteTable(db, "Users")
+	DBDeleteTable(db, "UserPref")
+	DBDeleteTable(db, "UserCont")
 }
 
 func DBClearAllTables(db *sql.DB) {

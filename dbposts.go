@@ -122,7 +122,7 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 		return Post{}
 	}
 
-	insertPostForUser := fmt.Sprintf(`INSERT INTO User%dCont(postId, commentId) VALUES(%d, -1)`, post.UserID, post.ID)
+	insertPostForUser := fmt.Sprintf(`INSERT INTO UserCont(userId, postId, commentId) VALUES(%d, %d, -1)`, post.UserID, post.ID)
 	_, e = db.Exec(insertPostForUser)
 	if DidFail(e, "insert post to user") {
 		return Post{}
@@ -178,18 +178,18 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location)
 	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location)
 	createPref := fmt.Sprintf(`
-	INSERT INTO User%dPref (kind, pid, sid) 
-	VALUES(3, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
+	INSERT INTO UserPref (uid, kind, pid, sid) 
+	VALUES(%d, 3, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
 
-	UPDATE User%dPref
+	UPDATE UserPref
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
-	WHERE kind=3 AND pid=%d
+	WHERE kind=3 AND uid=%d AND pid=%d
 	RETURNING %s
 	`, userId, postId,
-		userId, updateField, updateField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, postId, SQLFieldsForUserPref())
+		updateField, updateField, nowTime, upvoteAmount,
+		otherField, otherField, nowTime, nowTime, userId, postId, SQLFieldsForUserPref())
 	row = db.QueryRow(createPref)
 	userPrefForPost, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -210,8 +210,8 @@ func DBDeletePost(db *sql.DB, postId int64) {
 	var userId int64
 	e := row.Scan(&userId)
 	if !DidFail(e, "get userId for deleting post ", postId) {
-		deletePostFromUser := fmt.Sprintf(`DELETE FROM User%dCont WHERE postId=$2`, userId)
-		_, e = db.Exec(deletePostFromUser, postId)
+		deletePostFromUser := `DELETE FROM UserCont WHERE userId=$1 AND postId=$2`
+		_, e = db.Exec(deletePostFromUser, userId, postId)
 		DidFail(e, "delete post ", postId, " for user ", userId)
 	}
 	DidFail(e, "delete post from posts table")

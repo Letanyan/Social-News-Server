@@ -118,33 +118,6 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 		return User{}
 	}
 
-	createUserContentTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS User%dCont (
-		postId BIGINT NOT NULL,
-		commentId BIGINT NOT NULL,
-
-		PRIMARY KEY (postId, commentId)
-	);`, user.ID)
-	_, e = db.Exec(createUserContentTable)
-	if DidFail(e, "create user content table for user ", user.ID) {
-		return User{}
-	}
-
-	// kind (1=user, 2=comment, 3=post, 4=tag)
-	createUserPrefTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS User%dPref (
-		kind SMALLINT NOT NULL,
-		pid BIGINT NOT NULL,
-		sid BIGINT NOT NULL,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
-
-		PRIMARY KEY (kind, pid, sid)
-	);`, user.ID)
-	_, e = db.Exec(createUserPrefTable)
-	if DidFail(e, "create user preference table for user ", user.ID) {
-		return User{}
-	}
-
 	return user
 }
 
@@ -178,12 +151,12 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 	_, e := db.Exec(deleteFromUsers, userId)
 	DidFail(e, "delete user from users table")
 
-	deleteUserContTable := fmt.Sprintf(`DROP TABLE User%dCont`, userId)
-	_, e = db.Exec(deleteUserContTable)
+	deleteUserContTable := `DELETE FROM UserPref WHERE uid=$1`
+	_, e = db.Exec(deleteUserContTable, userId)
 	DidFail(e, "delete user content table")
 
-	deleteUserPrefTable := fmt.Sprintf(`DROP TABLE User%dPref`, userId)
-	_, e = db.Exec(deleteUserPrefTable)
+	deleteUserPrefTable := `DELETE FROM UserPref WHERE userId=$1`
+	_, e = db.Exec(deleteUserPrefTable, userId)
 	DidFail(e, "delete user preference table")
 }
 
@@ -324,17 +297,17 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		return UserProfile{}, UserPref{}
 	}
 
-	vote := fmt.Sprintf(`INSERT INTO User%dPref (kind, pid, sid)
-	VALUES (1, %d, -1) ON CONFLICT (kind, pid, sid) DO NOTHING;
-	UPDATE User%dPref 
+	vote := fmt.Sprintf(`INSERT INTO UserPref (uid, kind, pid, sid)
+	VALUES (%d, 1, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
+	UPDATE UserPref 
 	SET %s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
-	WHERE kind=1 AND pid = %d
+	WHERE kind=1 AND uid = %d AND pid = %d
 	RETURNING kind, pid, sid, upvotes, downvotes
-	`, userId, targetId, userId,
+	`, userId, targetId,
 		updatedField, updatedField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, targetId)
+		otherField, otherField, nowTime, nowTime, userId, targetId)
 	row = db.QueryRow(vote)
 	pref, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for user") {

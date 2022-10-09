@@ -111,8 +111,8 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	}
 
 	insertCommentForUser := fmt.Sprintf(`
-	INSERT INTO User%dCont(postId, commentId) 
-	VALUES(%d, %d) 
+	INSERT INTO UserCont(userId, postId, commentId) 
+	VALUES(%d, %d, %d) 
 	RETURNING %s`, userId, postId, comment.ID, SQLFieldsForUserCont())
 	row = db.QueryRow(insertCommentForUser)
 	userCont, e := ScanUserCont(row)
@@ -132,8 +132,8 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 		return
 	}
 
-	deletePostFromUser := fmt.Sprintf(`DELETE FROM User%dCont WHERE postId=$1 AND commentId=$2`, userId)
-	_, e = db.Exec(deletePostFromUser, postId, commentId)
+	deletePostFromUser := `DELETE FROM UserCont WHERE userId=$1 AND postId=$2 AND commentId=$3`
+	_, e = db.Exec(deletePostFromUser, userId, postId, commentId)
 	DidFail(e, "delete comment ", commentId, " for post ", postId, " for user ", userId)
 }
 
@@ -191,17 +191,17 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 
 	user, uPref := DBVoteForUser(db, userId, comment.UserID, upvoteAmount*sign(isUpvote), location)
 	createPref := fmt.Sprintf(`
-	INSERT INTO User%dPref (kind, pid, sid) 
-	VALUES(2, %d, %d) ON CONFLICT (kind, pid, sid) DO NOTHING;
-	UPDATE User%dPref SET 
+	INSERT INTO UserPref (uid, kind, pid, sid) 
+	VALUES(%d, 2, %d, %d) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
+	UPDATE UserPref SET 
 	%s = cooldown(%s, updatedAt, '%s', 31536000) + %d,
 	%s = cooldown(%s, updatedAt, '%s', 31536000),
 	updatedAt = '%s'
-	WHERE kind=2 AND pid=%d AND sid=%d
+	WHERE kind=2 AND uid=%d AND pid=%d AND sid=%d
 	RETURNING %s
-	`, userId, postId, commentId, userId,
+	`, userId, postId, commentId,
 		updateField, updateField, nowTime, upvoteAmount,
-		otherField, otherField, nowTime, nowTime, postId, commentId, SQLFieldsForUserPref())
+		otherField, otherField, nowTime, nowTime, userId, postId, commentId, SQLFieldsForUserPref())
 	row = db.QueryRow(createPref)
 	cPref, e := ScanUserPrefRow(row)
 	if DidFail(e, "vote for post ", postId) {
