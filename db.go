@@ -61,18 +61,20 @@ func DBUsersSetup(db *sql.DB) {
 
 	createUsersTable := func(mod int, rem int) {
 		makePrefInstance := fmt.Sprintf(`
-		CREATE TABLE UserPref%d 
+		CREATE TABLE IF NOT EXISTS UserPref%d 
 		PARTITION OF UserPref
-		FOR VALUES WITH (modulus %d, remainder %d)
-		`, rem, mod, rem)
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS UserPref%d_index ON UserPref%d (uid, kind, pid, sid)
+		`, rem, mod, rem, rem, rem)
 		_, e := db.Exec(makePrefInstance)
 		DidFail(e, "create user pref instance")
 
 		makeContInstance := fmt.Sprintf(`
-		CREATE TABLE UserCont%d 
+		CREATE TABLE IF NOT EXISTS UserCont%d 
 		PARTITION OF UserCont
-		FOR VALUES WITH (modulus %d, remainder %d)
-		`, rem, mod, rem)
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS UserCont%d_index ON UserCont%d (userId, postId, commentId)
+		`, rem, mod, rem, rem, rem)
 		_, e = db.Exec(makeContInstance)
 		DidFail(e, "create user cont instance")
 	}
@@ -102,9 +104,10 @@ func DBPostsSetup(db *sql.DB) {
 
 	createPostsTable := func(year int) {
 		makeInstance := fmt.Sprintf(`
-		CREATE TABLE posts%d PARTITION OF posts
+		CREATE TABLE IF NOT EXISTS posts%d 
+		PARTITION OF posts
 		FOR VALUES FROM (TIMESTAMP '%d-01-01' at time zone ('utc')) TO (TIMESTAMP '%d-01-01' at time zone ('utc'));
-		CREATE INDEX posts%d_createdAt ON posts%d (id, createdAt);
+		CREATE INDEX IF NOT EXISTS posts%d_index ON posts%d (id, createdAt);
 		`, year, year, year+1, year, year)
 		_, e := db.Exec(makeInstance)
 		DidFail(e, "create posts instance")
@@ -133,8 +136,9 @@ func DBCommentsSetup(db *sql.DB) {
 		makeInstance := fmt.Sprintf(`
 		CREATE TABLE Comments%d 
 		PARTITION OF Comments
-		FOR VALUES WITH (modulus %d, remainder %d)
-		`, rem, mod, rem)
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS Comments%d_index ON Comments%d (id, postId)
+		`, rem, mod, rem, rem, rem)
 		_, e := db.Exec(makeInstance)
 		DidFail(e, "create posts instance")
 	}
@@ -152,7 +156,7 @@ func DBVotesSetup(db *sql.DB) {
 		location TEXT[],
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
+		updatedAt DATE DEFAULT (now() at time zone ('utc')),
 
 		PRIMARY KEY (kind, pid, sid, location)
 	) PARTITION BY LIST(kind);`
@@ -160,10 +164,11 @@ func DBVotesSetup(db *sql.DB) {
 	DidFail(e, "create votes table")
 	createVotesTable := func(kind int) {
 		makeInstance := fmt.Sprintf(`
-		CREATE TABLE Votes%d
+		CREATE TABLE IF NOT EXISTS Votes%d
 		PARTITION OF Votes
-		FOR VALUES IN (%d)
-		`, kind, kind)
+		FOR VALUES IN (%d);
+		CREATE INDEX IF NOT EXISTS Votes%d_index ON Votes%d (kind, pid, sid, location)
+		`, kind, kind, kind, kind)
 		_, e = db.Exec(makeInstance)
 		DidFail(e, "create votes table instance")
 	}
@@ -223,6 +228,15 @@ func DBFunctionSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createScoredRatio)
 	DidFail(e, "create scored ratio function")
+
+	createDepreciationOverTime := `
+	CREATE OR REPLACE FUNCTION depreciateValue(n DOUBLE PRECISION, beginDate TIMESTAMP, endDate TIMESTAMP) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN 0.99 ^ (n * 229.105288 / EXTRACT(DAYS FROM (endDate - beginDate)));
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createDepreciationOverTime)
+	DidFail(e, "create deprecation over time function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {
