@@ -146,25 +146,18 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		updateField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	locArray := SQLFormattedArray(location)
-	updateVoteForPost := fmt.Sprintf(`
-	INSERT INTO votes(kind, pid, sid, location{date}) VALUES(3, %d, -1, %s{date_value})
-	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
-	UPDATE votes SET
-	%s = %s + %d
-	WHERE kind=3 AND pid=%d AND location=%s AND updatedAt={date_value_res};
 
+	voteQuery := SQLMakeVote(upPost, postId, -1, location, upvoteAmount*sign(isUpvote), date)
+	updateVoteForPost := fmt.Sprintf(`
+	%s
 	UPDATE posts SET
 	%s = %s + %d
 	WHERE id = %d
 	RETURNING %s
-	`, postId, locArray,
-		updateField, updateField, upvoteAmount,
-		postId, locArray,
+	`, voteQuery,
 		updateField, updateField, upvoteAmount,
 		postId, SQLFieldsForPost())
 
-	updateVoteForPost = ReplaceDateValues(updateVoteForPost, date)
 	row := db.QueryRow(updateVoteForPost)
 	post, e := ScanPost(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -173,22 +166,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 
 	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location, date)
 	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location, date)
-	createPref := fmt.Sprintf(`
-	INSERT INTO UserPref (uid, kind, pid, sid) 
-	VALUES(%d, 3, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
-
-	UPDATE UserPref SET 
-	%s = %s + %d
-	WHERE kind=3 AND uid=%d AND pid=%d
-	RETURNING %s
-	`, userId, postId,
-		updateField, updateField, upvoteAmount,
-		userId, postId, SQLFieldsForUserPref())
-	row = db.QueryRow(createPref)
-	userPrefForPost, e := ScanUserPrefRow(row)
-	if DidFail(e, "vote for post ", postId) {
-		return Post{}, UserProfile{}, []Tag{}, []UserPref{}
-	}
+	userPrefForPost := DBCreateUserPref(db, userId, upPost, postId, -1, upvoteAmount*sign(isUpvote))
 
 	prefs := []UserPref{userPref, userPrefForPost}
 	prefs = append(prefs, tagPrefs...)

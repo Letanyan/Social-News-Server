@@ -43,6 +43,38 @@ type UserPrefTag struct {
 	Downvotes float64
 }
 
+func DBCreateUserPref(db *sql.DB, uid int64, kind UserPrefKind, pid int64, sid int64, upvoteAmount int64) UserPref {
+	var updateField string
+	isUpvote := upvoteAmount > 0
+	if isUpvote {
+		updateField = "upvotes"
+	} else {
+		updateField = "downvotes"
+		upvoteAmount = -upvoteAmount
+	}
+
+	query := fmt.Sprintf(`
+	INSERT INTO UserPref(uid, kind, pid, sid)
+	VALUES(%d, %d, %d, %d)
+	ON CONFLICT(uid, kind, pid, sid)
+	DO NOTHING;
+	UPDATE UserPref SET
+	%s = %s + %d
+	WHERE kind=%d AND uid=%d AND pid=%d AND sid=%d
+	RETURNING %s
+	`, uid, kind, pid, sid,
+		updateField, updateField, upvoteAmount,
+		kind, uid, pid, sid, SQLFieldsForUserPref())
+
+	row := db.QueryRow(query)
+	pref, e := ScanUserPrefRow(row)
+	if DidFail(e, "create user pref") {
+		return UserPref{}
+	}
+
+	return pref
+}
+
 func SQLFieldsForUserPref() string {
 	return "kind, pid, sid, upvotes, downvotes"
 }

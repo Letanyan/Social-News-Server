@@ -66,9 +66,6 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	if len(tags) <= 0 {
 		return []Tag{}, []UserPref{}
 	}
-	// tagRows := SQLFormattedRows(tags, func(s string) string {
-	// 	return ""
-	// })
 	tagArray := SQLFormattedIndexArray(tags)
 	updatedField := ""
 	locArray := SQLFormattedArray(location)
@@ -79,8 +76,6 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 		updatedField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	// INSERT INTO tags (name)
-	// VALUES %s ON CONFLICT (name) DO NOTHING;
 	upsertTags := fmt.Sprintf(`
 	UPDATE tags SET 
 	%s = %s + %d

@@ -154,25 +154,17 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 		updateField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	locArray := SQLFormattedArray(location)
+	voteQuery := SQLMakeVote(upComment, postId, commentId, location, upvoteAmount*sign(isUpvote), date)
 	updateVoteForPost := fmt.Sprintf(`
-		INSERT INTO votes(kind, pid, sid, location{date}) VALUES(2, %d, %d, %s{date_value})
-		ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
-		UPDATE votes SET
-		%s = %s + %d
-		WHERE kind=2 AND pid=%d AND sid=%d AND location=%s AND updatedAt={date_value_res};
-
+		%s
 		UPDATE Comments SET 
 		%s = %s + %d
 		WHERE id = %d
 		RETURNING %s
-		`, postId, commentId, locArray,
-		updateField, updateField, upvoteAmount,
-		postId, commentId, locArray,
+		`, voteQuery,
 		updateField, updateField, upvoteAmount,
 		commentId, SQLFieldsForComment())
 
-	updateVoteForPost = ReplaceDateValues(updateVoteForPost, date)
 	row := db.QueryRow(updateVoteForPost)
 	comment, e := ScanComment(row)
 	if DidFail(e, "vote for post ", postId) {
@@ -180,21 +172,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	}
 
 	user, uPref := DBVoteForUser(db, userId, comment.UserID, upvoteAmount*sign(isUpvote), location, date)
-	createPref := fmt.Sprintf(`
-	INSERT INTO UserPref (uid, kind, pid, sid) 
-	VALUES(%d, 2, %d, %d) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
-	UPDATE UserPref SET 
-	%s = %s + %d
-	WHERE kind=2 AND uid=%d AND pid=%d AND sid=%d
-	RETURNING %s
-	`, userId, postId, commentId,
-		updateField, updateField, upvoteAmount,
-		userId, postId, commentId, SQLFieldsForUserPref())
-	row = db.QueryRow(createPref)
-	cPref, e := ScanUserPrefRow(row)
-	if DidFail(e, "vote for post ", postId) {
-		return comment, user, []UserPref{uPref}
-	}
+	cPref := DBCreateUserPref(db, userId, upComment, postId, commentId, upvoteAmount*sign(isUpvote))
 
 	return comment, user, []UserPref{uPref, cPref}
 }

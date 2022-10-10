@@ -226,22 +226,15 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		updatedField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	locArray := SQLFormattedArray(location)
+	voteQuery := SQLMakeVote(upUser, targetId, -1, location, upvoteAmount*sign(isUpvote), date)
 	updateUser := fmt.Sprintf(`
-	INSERT INTO votes(kind, pid, sid, location{date}) VALUES(1, %d, -1, %s{date_value})
-	ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
-	UPDATE votes SET
-	%s = %s + %d
-	WHERE kind=1 AND pid=%d AND location=%s AND updatedAt={date_value_res};
-	
+	%s
 	UPDATE users u SET 
 	%s = %s + %d,
 	credits = credits + 0.75 * %d
 	WHERE id = %d
 	RETURNING %s`,
-		targetId, locArray,
-		updatedField, updatedField, upvoteAmount,
-		targetId, locArray,
+		voteQuery,
 		updatedField, updatedField, upvoteAmount,
 		upvoteAmount, targetId, SQLFieldsForUserProfile())
 
@@ -252,20 +245,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		return UserProfile{}, UserPref{}
 	}
 
-	vote := fmt.Sprintf(`INSERT INTO UserPref (uid, kind, pid, sid)
-	VALUES (%d, 1, %d, -1) ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
-	UPDATE UserPref SET
-	%s = %s + %d
-	WHERE kind=1 AND uid = %d AND pid = %d
-	RETURNING kind, pid, sid, upvotes, downvotes
-	`, userId, targetId,
-		updatedField, updatedField, upvoteAmount,
-		userId, targetId)
-	row = db.QueryRow(vote)
-	pref, e := ScanUserPrefRow(row)
-	if DidFail(e, "vote for user") {
-		return UserProfile{}, UserPref{}
-	}
+	pref := DBCreateUserPref(db, userId, upUser, targetId, -1, upvoteAmount*sign(isUpvote))
 
 	return user, pref
 }
