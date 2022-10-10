@@ -14347,3 +14347,268 @@ LIMIT 50 OFFSET 0
 [INFO]: 2022/10/10 14:59:51 dbuser.go:244:update user score5
 [INFO]: 2022/10/10 14:59:51 dbuserdata.go:71:create user pref
 [INFO]: 2022/10/10 14:59:51 dbuserdata.go:71:create user pref
+[INFO]: 2022/10/10 15:00:50 db.go:33:create users table
+[INFO]: 2022/10/10 15:00:50 db.go:43:create user content table
+[INFO]: 2022/10/10 15:00:50 db.go:57:create user preference table
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:00:50 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:00:50 db.go:99:create posts table
+[INFO]: 2022/10/10 15:00:50 db.go:109:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:109:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:129:create comments table
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:00:50 db.go:160:create votes table
+[INFO]: 2022/10/10 15:00:50 db.go:177:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:177:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:00:50 db.go:207:create tags table
+[INFO]: 2022/10/10 15:00:50 db.go:218:create dateFrac function
+[INFO]: 2022/10/10 15:00:50 db.go:227:create dateFrac function
+[INFO]: 2022/10/10 15:00:50 db.go:236:create ratio function
+[INFO]: 2022/10/10 15:00:50 db.go:245:create scored ratio function
+[INFO]: 2022/10/10 15:00:50 db.go:254:create deprecation over time function
+[INFO]: 2022/10/10 15:03:16 api.go:777:get input for vote post
+[INFO]: 2022/10/10 15:04:35 db.go:33:create users table
+[INFO]: 2022/10/10 15:04:35 db.go:43:create user content table
+[INFO]: 2022/10/10 15:04:35 db.go:57:create user preference table
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:04:35 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:04:35 db.go:99:create posts table
+[INFO]: 2022/10/10 15:04:35 db.go:109:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:109:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:129:create comments table
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:04:35 db.go:160:create votes table
+[INFO]: 2022/10/10 15:04:35 db.go:177:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:177:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:04:35 db.go:207:create tags table
+[INFO]: 2022/10/10 15:04:35 db.go:218:create dateFrac function
+[INFO]: 2022/10/10 15:04:35 db.go:227:create dateFrac function
+[INFO]: 2022/10/10 15:04:35 db.go:236:create ratio function
+[INFO]: 2022/10/10 15:04:35 db.go:245:create scored ratio function
+[INFO]: 2022/10/10 15:04:35 db.go:254:create deprecation over time function
+[INFO]: 2022/10/10 15:04:37 api.go:777:get input for vote post
+[INFO]: 2022/10/10 15:06:46 db.go:33:create users table
+[INFO]: 2022/10/10 15:06:46 db.go:43:create user content table
+[INFO]: 2022/10/10 15:06:46 db.go:57:create user preference table
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:67:create user pref instance
+[INFO]: 2022/10/10 15:06:46 db.go:76:create user cont instance
+[INFO]: 2022/10/10 15:06:46 db.go:99:create posts table
+[INFO]: 2022/10/10 15:06:46 db.go:109:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:109:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:129:create comments table
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:138:create posts instance
+[INFO]: 2022/10/10 15:06:46 db.go:160:create votes table
+[INFO]: 2022/10/10 15:06:46 db.go:177:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:177:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:188:create votes table instance
+[INFO]: 2022/10/10 15:06:46 db.go:207:create tags table
+[INFO]: 2022/10/10 15:06:46 db.go:218:create dateFrac function
+[INFO]: 2022/10/10 15:06:46 db.go:227:create dateFrac function
+[INFO]: 2022/10/10 15:06:46 db.go:236:create ratio function
+[INFO]: 2022/10/10 15:06:46 db.go:245:create scored ratio function
+[INFO]: 2022/10/10 15:06:46 db.go:254:create deprecation over time function
+[INFO]: 2022/10/10 15:06:48 api.go:777:get input for vote post
+[INFO]: 2022/10/10 15:06:48 dbuserdata.go:96:create user pref
+	INSERT INTO UserPref(uid, kind, pid, sid)
+	VALUES (2, 4, 12, -1),(2, 4, 13, -1),(2, 4, 16, -1),(2, 4, 17, -1)
+	ON CONFLICT(uid, kind, pid, sid)
+	DO NOTHING;
+	UPDATE UserPref SET
+	upvotes = upvotes * 1.500000
+	WHERE kind=4 AND uid=2 AND pid=ANY('{"12","13","16","17"}')
+	RETURNING kind, pid, sid, upvotes, downvotes
+	

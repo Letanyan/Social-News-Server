@@ -75,9 +75,9 @@ func DBCreateUserPref(db *sql.DB, uid int64, kind UserPrefKind, pid int64, sid i
 	return pref
 }
 
-func DBWatchUser(db *sql.DB, uid int64, tags []int64, viewTime float64) UserPref {
+func DBWatchUser(db *sql.DB, uid int64, tags []int64, viewTime float64) []UserPref {
 	tagArray := SQLFormattedIndexArray(tags)
-	tagItems := SQLFormattedIndexRows(tags, func(i int64) string {
+	tagItems := SQLFormattedIndexList(tags, func(i int64) string {
 		return fmt.Sprintf("(%d, 4, %d, -1)", uid, i)
 	})
 	query := fmt.Sprintf(`
@@ -91,13 +91,13 @@ func DBWatchUser(db *sql.DB, uid int64, tags []int64, viewTime float64) UserPref
 	RETURNING %s
 	`, tagItems, viewTime, uid, tagArray, SQLFieldsForUserPref())
 
-	row := db.QueryRow(query)
-	pref, e := ScanUserPrefRow(row)
-	if DidFail(e, "create user pref") {
-		return UserPref{}
+	rows, e := db.Query(query)
+	if DidFail(e, "create user pref", query) {
+		return []UserPref{}
 	}
+	result := ScanUserPrefRows(rows)
 
-	return pref
+	return result
 }
 
 func SQLFieldsForUserPref() string {
