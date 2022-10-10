@@ -75,6 +75,31 @@ func DBCreateUserPref(db *sql.DB, uid int64, kind UserPrefKind, pid int64, sid i
 	return pref
 }
 
+func DBWatchUser(db *sql.DB, uid int64, tags []int64, viewTime float64) UserPref {
+	tagArray := SQLFormattedIndexArray(tags)
+	tagItems := SQLFormattedIndexRows(tags, func(i int64) string {
+		return fmt.Sprintf("(%d, 4, %d, -1)", uid, i)
+	})
+	query := fmt.Sprintf(`
+	INSERT INTO UserPref(uid, kind, pid, sid)
+	VALUES %s
+	ON CONFLICT(uid, kind, pid, sid)
+	DO NOTHING;
+	UPDATE UserPref SET
+	upvotes = upvotes * %f
+	WHERE kind=4 AND uid=%d AND pid=ANY(%s)
+	RETURNING %s
+	`, tagItems, viewTime, uid, tagArray, SQLFieldsForUserPref())
+
+	row := db.QueryRow(query)
+	pref, e := ScanUserPrefRow(row)
+	if DidFail(e, "create user pref") {
+		return UserPref{}
+	}
+
+	return pref
+}
+
 func SQLFieldsForUserPref() string {
 	return "kind, pid, sid, upvotes, downvotes"
 }

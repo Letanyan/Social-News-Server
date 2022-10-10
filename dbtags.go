@@ -110,7 +110,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	%s = %s + %d
 	WHERE kind=4 AND pid=ANY(%s) AND location=%s AND updatedAt={date_value_res};
 
-	INSERT INTO UserPref (uid, pid, sid, kind)
+	INSERT INTO UserPref (uid, kind, pid, sid)
 	VALUES %s ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
 	UPDATE UserPref SET 
 	%s = %s + %d

@@ -59,6 +59,8 @@ func main() {
 		v1.POST("/users/:uid", APIVoteUser)
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
+
+		v1.POST("/watch/users/:uid", APIWatchUser)
 	}
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)

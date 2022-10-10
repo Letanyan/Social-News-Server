@@ -762,3 +762,24 @@ func APIPurchaseCredit(c *gin.Context) {
 		APIFailed(c, errors.New(""), "could not complete top up")
 	}
 }
+
+func APIWatchUser(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	type Input struct {
+		Tags []int64 `json:"tags"`
+		Time float64 `json:"time"`
+	}
+	var input Input
+	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+		APIFailed(c, e, "invalid input values")
+		return
+	}
+
+	pref := DBWatchUser(mainDB, uid, input.Tags, input.Time)
+
+	APIReturn(c, true, pref)
+}
