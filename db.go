@@ -22,7 +22,6 @@ func DBUsersSetup(db *sql.DB) {
 		email TEXT NOT NULL,
 		password TEXT NOT NULL,
 		registerDate TIMESTAMP DEFAULT (now() at time zone ('utc')),
-		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		credits INTEGER DEFAULT 25,
@@ -51,7 +50,6 @@ func DBUsersSetup(db *sql.DB) {
 		sid BIGINT NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
 
 		PRIMARY KEY (uid, kind, pid, sid)
 	) PARTITION BY HASH(uid);`
@@ -91,7 +89,6 @@ func DBPostsSetup(db *sql.DB) {
 		content TEXT,
 		tags TEXT[],
 		createdAt TIMESTAMP,
-		updatedAt TIMESTAMP,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		location TEXT[],
@@ -123,7 +120,6 @@ func DBCommentsSetup(db *sql.DB) {
 		replyId BIGINT,
 		content TEXT,
 		createdAt TIMESTAMP,
-		updatedAt TIMESTAMP,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 
@@ -204,7 +200,6 @@ func DBTagsSetup(db *sql.DB) {
 		name TEXT NOT NULL,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
 
 		PRIMARY KEY (name)
 	);`

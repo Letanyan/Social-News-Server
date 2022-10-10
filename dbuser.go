@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/smtp"
-	"strings"
 	"time"
 )
 
@@ -16,7 +15,6 @@ type User struct {
 	Email         string
 	Password      string
 	RegisterDate  time.Time
-	UpdatedAt     time.Time
 	Upvotes       float64
 	Downvotes     float64
 	Credits       int32
@@ -32,7 +30,7 @@ type UserProfile struct {
 }
 
 func SQLFieldsForUser() string {
-	return "id, name, email, password, registerDate, updatedAt, upvotes, downvotes, credits, validationKey"
+	return "id, name, email, password, registerDate, upvotes, downvotes, credits, validationKey"
 }
 
 func SQLFieldsForUserProfile() string {
@@ -45,7 +43,7 @@ func SQLFieldsForUserProfileAlias() string {
 
 func ScanUser(row *sql.Row) (User, error) {
 	u := User{}
-	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.UpdatedAt, &u.Upvotes, &u.Downvotes, &u.Credits, &u.ValidationKey)
+	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Credits, &u.ValidationKey)
 	return u, e
 }
 
@@ -185,81 +183,19 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 	if len(popularIn) > 0 {
 		voteTable = "v"
 	}
-	getUsers := fmt.Sprintf(`
-	SELECT %s{agg}, RATIO(u.upvotes, u.downvotes) AS cred, u.upvotes * RATIO(u.upvotes, u.downvotes) AS score  
-	FROM users u
-	`, SQLFieldsForUserProfileAlias())
-
-	upClause := ""
-	if upvotes > 0 {
-		upClause = fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes)
-	} else if upvotes < 0 {
-		upClause = fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes)
-	}
-	downClause := ""
-	if downvotes > 0 {
-		downClause = fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes)
-	} else if downvotes < 0 {
-		downClause = fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes)
-	}
-	voteCondition := ""
-	if len(upClause) > 0 && len(downClause) > 0 {
-		voteCondition = upClause + " AND " + downClause
-	} else if len(upClause) > 0 {
-		voteCondition = upClause
-	} else if len(downClause) > 0 {
-		voteCondition = downClause
-	}
-
-	if len(popularIn) > 0 {
-		queryLoc := SQLFormattedArray(popularIn)
-		locCond := fmt.Sprintf("v.kind=1 AND v.location @> %s\n", queryLoc)
-		if len(voteCondition) > 0 {
-			voteCondition += " AND " + locCond
-		} else {
-			voteCondition += " " + locCond
-		}
-	}
-	updatedCond := ""
-	if len(startDate) > 0 && len(endDate) > 0 {
-		updatedCond = fmt.Sprintf(" v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", startDate, endDate)
-	} else if len(startDate) > 0 {
-		updatedCond = fmt.Sprintf(" TIMESTAMP '%s' <= v.updatedAt", startDate)
-	} else if len(endDate) > 0 {
-		updatedCond = fmt.Sprintf(" TIMESTAMP '%s' > v.updatedAt", endDate)
-	}
-	if len(updatedCond) > 0 {
-		if len(voteCondition) > 0 {
-			voteCondition += " AND" + updatedCond
-		} else {
-			voteCondition += updatedCond
-		}
-	}
+	joins := ""
+	cond := []string{}
 
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 
 	if usingVotesTable {
-		getUsers += "JOIN Votes v ON v.pid = u.id\n"
+		joins = "JOIN Votes v ON v.pid = u.id\n"
+		cond = append(cond, "kind=1")
 	}
 
-	if len(voteCondition) > 0 {
-		getUsers += "WHERE " + voteCondition + "\n"
-	}
-
-	if usingVotesTable {
-		if len(voteCondition) > 0 {
-			getUsers += " AND kind=1 "
-		} else {
-			getUsers += " WHERE kind=1 "
-		}
-		getUsers += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForUserProfile())
-		getUsers = strings.ReplaceAll(getUsers, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
-	} else {
-		getUsers = strings.ReplaceAll(getUsers, "{agg}", "")
-	}
-
-	getUsers += SQLSortOrder(sortOrder)
-	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+	getUsers := SQLGetItems("users u", voteTable, SQLFieldsForUserProfileAlias(),
+		SQLFieldsForUserProfile(), joins, popularIn, cond, usingVotesTable,
+		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate)
 
 	rows, e := db.Query(getUsers)
 	if DidFail(e, "get users", getUsers) {

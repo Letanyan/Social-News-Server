@@ -52,11 +52,11 @@ func SQLFieldsForUserPrefUser() string {
 }
 
 func SQLFieldsForUserPrefPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.sid, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.sid, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefTag() string {
-	return "t.id, t.name, t.updatedAt, t.upvotes AS item_up, t.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "t.id, t.name, t.upvotes AS item_up, t.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func ScanUserPrefRow(row *sql.Row) (UserPref, error) {
@@ -111,7 +111,7 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 		var up float64
 		var down float64
 		var userId int64
-		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt,
+		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt,
 			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &u.ID, &u.Name, &u.RegisterDate,
 			&u.Upvotes, &u.Upvotes, &commentId, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
@@ -132,7 +132,7 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 		tag := Tag{}
 		var up float64
 		var down float64
-		e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt,
+		e = rows.Scan(&tag.ID, &tag.Name,
 			&tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref tag") {
 			continue
@@ -351,7 +351,7 @@ func SQLFieldsForUserCont() string {
 }
 
 func SQLFieldsForUserContResult() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes," +
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes," +
 		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.commentId"
 }
 
@@ -366,7 +366,7 @@ func ScanUserContResult(row *sql.Row) (UserContResult, error) {
 	u := UserProfile{}
 	var userId int64
 	var commentId int64
-	e := row.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+	e := row.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
 		&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &commentId)
 	p.Author = u
 	return UserContResult{p, commentId}, e
@@ -396,7 +396,7 @@ func ScanUserContResults(rows *sql.Rows) []UserContResult {
 		var commentId int64
 		var score float64
 		var cred float64
-		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
 			&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &commentId, &cred, &score)
 		p.Author = u
 		if DidFail(e, "scan user pref") {

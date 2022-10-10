@@ -3,24 +3,21 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"strings"
-	"time"
 )
 
 type Tag struct {
 	ID        int64
 	Name      string
-	UpdatedAt time.Time
 	Upvotes   float64
 	Downvotes float64
 }
 
 func SQLFieldsForTag() string {
-	return "id, name, updatedAt, upvotes, downvotes"
+	return "id, name, upvotes, downvotes"
 }
 
 func SQLFieldsForTagAlias() string {
-	return "id, name, updatedAt, upvotes AS item_up, downvotes AS item_down"
+	return "id, name, upvotes AS item_up, downvotes AS item_down"
 }
 
 func ScanTags(rows *sql.Rows, includeScore bool) []Tag {
@@ -31,9 +28,9 @@ func ScanTags(rows *sql.Rows, includeScore bool) []Tag {
 		var score float64
 		tag := Tag{}
 		if includeScore {
-			e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt, &tag.Upvotes, &tag.Downvotes, &cred, &score)
+			e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score)
 		} else {
-			e = rows.Scan(&tag.ID, &tag.Name, &tag.UpdatedAt, &tag.Upvotes, &tag.Downvotes)
+			e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes)
 		}
 		if DidFail(e, "read row") {
 			continue
@@ -145,58 +142,33 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	return tagResult, tagPrefs
 }
 
-func DBGetTags(db *sql.DB, id int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []Tag {
+func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []Tag {
 	voteTable := "v"
-	if len(location) > 0 {
+	if len(popularIn) > 0 {
 		voteTable = "t"
 	}
-	getTags := fmt.Sprintf(`
-	SELECT %s{agg}, RATIO(t.upvotes, t.downvotes) AS cred, t.upvotes * RATIO(t.upvotes, t.downvotes) AS score 
-	FROM tags t
-	`, SQLFieldsForTagAlias())
 
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	cond := []string{}
+	joins := ""
 	if id != 0 {
-		getTags += fmt.Sprintf("WHERE t.id = %d\n", id)
+		cond = append(cond, fmt.Sprintf("t.id = %d\n", id))
 	} else {
-		cond := []string{}
 		if len(tags) > 0 {
 			tagArray := SQLFormattedArray(tags)
 			cond = append(cond, fmt.Sprintf("ARRAY[t.name] <@ %s", tagArray))
 		}
-		if len(location) > 0 {
-			locArray := SQLFormattedArray(location)
-			cond = append(cond, fmt.Sprintf("v.kind=4 AND v.location @> %s", locArray))
-		}
-		if upvotes > 0 {
-			cond = append(cond, fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes))
-		} else if upvotes < 0 {
-			cond = append(cond, fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes))
-		}
-		if downvotes > 0 {
-			cond = append(cond, fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes))
-		} else if downvotes < 0 {
-			cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
-		}
 
-		usingVotesTable := len(location) > 0 || len(startDate) > 0 || len(endDate) > 0
 		if usingVotesTable {
-			getTags += "JOIN votes v ON v.pid = t.id\n"
+			joins += "JOIN votes v ON v.pid = t.id\n"
 			cond = append(cond, "kind=4")
 		}
-
-		if len(cond) > 0 {
-			getTags += "WHERE " + JoinStrings(cond, " AND ") + "\n"
-		}
-
-		if usingVotesTable {
-			getTags += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForUserProfile())
-			getTags = strings.ReplaceAll(getTags, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
-		} else {
-			getTags = strings.ReplaceAll(getTags, "{agg}", "")
-		}
-		getTags += SQLSortOrder(sortOrder)
-		getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 	}
+
+	getTags := SQLGetItems("tags t", voteTable, SQLFieldsForTagAlias(),
+		SQLFieldsForTag(), joins, popularIn, cond, usingVotesTable,
+		upvotes, downvotes,
+		sortOrder, limit, offset, startDate, endDate)
 
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags") {

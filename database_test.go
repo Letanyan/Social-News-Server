@@ -154,9 +154,6 @@ func TestDatabase(t *testing.T) {
 		if a.CreatedAt != b.CreatedAt {
 			t.Errorf("Mismatch createdAt %v != %v", a.CreatedAt, b.CreatedAt)
 		}
-		if a.UpdatedAt != b.UpdatedAt {
-			t.Errorf("Mismatch updatedAt %v != %v", a.UpdatedAt, b.UpdatedAt)
-		}
 		if a.Upvotes != b.Upvotes {
 			t.Errorf("Mismatch upvotes %f != %f", a.Upvotes, b.Upvotes)
 		}

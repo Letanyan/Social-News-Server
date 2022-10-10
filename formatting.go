@@ -112,7 +112,7 @@ func ReplaceDateValues(query string, date string) string {
 func JoinStrings(list []string, joiner string) string {
 	result := ""
 	for i, s := range list {
-		result += fmt.Sprintf("%s", s)
+		result += s
 		if i < len(list)-1 {
 			result += joiner
 		}

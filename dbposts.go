@@ -16,7 +16,6 @@ type Post struct {
 	Content   string
 	Tags      []int64
 	CreatedAt time.Time
-	UpdatedAt time.Time
 	Location  []string
 	Upvotes   float64
 	Downvotes float64
@@ -28,27 +27,26 @@ type PostResult struct {
 	Content   string
 	Tags      []int64
 	CreatedAt time.Time
-	UpdatedAt time.Time
 	Location  []string
 	Upvotes   float64
 	Downvotes float64
 }
 
 func SQLFieldsForPost() string {
-	return "id, userId, content, tags, createdAt, updatedAt, location, upvotes, downvotes"
+	return "id, userId, content, tags, createdAt, location, upvotes, downvotes"
 }
 
 func SQLFieldsForPostResult() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
 func SQLFieldsForPostResultAlias() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.updatedAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
 func ScanPost(row *sql.Row) (Post, error) {
 	p := Post{}
-	e := row.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes)
+	e := row.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes)
 	return p, e
 }
 
@@ -56,7 +54,7 @@ func ScanPostResult(row *sql.Row) (PostResult, error) {
 	p := PostResult{}
 	u := UserProfile{}
 	var userID int64
-	e := row.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+	e := row.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
 		&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes)
 	p.Author = u
 	return p, e
@@ -70,7 +68,7 @@ func ScanPosts(rows *sql.Rows) []Post {
 		p := Post{}
 		var score float64
 		var cred float64
-		e = rows.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &cred, &score)
+		e = rows.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &cred, &score)
 		if DidFail(e, "scan post") {
 			continue
 		}
@@ -93,10 +91,10 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
 		var up float64
 		var down float64
 		if hasVotes {
-			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
 				&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
 		} else {
-			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, &p.UpdatedAt, pq.Array(&p.Location), &p.Upvotes,
+			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
 				&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score)
 		}
 		if DidFail(e, "scan post") {
@@ -121,8 +119,8 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 
 	// year := t.Year()
 	insertPost := fmt.Sprintf(`
-	INSERT INTO posts(userId, content, tags, createdAt, updatedAt, location) 
-	VALUES ($1, $2, %s, '%s', '%s', %s) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, nowTime, SQLFormattedArray(location), SQLFieldsForPost())
+	INSERT INTO posts(userId, content, tags, createdAt, location) 
+	VALUES ($1, $2, %s, '%s', %s) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, SQLFormattedArray(location), SQLFieldsForPost())
 	row := db.QueryRow(insertPost, userId, content)
 
 	post, e := ScanPost(row)
@@ -283,11 +281,8 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	if len(popularIn) > 0 {
 		voteTable = "v"
 	}
-	getPosts := fmt.Sprintf(`SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
-	FROM posts p 
-	JOIN users u ON p.userId = u.id
-	`, SQLFieldsForPostResultAlias())
 
+	joins := "JOIN users u ON p.userId = u.id\n"
 	cond := []string{}
 	if len(start) > 0 && len(end) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", start, end))
@@ -307,49 +302,17 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 		queryLoc := SQLFormattedArray(origin)
 		cond = append(cond, fmt.Sprintf("p.location @> %s", queryLoc))
 	}
-	if upvotes > 0 {
-		cond = append(cond, fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes))
-	} else if upvotes < 0 {
-		cond = append(cond, fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes))
-	}
-	if downvotes > 0 {
-		cond = append(cond, fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes))
-	} else if downvotes < 0 {
-		cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
-	}
-
-	if len(startDate) > 0 && len(endDate) > 0 {
-		cond = append(cond, fmt.Sprintf("v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", startDate, endDate))
-	} else if len(startDate) > 0 {
-		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' <= v.updatedAt", startDate))
-	} else if len(endDate) > 0 {
-		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' > v.updatedAt", endDate))
-	}
-	if len(popularIn) > 0 {
-		queryLoc := SQLFormattedArray(popularIn)
-		cond = append(cond, fmt.Sprintf("v.kind=3 AND v.location @> %s\n", queryLoc))
-	}
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	if usingVotesTable {
-		getPosts += "JOIN Votes v ON v.pid = p.id\n"
+		joins += "JOIN Votes v ON v.pid = p.id\n"
 		cond = append(cond, "kind=3")
 	}
 
-	if len(cond) > 0 {
-		getPosts += "WHERE " + JoinStrings(cond, " AND ") + "\n"
-	}
+	getPosts := SQLGetItems("posts p", voteTable, SQLFieldsForPostResultAlias(),
+		SQLFieldsForPostResult(), joins, popularIn, cond, usingVotesTable,
+		upvotes, downvotes,
+		sortOrder, limit, offset, startDate, endDate)
 
-	if usingVotesTable {
-		getPosts += fmt.Sprintf("GROUP BY %s, cred, score\n", SQLFieldsForPostResult())
-		getPosts = strings.ReplaceAll(getPosts, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
-	} else {
-		getPosts = strings.ReplaceAll(getPosts, "{agg}", "")
-	}
-
-	getPosts += SQLSortOrder(sortOrder)
-	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
-
-	fmt.Println(getPosts)
 	rows, e := db.Query(getPosts)
 	result := []PostResult{}
 	if DidFail(e, "get posts\n", getPosts) {
