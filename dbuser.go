@@ -178,8 +178,10 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	return user
 }
 
-func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []User {
-	voteTable := "u"
+func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
+	sortOrder SortOrder, limit int64, offset int64,
+	startDate string, endDate string, forUser int64) []User {
+	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
 	}
@@ -189,13 +191,13 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64, 
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 
 	if usingVotesTable {
-		joins = "JOIN Votes v ON v.pid = u.id\n"
+		joins = "JOIN Votes v ON v.pid = p.id\n"
 		cond = append(cond, "kind=1")
 	}
 
-	getUsers := SQLGetItems("users u", voteTable, SQLFieldsForUserProfileAlias(),
+	getUsers := SQLGetItems("users p", voteTable, SQLFieldsForUserProfileAlias(),
 		SQLFieldsForUserProfile(), joins, popularIn, cond, usingVotesTable,
-		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate)
+		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate, forUser)
 
 	rows, e := db.Query(getUsers)
 	if DidFail(e, "get users", getUsers) {

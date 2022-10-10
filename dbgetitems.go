@@ -7,12 +7,34 @@ import (
 
 func SQLGetItems(table string, voteTable string, aliasFields string, returnedFields string, joins string,
 	popularIn []string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
-	sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) string {
-	result := fmt.Sprintf(`
-	SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score
+	sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string, forUser int64) string {
+
+	scoreField := "p.upvotes * RATIO(p.upvotes, p.downvotes)"
+	withTable := ""
+	if forUser > 0 {
+		withTable = fmt.Sprintf(`
+		WITH Total AS (
+			SELECT SUM(upvotes) up, SUM(downvotes) down
+			FROM UserPref
+			WHERE kind=4 AND uid=%d
+		), Scores AS (
+			SELECT pid, (upvotes - downvotes) / (total.up + total.down) AS value
+			FROM UserPref, Total
+			WHERE kind=4 AND uid=%d
+		)
+		`, forUser, forUser)
+
+		joins += "JOIN Scores s ON s.pid = ANY(p.tags)"
+		scoreField = "SUM(s.value)"
+	}
+
+	result := fmt.Sprintf(`%s
+	SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, {score} AS score
 	FROM %s
 	%s
-	`, aliasFields, table, joins)
+	`, withTable, aliasFields, table, joins)
+
+	result = strings.ReplaceAll(result, "{score}", scoreField)
 
 	if upvotes > 0 {
 		cond = append(cond, fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes))
@@ -42,6 +64,11 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 
 	if usingVotes {
 		result += fmt.Sprintf("GROUP BY %s, cred, score\n", returnedFields)
+	} else if forUser > 0 {
+		result += fmt.Sprintf("GROUP BY %s, cred\n", returnedFields)
+	}
+
+	if usingVotes {
 		result = strings.ReplaceAll(result, "{agg}", ", SUM(v.upvotes) AS sec_up, SUM(v.downvotes) AS sec_down")
 	} else {
 		result = strings.ReplaceAll(result, "{agg}", "")
@@ -49,6 +76,8 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 
 	result += SQLSortOrder(sortOrder)
 	result += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+
+	fmt.Println(result)
 
 	return result
 }

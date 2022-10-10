@@ -137,33 +137,35 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	return tagResult, tagPrefs
 }
 
-func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []Tag {
-	voteTable := "v"
+func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
+	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
+	startDate string, endDate string, forUser int64) []Tag {
+	voteTable := "p"
 	if len(popularIn) > 0 {
-		voteTable = "t"
+		voteTable = "v"
 	}
 
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	cond := []string{}
 	joins := ""
 	if id != 0 {
-		cond = append(cond, fmt.Sprintf("t.id = %d\n", id))
+		cond = append(cond, fmt.Sprintf("p.id = %d\n", id))
 	} else {
 		if len(tags) > 0 {
 			tagArray := SQLFormattedArray(tags)
-			cond = append(cond, fmt.Sprintf("ARRAY[t.name] <@ %s", tagArray))
+			cond = append(cond, fmt.Sprintf("ARRAY[p.name] <@ %s", tagArray))
 		}
 
 		if usingVotesTable {
-			joins += "JOIN votes v ON v.pid = t.id\n"
+			joins += "JOIN votes v ON v.pid = p.id\n"
 			cond = append(cond, "kind=4")
 		}
 	}
 
-	getTags := SQLGetItems("tags t", voteTable, SQLFieldsForTagAlias(),
+	getTags := SQLGetItems("tags p", voteTable, SQLFieldsForTagAlias(),
 		SQLFieldsForTag(), joins, popularIn, cond, usingVotesTable,
 		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate)
+		sortOrder, limit, offset, startDate, endDate, forUser)
 
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags") {

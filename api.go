@@ -160,7 +160,12 @@ func APIGetUsers(c *gin.Context) {
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 
-	users := DBGetUsers(mainDB, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
+	if APIFailed(c, e, "invalid for user") {
+		return
+	}
+
+	users := DBGetUsers(mainDB, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate, forUser)
 	APIReturn(c, true, users)
 }
 
@@ -495,7 +500,12 @@ func APIGetPosts(c *gin.Context) {
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 
-	posts := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes, order, limit, offset, start, end, startDate, endDate)
+	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
+	if APIFailed(c, e, "invalid for user") {
+		return
+	}
+
+	posts := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes, order, limit, offset, start, end, startDate, endDate, forUser)
 	APIReturn(c, true, posts)
 }
 
@@ -568,7 +578,12 @@ func APIGetComments(c *gin.Context) {
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, start, end, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
+	if APIFailed(c, e, "invalid for user") {
+		return
+	}
+
+	result := DBGetComments(mainDB, pid, uid, replyId, start, end, popularIn, upvotes, downvotes, order, limit, offset, startDate, endDate, forUser)
 	APIReturn(c, true, result)
 }
 
@@ -581,7 +596,7 @@ func APIGetTag(c *gin.Context) {
 		return
 	}
 
-	tag := DBGetTags(mainDB, tid, []string{}, []string{}, 0, 0, soScore, 1, 0, "", "")
+	tag := DBGetTags(mainDB, tid, []string{}, []string{}, 0, 0, soScore, 1, 0, "", "", 0)
 	if len(tag) == 1 {
 		APIReturn(c, true, tag[0])
 	} else {
@@ -627,7 +642,12 @@ func APIGetTags(c *gin.Context) {
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 
-	result := DBGetTags(mainDB, 0, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
+	if APIFailed(c, e, "invalid for user") {
+		return
+	}
+
+	result := DBGetTags(mainDB, 0, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate, forUser)
 	APIReturn(c, true, result)
 }
 

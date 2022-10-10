@@ -87,7 +87,7 @@ func DBPostsSetup(db *sql.DB) {
 		id BIGSERIAL NOT NULL,
 		userId BIGINT NOT NULL,
 		content TEXT,
-		tags TEXT[],
+		tags BIGINT[],
 		createdAt TIMESTAMP,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,

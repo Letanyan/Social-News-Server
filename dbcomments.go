@@ -188,7 +188,10 @@ func DBGetComment(db *sql.DB, postId int64, commentId int64) CommentResult {
 }
 
 // ignore userId if 0, ignore replyId if 0, start < CreatedAt < end ignore if empty, ignore upvotes if 0
-func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start string, end string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []CommentResult {
+func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64,
+	start string, end string, popularIn []string, upvotes int64, downvotes int64,
+	sortOrder SortOrder, limit int64, offset int64,
+	startDate string, endDate string, forUser int64) []CommentResult {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -219,7 +222,7 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, start 
 	getComments := SQLGetItems("Comments p", voteTable, SQLFieldsForCommentResultAlias(),
 		SQLFieldsForCommentResult(), joins, popularIn, cond, usingVotesTable,
 		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate)
+		sortOrder, limit, offset, startDate, endDate, forUser)
 
 	rows, e := db.Query(getComments)
 	if DidFail(e, "failed to get comments") {

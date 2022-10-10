@@ -254,7 +254,9 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 }
 
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
-func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, start string, end string, startDate string, endDate string) []PostResult {
+func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string,
+	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
+	start string, end string, startDate string, endDate string, forUser int64) []PostResult {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -289,7 +291,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	getPosts := SQLGetItems("posts p", voteTable, SQLFieldsForPostResultAlias(),
 		SQLFieldsForPostResult(), joins, popularIn, cond, usingVotesTable,
 		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate)
+		sortOrder, limit, offset, startDate, endDate, forUser)
 
 	rows, e := db.Query(getPosts)
 	result := []PostResult{}
