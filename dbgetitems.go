@@ -93,7 +93,5 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	result += SQLSortOrder(sortOrder)
 	result += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
-	fmt.Println(result)
-
 	return result
 }

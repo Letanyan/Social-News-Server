@@ -24,6 +24,7 @@ const (
 
 var (
 	mainDB *sql.DB
+	agents []NewsAgent
 )
 
 func main() {
@@ -64,6 +65,13 @@ func main() {
 		v1.GET("/users/:uid/blacklist/:tid", APIBlacklistUser)
 	}
 
+	apih := router.Group("/apih")
+	hv1 := apih.Group("/v1")
+	{
+		hv1.POST("/agents", APIHCreateAgent)
+		hv1.POST("/agents/:uid", APIHUpdateAgent)
+	}
+
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
 	mainDB, _ = sql.Open("postgres", conn)
@@ -72,6 +80,8 @@ func main() {
 	// DBClearAllTables(db)
 
 	DBSetup(mainDB)
+
+	agents = NAReadAllNewsAgents()
 
 	port := os.Getenv("PORT")
 	if port == "" {
