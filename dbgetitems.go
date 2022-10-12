@@ -13,18 +13,34 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	withTable := ""
 	if forUser > 0 {
 		withTable = fmt.Sprintf(`
-		WITH Total AS (
-			SELECT SUM(upvotes) up, SUM(downvotes) down
+		WITH 
+		UserPrefs AS (
+			SELECT * 
 			FROM UserPref
-			WHERE kind=4 AND uid=%d
+			WHERE uid=%d
+		),
+		Total AS (
+			SELECT SUM(upvotes) up, SUM(downvotes) down
+			FROM UserPrefs
+			WHERE kind=4
 		), Scores AS (
 			SELECT pid, (upvotes - downvotes) / (total.up + total.down) AS value
-			FROM UserPref, Total
-			WHERE kind=4 AND uid=%d
+			FROM UserPrefs, Total
+			WHERE kind=4
+		), Blacklist AS (
+			SELECT pid
+			FROM UserPrefs
+			WHERE kind=5
+		), Viewed AS (
+			SELECT pid
+			FROM UserPrefs
+			WHERE kind=3 AND (upvotes > 0 OR downvotes > 0)
 		)
-		`, forUser, forUser)
+		`, forUser)
 
 		joins += "JOIN Scores s ON s.pid = ANY(p.tags)"
+		cond = append(cond, "p.userId NOT IN (SELECT * FROM Blacklist)")
+		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
 		scoreField = "SUM(s.value)"
 	}
 

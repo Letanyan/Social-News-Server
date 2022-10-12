@@ -60,7 +60,8 @@ func main() {
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
 
-		v1.POST("/watch/users/:uid", APIWatchUser)
+		v1.POST("/users/:uid/watch", APIWatchUser)
+		v1.GET("/users/:uid/blacklist/:tid", APIBlacklistUser)
 	}
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
@@ -71,36 +72,6 @@ func main() {
 	// DBClearAllTables(db)
 
 	DBSetup(mainDB)
-
-	// query := fmt.Sprintf(`
-	// WITH tv AS (
-	//     SELECT t.name, ratio(up.upvotes, up.downvotes) AS val
-	//     FROM user3pref up JOIN tags t ON t.id = up.pid
-	//     WHERE up.kind = 4
-	// )
-	// SELECT id, upvotes, tags,
-	//     SUM(cooldown(p.upvotes - p.downvotes, p.updatedAt, now() at time zone ('utc'), 31536000) * tv.val),
-	//     p.upvotes - p.downvotes AS x, tv.val AS y, tv.name
-	// FROM posts2022 p JOIN tv ON ARRAY[tv.name] <@ p.tags
-	// GROUP BY id, upvotes, tags, x, y, tv.name
-	// `)
-	// rows, e := mainDB.Query(query)
-	// if DidFail(e) {
-	// 	return
-	// }
-	// for rows.Next() {
-	// 	var p PostResult
-	// 	var s float64
-	// 	var x float64
-	// 	var y float64
-	// 	var name string
-	// 	e = rows.Scan(&p.ID, &p.Content, pq.Array(&p.Tags), &s, &x, &y, &name)
-	// 	if DidFail(e) {
-	// 		return
-	// 	}
-
-	// 	fmt.Println(p.ID, p.Content, p.Tags, s, x, y, name)
-	// }
 
 	port := os.Getenv("PORT")
 	if port == "" {

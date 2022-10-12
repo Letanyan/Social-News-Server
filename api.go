@@ -257,7 +257,16 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
-	users := DBGetUserPrefUsers(mainDB, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, limit, offset)
+	isBlacklist, e := strconv.ParseInt(c.DefaultQuery("isBlacklist", "0"), 10, 64)
+	if APIFailed(c, e, "invalid blacklist value") {
+		return
+	}
+	kind := upUser
+	if isBlacklist == 1 {
+		kind = upBlacklistUser
+	}
+
+	users := DBGetUserPrefUsers(mainDB, kind, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, limit, offset)
 	APIReturn(c, true, users)
 }
 
@@ -800,6 +809,22 @@ func APIWatchUser(c *gin.Context) {
 	}
 
 	pref := DBWatchUser(mainDB, uid, input.Tags, input.Time)
+
+	APIReturn(c, true, pref)
+}
+
+func APIBlacklistUser(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	tid, e := strconv.ParseInt(c.Param("tid"), 10, 64)
+	if APIFailed(c, e, "invalid target user id") {
+		return
+	}
+
+	pref := DBCreateUserPref(mainDB, uid, upBlacklistUser, tid, -1, -1)
 
 	APIReturn(c, true, pref)
 }

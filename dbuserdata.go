@@ -14,6 +14,7 @@ const (
 	upComment
 	upPost
 	upTag
+	upBlacklistUser
 )
 
 type UserPref struct {
@@ -240,13 +241,13 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	return result
 }
 
-func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefUser {
+func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmount int64, downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefUser {
 	getUsers := fmt.Sprintf(`
 	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
 	FROM UserPref up 
 	JOIN users u ON up.pid = u.id 
-	WHERE kind = 1 AND up.uid = %d
-	`, SQLFieldsForUserPrefUser(), userId)
+	WHERE kind=%d AND up.uid = %d
+	`, SQLFieldsForUserPrefUser(), kind, userId)
 
 	if upvoteAmount > 0 {
 		getUsers += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
