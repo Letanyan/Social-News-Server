@@ -37,6 +37,7 @@ func DBUsersSetup(db *sql.DB) {
 		userId BIGINT NOT NULL,
 		postId BIGINT NOT NULL,
 		commentId BIGINT NOT NULL,
+		thrashed BOOLEAN DEFAULT false,
 
 		PRIMARY KEY (userId, postId, commentId)
 	) PARTITION BY HASH(userId);`
@@ -93,6 +94,7 @@ func DBPostsSetup(db *sql.DB) {
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		location TEXT[],
+		trashed BOOLEAN DEFAULT false,
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
@@ -123,6 +125,7 @@ func DBCommentsSetup(db *sql.DB) {
 		createdAt TIMESTAMP,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		thrashed BOOLEAN DEFAULT false,
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`

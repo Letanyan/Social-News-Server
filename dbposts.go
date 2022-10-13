@@ -177,20 +177,20 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 func DBDeletePost(db *sql.DB, postId int64) {
 	// year := yearFromId(postId)
 
-	deleteFromPosts := `DELETE FROM posts WHERE id=$1 RETURNING userId`
+	deleteFromPosts := `UPDATE posts SET thrashed=true WHERE id=$1 RETURNING userId`
 	row := db.QueryRow(deleteFromPosts, postId)
 	var userId int64
 	e := row.Scan(&userId)
 	if !DidFail(e, "get userId for deleting post ", postId) {
-		deletePostFromUser := `DELETE FROM UserCont WHERE userId=$1 AND postId=$2`
+		deletePostFromUser := `UPDATE UserCont SET thrashed=true WHERE userId=$1 AND postId=$2`
 		_, e = db.Exec(deletePostFromUser, userId, postId)
 		DidFail(e, "delete post ", postId, " for user ", userId)
 	}
 	DidFail(e, "delete post from posts table")
 
-	deletePostTable := fmt.Sprintf(`DELETE FROM Comments WHERE postId = %d`, postId)
-	_, e = db.Exec(deletePostTable)
-	DidFail(e, "delete post table")
+	// deletePostTable := fmt.Sprintf(`DELETE FROM Comments WHERE postId = %d`, postId)
+	// _, e = db.Exec(deletePostTable)
+	// DidFail(e, "delete post table")
 }
 
 type SortOrder int
@@ -264,6 +264,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 
 	joins := "JOIN users u ON p.userId = u.id\n"
 	cond := []string{}
+	cond = append(cond, "p.thrashed = false")
 	if len(start) > 0 && len(end) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", start, end))
 	} else if len(start) > 0 {

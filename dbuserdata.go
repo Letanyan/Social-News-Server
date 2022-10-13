@@ -294,7 +294,7 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 		JOIN posts p ON up.pid = p.id
 		JOIN users u ON p.userId = u.id
 		WHERE p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') 
-		AND up.kind = %d AND up.uid = %d
+		AND up.kind = %d AND up.uid = %d AND p.thrashed=false 
 		`, SQLFieldsForUserPrefPost(), startDate, endDate, kind, userId)
 
 	if upvoteAmount > 0 {
@@ -470,7 +470,7 @@ func DBGetUserCont(db *sql.DB, userId int64, isPosts bool, tags []string, locati
 	FROM UserCont up 
 	JOIN posts p ON up.postId = p.id 
 	JOIN users u ON p.userId = u.id
-	WHERE up.userId = %d 
+	WHERE up.userId = %d AND p.thrashed=false
 	`, SQLFieldsForUserContResult(), userId)
 
 	if isPosts {

@@ -121,7 +121,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 }
 
 func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
-	deleteFromPostComments := `DELETE FROM comments WHERE id=$1 RETURNING userId`
+	deleteFromPostComments := `UPDATE comments SET thrashed=true WHERE id=$1 RETURNING userId`
 	row := db.QueryRow(deleteFromPostComments, commentId)
 	var userId int64
 	e := row.Scan(&userId)
@@ -129,7 +129,7 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 		return
 	}
 
-	deletePostFromUser := `DELETE FROM UserCont WHERE userId=$1 AND postId=$2 AND commentId=$3`
+	deletePostFromUser := `UPDATE UserCont SET thrashed=true WHERE userId=$1 AND postId=$2 AND commentId=$3`
 	_, e = db.Exec(deletePostFromUser, userId, postId, commentId)
 	DidFail(e, "delete comment ", commentId, " for post ", postId, " for user ", userId)
 }
@@ -198,7 +198,7 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64,
 	}
 
 	joins := "JOIN users u ON p.userId = u.id\n"
-	cond := []string{fmt.Sprintf("postId = %d\n", postId)}
+	cond := []string{fmt.Sprintf("postId = %d\n", postId), "thrashed=false"}
 	if userId != 0 {
 		cond = append(cond, fmt.Sprintf("p.userId = %d\n", userId))
 	}
