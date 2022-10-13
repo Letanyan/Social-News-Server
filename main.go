@@ -63,6 +63,11 @@ func main() {
 
 		v1.POST("/users/:uid/watch", APIWatchUser)
 		v1.GET("/users/:uid/blacklist/:tid", APIBlacklistUser)
+
+		//Flags
+		v1.POST("/flags", APICreateFlag)
+		v1.GET("/flags", APIGetFlags)
+		v1.DELETE("/flags/:id", APIHandleFlag)
 	}
 
 	apih := router.Group("/apih")

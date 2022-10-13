@@ -12,6 +12,7 @@ func DBSetup(db *sql.DB) {
 	DBCommentsSetup(db)
 	DBVotesSetup(db)
 	DBTagsSetup(db)
+	DBFlagsSetup(db)
 	DBFunctionSetup(db)
 }
 
@@ -205,6 +206,36 @@ func DBTagsSetup(db *sql.DB) {
 	);`
 	_, e := db.Exec(createTags)
 	DidFail(e, "create tags table")
+}
+
+func DBFlagsSetup(db *sql.DB) {
+	createFlags := `CREATE TABLE IF NOT EXISTS Flags (
+		id BIGSERIAL,
+		uid BIGINT,
+		pid BIGINT,
+		sid BIGINT,
+		kind SMALLINT,
+		reason TEXT,
+		createdAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
+
+		PRIMARY KEY (id, pid)
+	) PARTITION BY HASH(pid);`
+	_, e := db.Exec(createFlags)
+	DidFail(e, "create comments table")
+	createFlagsTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS Flags%d 
+		PARTITION OF Flags
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS Flags%d_index ON Flags%d (id, pid)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create posts instance")
+	}
+	mod := 20
+	for i := 0; i < mod; i += 1 {
+		createFlagsTable(mod, i)
+	}
 }
 
 func DBFunctionSetup(db *sql.DB) {

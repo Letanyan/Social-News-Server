@@ -828,3 +828,71 @@ func APIBlacklistUser(c *gin.Context) {
 
 	APIReturn(c, true, pref)
 }
+
+// ------------------------------------------------------------------------
+// Admin
+// ------------------------------------------------------------------------
+
+func APICreateFlag(c *gin.Context) {
+	type Input struct {
+		UID    int64      `json:"uid"`
+		PID    int64      `json:"pid"`
+		SID    int64      `json:"sid"`
+		Kind   FlagReason `json:"kind"`
+		Reason string     `json:"reason"`
+	}
+
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for flag") {
+		APIFailed(c, e, "invalid input values")
+		return
+	}
+
+	DBCreateFlag(mainDB, in.UID, in.PID, in.SID, in.Kind, in.Reason)
+
+	APIReturn(c, true, gin.H{})
+}
+
+func APIGetFlags(c *gin.Context) {
+	kind, e := strconv.ParseInt(c.DefaultQuery("kind", fmt.Sprint(frSpam)), 10, 64)
+	if APIFailed(c, e, "invalid flag kind") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit value") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset value") {
+		return
+	}
+
+	content := DBGetFlags(mainDB, FlagReason(kind), limit, offset)
+
+	APIReturn(c, true, content)
+}
+
+func APIHandleFlag(c *gin.Context) {
+	type Input struct {
+		PID    int64  `json:"pid"`
+		SID    int64  `json:"sid"`
+		Action string `json:"action"`
+	}
+
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for flag") {
+		APIFailed(c, e, "invalid input values")
+		return
+	}
+
+	id, e := strconv.ParseInt(c.Param("id"), 10, 64)
+	if APIFailed(c, e, "invalid flag id") {
+		return
+	}
+
+	DBHandleFlag(mainDB, id, in.PID, in.SID, in.Action)
+
+	APIReturn(c, true, gin.H{})
+}
