@@ -74,7 +74,10 @@ func main() {
 	hv1 := apih.Group("/v1")
 	{
 		hv1.POST("/agents", APIHCreateAgent)
-		hv1.POST("/agents/:uid", APIHUpdateAgent)
+		hv1.POST("/agents/:aid", APIHUpdateAgent)
+		hv1.POST("/all-agents", APIHUpdateAgents)
+		hv1.GET("/agents/:aid", APIHGetAgent)
+		hv1.GET("/agents", APIHGetAllAgents)
 	}
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -33,12 +34,43 @@ func APIHCreateAgent(c *gin.Context) {
 }
 
 func APIHUpdateAgent(c *gin.Context) {
-	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
-	if APIFailed(c, e, "invalid uid param") {
+	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
+	if APIFailed(c, e, "invalid aid param") {
 		return
 	}
 
-	result := NAUpdateNewsAgent(uid)
+	result := NAUpdateNewsAgentWithID(aid)
 
 	APIReturn(c, true, result)
+}
+
+func APIHUpdateAgents(c *gin.Context) {
+	result := NAUpdateAllNewsAgent()
+
+	APIReturn(c, true, result)
+}
+
+func APIHGetAgent(c *gin.Context) {
+	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
+	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+
+	var result NewsAgent
+	for _, a := range agents {
+		if a.ID == aid {
+			result = a
+			break
+		}
+	}
+
+	if result.ID > 0 {
+		APIReturn(c, true, result)
+	} else {
+		APIFailed(c, errors.New("could not find agent with id"), "could not find agent with id")
+	}
+}
+
+func APIHGetAllAgents(c *gin.Context) {
+	APIReturn(c, true, agents)
 }

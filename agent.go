@@ -83,7 +83,7 @@ func NAWriteAllNewsAgents(agents []NewsAgent) {
 	}
 }
 
-func NAUpdateNewsAgent(id int64) WebsiteScrapings {
+func NAUpdateNewsAgentWithID(id int64) WebsiteScrapings {
 	var agent NewsAgent
 	for _, a := range agents {
 		if a.ID == id {
@@ -91,19 +91,31 @@ func NAUpdateNewsAgent(id int64) WebsiteScrapings {
 			break
 		}
 	}
+	return NAUpdateNewsAgent(agent)
+}
+
+func NAUpdateAllNewsAgent() []WebsiteScrapings {
+	result := []WebsiteScrapings{}
+	for _, a := range agents {
+		result = append(result, NAUpdateNewsAgent(a))
+	}
+	return result
+}
+
+func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	if agent.ID == 0 {
 		return WebsiteScrapings{}
 	}
 	scraping := NAScrapeWebsite(agent.Origin)
 
 	if scraping.Type == "article" {
-		NACreatePost(id, scraping)
+		NACreatePost(agent.ID, scraping)
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
 		return WebsiteScrapings{}
 	}
-	bloomFile := fmt.Sprintf("./agents/%d.json", id)
+	bloomFile := fmt.Sprintf("./agents/%d.json", agent.ID)
 	bloom := NewBloomFilterF(bloomFile)
 	defer bloom.Write(bloomFile)
 	for _, urlString := range scraping.URLs {
@@ -118,7 +130,7 @@ func NAUpdateNewsAgent(id int64) WebsiteScrapings {
 			bloom.Insert(urlString)
 			subScraping := NAScrapeWebsite(urlString)
 			if subScraping.Type == "article" {
-				NACreatePost(id, subScraping)
+				NACreatePost(agent.ID, subScraping)
 			}
 		}
 	}
