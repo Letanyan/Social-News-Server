@@ -109,7 +109,7 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	scraping := NAScrapeWebsite(agent.Origin)
 
 	if scraping.Type == "article" {
-		NACreatePost(agent.ID, scraping)
+		NACreatePost(agent.ID, agent.Origin, scraping)
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
@@ -126,11 +126,10 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 			continue
 		}
 		if !bloom.Contains(urlString) {
-			fmt.Println("++++++")
 			bloom.Insert(urlString)
 			subScraping := NAScrapeWebsite(urlString)
 			if subScraping.Type == "article" {
-				NACreatePost(agent.ID, subScraping)
+				NACreatePost(agent.ID, urlString, subScraping)
 			}
 		}
 	}
@@ -239,8 +238,8 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	return WebsiteScrapings{title, description, links, tags, author, image, contentType}
 }
 
-func NACreatePost(userId int64, scrape WebsiteScrapings) {
-	body := scrape.Title
+func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
+	body := url + "\n" + scrape.Title
 
 	if len(scrape.Image) > 0 {
 		body += "\n" + scrape.Image
@@ -253,8 +252,4 @@ func NACreatePost(userId int64, scrape WebsiteScrapings) {
 	}
 
 	DBCreatePost(mainDB, userId, body, scrape.Tags, []string{})
-}
-
-func NALoadVisited(id int64) {
-
 }
