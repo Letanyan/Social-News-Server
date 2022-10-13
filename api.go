@@ -84,6 +84,32 @@ func APICreatePost(c *gin.Context) {
 	}
 }
 
+func APICreateComment(c *gin.Context) {
+	type Input struct {
+		UserID  int64  `json:"userId"`
+		ReplyID int64  `json:"replyId"`
+		Content string `json:"content"`
+	}
+	var in Input
+
+	if e := c.BindJSON(&in); DidFail(e, "get input for create comment") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	postId, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if DidFail(e, "invalid pid") {
+		APIFailed(c, e, "invalid post id")
+	}
+
+	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID)
+	if comment.ID != 0 {
+		APIReturn(c, true, comment)
+	} else {
+		APIReturn(c, false, "could not create post")
+	}
+}
+
 // ------------------------------------------------------------------------
 // Delete
 // ------------------------------------------------------------------------
@@ -106,6 +132,23 @@ func APIDeletePost(c *gin.Context) {
 	}
 
 	DBDeletePost(mainDB, pid)
+	APIReturn(c, true, gin.H{})
+}
+
+func APIDeleteComment(c *gin.Context) {
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		APIReturn(c, false, "invalid post id provided")
+		return
+	}
+
+	cid, e := strconv.ParseInt(c.Param("cid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		APIReturn(c, false, "invalid post id provided")
+		return
+	}
+
+	DBDeleteComment(mainDB, pid, cid)
 	APIReturn(c, true, gin.H{})
 }
 

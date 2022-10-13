@@ -37,9 +37,11 @@ func main() {
 		// Create
 		v1.POST("/users", APICreateUser)
 		v1.POST("/posts", APICreatePost)
+		v1.POST("/posts/:pid/comments", APICreateComment)
 		// Delete
 		v1.DELETE("/users/:uid", APIDeleteUser)
-		v1.DELETE("/posts/:pid", APICreateUser)
+		v1.DELETE("/posts/:pid", APIDeletePost)
+		v1.DELETE("/posts/:pid/comments/:cid", APIDeleteComment)
 		// Get
 		v1.GET("/users/:uid", APIGetUser)
 		v1.GET("/users/:uid/prefs/users", APIGetUserPrefUsers)
