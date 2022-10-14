@@ -13,15 +13,19 @@ import (
 func APIReturn(c *gin.Context, success bool, payload interface{}) {
 	if isDebug {
 		if success {
-			c.IndentedJSON(http.StatusAccepted, gin.H{"success": true, "payload": payload})
+			c.Header("Access-Control-Allow-Origin", "*")         // Required for CORS support to work
+			c.Header("Access-Control-Allow-Credentials", "true") // Required for cookies, authorization headers with HTTPS
+			c.Header("Access-Control-Allow-Headers", "Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,locale")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE")
+			c.IndentedJSON(http.StatusOK, gin.H{"success": true, "payload": payload})
 		} else {
-			c.IndentedJSON(http.StatusAccepted, gin.H{"success": false, "reason": payload})
+			c.IndentedJSON(http.StatusOK, gin.H{"success": false, "reason": payload})
 		}
 	} else {
 		if success {
-			c.JSON(http.StatusAccepted, gin.H{"success": true, "payload": payload})
+			c.JSON(http.StatusOK, gin.H{"success": true, "payload": payload})
 		} else {
-			c.JSON(http.StatusAccepted, gin.H{"success": false, "reason": payload})
+			c.JSON(http.StatusOK, gin.H{"success": false, "reason": payload})
 		}
 	}
 }
