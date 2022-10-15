@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,15 +9,17 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/Timothylock/go-signin-with-apple/apple"
 )
 
 func APIReturn(c *gin.Context, success bool, payload interface{}) {
+	c.Header("Access-Control-Allow-Origin", "*")         // Required for CORS support to work
+	c.Header("Access-Control-Allow-Credentials", "true") // Required for cookies, authorization headers with HTTPS
+	c.Header("Access-Control-Allow-Headers", "Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,locale")
+	c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE")
 	if isDebug {
 		if success {
-			c.Header("Access-Control-Allow-Origin", "*")         // Required for CORS support to work
-			c.Header("Access-Control-Allow-Credentials", "true") // Required for cookies, authorization headers with HTTPS
-			c.Header("Access-Control-Allow-Headers", "Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,locale")
-			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE")
 			c.IndentedJSON(http.StatusOK, gin.H{"success": true, "payload": payload})
 		} else {
 			c.IndentedJSON(http.StatusOK, gin.H{"success": false, "reason": payload})
@@ -942,4 +945,64 @@ func APIHandleFlag(c *gin.Context) {
 	DBHandleFlag(mainDB, id, in.PID, in.SID, in.Action)
 
 	APIReturn(c, true, gin.H{})
+}
+
+// ------------------------------------------------------------------------
+// Sign In
+// ------------------------------------------------------------------------
+func APISignIn(c *gin.Context) {
+	type Input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for sign in") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	user := DBSignIn(mainDB, in.Email, in.Password)
+	if user.ID != 0 {
+		// FIXME: return proper token which is stored on the server
+		// to cross reference with user to ensure user updates only their data
+		APIReturn(c, true, gin.H{"user": user, "token": "secret"})
+	} else {
+		APIReturn(c, false, "password or email incorrect")
+	}
+}
+
+func APISignInWithApple(c *gin.Context) {
+	teamID := "86QZ48F54E"
+	serviceID := "com.letanyan.newsourceserviceid"
+	keyID := "K3NQ5VC2LH"
+	// bundleID := "com.letanyan.newsource"
+	secretFile := `-----BEGIN PRIVATE KEY-----
+MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgX8e/+ExMOMTbLzav
+lg8rFYOhBfeGrcAIKL+7Q4FjjSGgCgYIKoZIzj0DAQehRANCAATtI0L8/MPp2b4T
+J6/1jA9dnkP0SodRODScM2opvHJgKYhevNPi/Blu5pd3ble2zGBctKdDbHpW6Xf3
+jAhjLaPD
+-----END PRIVATE KEY-----`
+
+	// Generate the client secret used to authenticate with Apple's validation servers
+	// Refer to the example files to see where to get secret, teamID, clientID, keyID
+	secret, _ := apple.GenerateClientSecret(secretFile, teamID, serviceID, keyID)
+
+	// Generate a new validation client
+	client := apple.New()
+
+	vReq := apple.AppValidationTokenRequest{
+		ClientID:     serviceID,
+		ClientSecret: secret,
+		Code:         "the_token_to_validate",
+	}
+
+	var resp apple.ValidationResponse
+
+	// Do the verification
+	client.VerifyAppToken(context.Background(), vReq, &resp)
+
+	unique, _ := apple.GetUniqueID(resp.IDToken)
+
+	// Voila!
+	fmt.Println(unique)
 }

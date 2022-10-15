@@ -34,6 +34,9 @@ func main() {
 	api := router.Group("/api")
 	v1 := api.Group("/v1")
 	{
+		// Sign in
+		v1.POST("/auth/callbacks/sign-in", APISignIn)
+		v1.POST("/auth/callbacks/sign-in-with-apple", APISignInWithApple)
 		// Create
 		v1.POST("/users", APICreateUser)
 		v1.POST("/posts", APICreatePost)

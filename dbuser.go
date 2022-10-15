@@ -98,7 +98,8 @@ func DBIsValidEmail(db *sql.DB, email string) bool {
 func DBHashPassword(password string) string {
 	h := sha256.New()
 	h.Write([]byte("{" + password + "_}"))
-	return fmt.Sprintf("%x", h.Sum(nil))
+	result := fmt.Sprintf("%x", h.Sum(nil))
+	return result
 }
 
 func DBEqualHashAndPassword(hash string, password string) bool {
@@ -141,6 +142,16 @@ func SendValidationKey(userId int64, email string, key int64) {
 
 	if DidFail(e, "send mail") {
 		return
+	}
+}
+
+func DBSignIn(db *sql.DB, email string, password string) User {
+	user := DBGetUser(db, 0, email)
+	if DBEqualHashAndPassword(user.Password, password) {
+		user.Password = ""
+		return user
+	} else {
+		return User{}
 	}
 }
 
@@ -214,6 +225,15 @@ func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 	hOld := DBHashPassword(old)
 	hNew := DBHashPassword(new)
 	_, e := db.Exec(updatePassword, hNew, userId, hOld)
+	if DidFail(e, "update password") {
+		return
+	}
+}
+
+func DBResetPasswordForUser(db *sql.DB, userId int64, new string) {
+	updatePassword := "UPDATE users SET password = $1 WHERE id = $2"
+	hNew := DBHashPassword(new)
+	_, e := db.Exec(updatePassword, hNew, userId)
 	if DidFail(e, "update password") {
 		return
 	}
