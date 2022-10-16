@@ -33,6 +33,22 @@ func APIHCreateAgent(c *gin.Context) {
 	}
 }
 
+func APIHDeleteAgent(c *gin.Context) {
+	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
+	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+
+	e = NADeleteNewsAgent(aid)
+	if APIFailed(c, e, "no agent exists") {
+		return
+	}
+
+	DBDeleteUser(mainDB, aid)
+
+	APIReturn(c, true, "deleted agent")
+}
+
 func APIHUpdateAgent(c *gin.Context) {
 	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
 	if APIFailed(c, e, "invalid aid param") {

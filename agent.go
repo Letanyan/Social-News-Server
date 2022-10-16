@@ -40,7 +40,7 @@ func NACreateNewsAgent(id int64, name string, origin string) (NewsAgent, error) 
 	agents = append(agents, agent)
 	NAWriteAllNewsAgents(agents)
 	bloom := NewBloomFilterP(0.99, 100_000_000)
-	bloom.Write(fmt.Sprintf("./agents/%d.json", id))
+	bloom.Write(fmt.Sprintf("./agents/%d.gob", id))
 	return agent, nil
 }
 
@@ -53,6 +53,24 @@ func NAAgentExists(name string, origin string) error {
 			return errors.New("agent with origin already exists")
 		}
 	}
+	return nil
+}
+
+func NADeleteNewsAgent(id int64) error {
+	idx := -1
+	for i, a := range agents {
+		if a.ID == id {
+			idx = i
+		}
+	}
+
+	if idx > 0 {
+		return errors.New("agent does not exist with id " + fmt.Sprint(idx))
+	}
+
+	agents[idx] = agents[len(agents)-1]
+	agents = agents[:len(agents)-1]
+
 	return nil
 }
 
@@ -115,18 +133,17 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	if DidFail(e, "invalid origin url") {
 		return WebsiteScrapings{}
 	}
-	bloomFile := fmt.Sprintf("./agents/%d.json", agent.ID)
+	bloomFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
 	bloom := NewBloomFilterF(bloomFile)
 	defer bloom.Write(bloomFile)
 	for _, urlString := range scraping.URLs {
 		url, e := nurl.Parse(urlString)
-		urlHost := strings.TrimPrefix(url.Hostname(), "www.")
-		baseHost := strings.TrimPrefix(baseURL.Hostname(), "www.")
-		if e != nil || baseHost != urlHost {
+		canURLString := CanonicalURL(url.String())
+		if e != nil || !IsSameHost(url, baseURL) {
 			continue
 		}
-		if !bloom.Contains(urlString) {
-			bloom.Insert(urlString)
+		if !bloom.Contains(canURLString) {
+			bloom.Insert(canURLString)
 			subScraping := NAScrapeWebsite(urlString)
 			if subScraping.Type == "article" {
 				NACreatePost(agent.ID, urlString, subScraping)
@@ -135,6 +152,20 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	}
 
 	return scraping
+}
+
+func CanonicalURL(a string) string {
+	x := strings.TrimPrefix(a, "https://")
+	x = strings.TrimPrefix(x, "http://")
+	x = strings.TrimPrefix(x, "www.")
+	x = strings.TrimSuffix(x, "/")
+	return x
+}
+
+func IsSameHost(a *nurl.URL, b *nurl.URL) bool {
+	x := CanonicalURL(a.Hostname())
+	y := CanonicalURL(b.Hostname())
+	return x == y
 }
 
 func NAScrapeWebsite(url string) WebsiteScrapings {

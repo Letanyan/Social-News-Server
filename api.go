@@ -663,6 +663,22 @@ func APIGetTag(c *gin.Context) {
 	}
 }
 
+func APIGetTagsFromIDs(c *gin.Context) {
+	type Input struct {
+		Ids []int64 `json:"ids"`
+	}
+	var in Input
+
+	if e := c.BindJSON(&in); DidFail(e, "get input for tags") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	result := DBGetTagsFromIDs(mainDB, in.Ids)
+
+	APIReturn(c, true, result)
+}
+
 func APIGetTags(c *gin.Context) {
 	location := strings.Split(c.DefaultQuery("location", ""), ",")
 	if len(location) == 1 && location[0] == "" {

@@ -264,7 +264,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 
 	joins := "JOIN users u ON p.userId = u.id\n"
 	cond := []string{}
-	cond = append(cond, "p.thrashed = false")
+	// cond = append(cond, "p.thrashed = false")
 	if len(start) > 0 && len(end) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", start, end))
 	} else if len(start) > 0 {

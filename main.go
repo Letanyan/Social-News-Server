@@ -60,6 +60,7 @@ func main() {
 		v1.GET("/posts/:pid/comments", APIGetComments)
 		v1.GET("/tags/:tid", APIGetTag)
 		v1.GET("/tags", APIGetTags)
+		v1.POST("/tags", APIGetTagsFromIDs)
 		// Vote
 		v1.POST("/credits/:uid", APIPurchaseCredit)
 		v1.POST("/users/:uid", APIVoteUser)
@@ -80,6 +81,7 @@ func main() {
 	{
 		hv1.POST("/agents", APIHCreateAgent)
 		hv1.POST("/agents/:aid", APIHUpdateAgent)
+		hv1.DELETE("/agents/:aid", APIHDeleteAgent)
 		hv1.POST("/all-agents", APIHUpdateAgents)
 		hv1.GET("/agents/:aid", APIHGetAgent)
 		hv1.GET("/agents", APIHGetAllAgents)

@@ -137,6 +137,21 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	return tagResult, tagPrefs
 }
 
+func DBGetTagsFromIDs(db *sql.DB, ids []int64) []Tag {
+	query := fmt.Sprintf(`
+	SELECT %s
+	FROM Tags p
+	WHERE ARRAY[p.id] <@ %s
+	`, SQLFieldsForTagAlias(), SQLFormattedIndexArray(ids))
+	rows, e := db.Query(query)
+	result := []Tag{}
+	if DidFail(e, "get tags by id") {
+		return result
+	}
+	result = ScanTags(rows, false)
+	return result
+}
+
 func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64) []Tag {

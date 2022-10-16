@@ -1,9 +1,9 @@
 package main
 
 import (
-	"encoding/json"
-	"io/ioutil"
+	"encoding/gob"
 	"math"
+	"os"
 )
 
 type BloomFilter struct {
@@ -52,29 +52,31 @@ func (bloom *BloomFilter) Contains(word string) bool {
 	return true
 }
 
+func (bloom *BloomFilter) Clear() {
+	for i := range bloom.Buckets {
+		bloom.Buckets[i] = 0
+	}
+}
+
 func NewBloomFilterF(fileName string) *BloomFilter {
-	content, e := ioutil.ReadFile(fileName)
-	if DidFail(e, "read bloom.json file") {
-		return &BloomFilter{}
+	result := BloomFilter{}
+	file, _ := os.Open(fileName)
+	defer file.Close()
+	dec := gob.NewDecoder(file)
+	err := dec.Decode(&result)
+	if err != nil {
+		print(err.Error())
 	}
-
-	var result BloomFilter
-	e = json.Unmarshal(content, &result)
-	if DidFail(e, "unmarshal bloom") {
-		return &BloomFilter{}
-	}
-
 	return &result
 }
 
 func (bloom *BloomFilter) Write(fileName string) {
-	file, e := json.Marshal(*bloom)
-	if DidFail(e, "marshal bloom") {
-		return
-	}
-
-	e = ioutil.WriteFile(fileName, file, 0644)
-	if DidFail(e, "write bloom to file") {
+	file, _ := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
+	defer file.Close()
+	enc := gob.NewEncoder(file)
+	err := enc.Encode(*bloom)
+	if DidFail(err, "gob write file") {
+		print(err.Error())
 		return
 	}
 }
