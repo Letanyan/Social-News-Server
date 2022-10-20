@@ -7,7 +7,8 @@ import (
 
 func SQLGetItems(table string, voteTable string, aliasFields string, returnedFields string, joins string,
 	popularIn []string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
-	sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string, forUser int64) string {
+	sortOrder SortOrder, limit int64, offset int64,
+	startDate string, endDate string, forUser int64, search string) string {
 
 	scoreField := "p.upvotes * RATIO(p.upvotes, p.downvotes)"
 	withTable := ""
@@ -72,6 +73,14 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' <= v.updatedAt\n", startDate))
 	} else if len(endDate) > 0 {
 		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' > v.updatedAt\n", endDate))
+	}
+	if len(search) > 0 {
+		// FIXME: sanitize search string
+		if table == "Posts p" || table == "Comments p" {
+			cond = append(cond, fmt.Sprintf("p.content LIKE '%%%s%%'", search))
+		} else if table == "Users p" || table == "Tags p" {
+			cond = append(cond, fmt.Sprintf("p.name LIKE '%%%s%%'", search))
+		}
 	}
 
 	if len(cond) > 0 {

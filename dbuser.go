@@ -34,11 +34,11 @@ func SQLFieldsForUser() string {
 }
 
 func SQLFieldsForUserProfile() string {
-	return "u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes"
 }
 
 func SQLFieldsForUserProfileAlias() string {
-	return "u.id, u.name, u.registerDate, u.upvotes AS item_up, u.downvotes AS item_down"
+	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down"
 }
 
 func ScanUser(row *sql.Row) (User, error) {
@@ -171,7 +171,7 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 
 // ignore email if userId > 0
 func DBGetUser(db *sql.DB, userId int64, email string) User {
-	getUser := fmt.Sprintf(`SELECT %s FROM users u WHERE `, SQLFieldsForUser())
+	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
 	if userId > 0 {
 		arg = fmt.Sprint(userId)
@@ -191,7 +191,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 
 func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
-	startDate string, endDate string, forUser int64) []User {
+	startDate string, endDate string, forUser int64, search string) []User {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -206,9 +206,9 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 		cond = append(cond, "kind=1")
 	}
 
-	getUsers := SQLGetItems("users p", voteTable, SQLFieldsForUserProfileAlias(),
+	getUsers := SQLGetItems("Users p", voteTable, SQLFieldsForUserProfileAlias(),
 		SQLFieldsForUserProfile(), joins, popularIn, cond, usingVotesTable,
-		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate, forUser)
+		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate, forUser, search)
 
 	rows, e := db.Query(getUsers)
 	if DidFail(e, "get users", getUsers) {
@@ -251,7 +251,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 	voteQuery := SQLMakeVote(upUser, targetId, -1, location, upvoteAmount*sign(isUpvote), date)
 	updateUser := fmt.Sprintf(`
 	%s
-	UPDATE users u SET 
+	UPDATE users p SET 
 	%s = %s + %d,
 	credits = credits + 0.75 * %d
 	WHERE id = %d

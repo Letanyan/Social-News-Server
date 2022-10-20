@@ -13,24 +13,34 @@ type Tag struct {
 }
 
 func SQLFieldsForTag() string {
-	return "id, name, upvotes, downvotes"
+	return "p.id, p.name, p.upvotes, p.downvotes"
 }
 
 func SQLFieldsForTagAlias() string {
-	return "id, name, upvotes AS item_up, downvotes AS item_down"
+	return "p.id, p.name, p.upvotes AS item_up, p.downvotes AS item_down"
 }
 
-func ScanTags(rows *sql.Rows, includeScore bool) []Tag {
+func ScanTags(rows *sql.Rows, includeScore bool, hasVotes bool) []Tag {
 	result := []Tag{}
 	var e error
 	for rows.Next() {
 		var cred float64
 		var score float64
+		var up float64
+		var down float64
 		tag := Tag{}
-		if includeScore {
-			e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score)
+		if hasVotes {
+			if includeScore {
+				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score)
+			} else {
+				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down)
+			}
 		} else {
-			e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes)
+			if includeScore {
+				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score)
+			} else {
+				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes)
+			}
 		}
 		if DidFail(e, "read row") {
 			continue
@@ -48,16 +58,20 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	tagRows := SQLFormattedRows(tags, func(s string) string {
 		return ""
 	})
+	tagArray := SQLFormattedArray(tags)
+
 	upsertTags := fmt.Sprintf(`
 	INSERT INTO tags (name)
-	VALUES %s ON CONFLICT (name) DO NOTHING 
-	RETURNING %s;
-	`, tagRows, SQLFieldsForTag())
+	VALUES %s ON CONFLICT (name) DO NOTHING;
+	SELECT %s
+	FROM Tags p
+	WHERE ARRAY[Name] <@ %s;
+	`, tagRows, SQLFieldsForTag(), tagArray)
 	rows, e := db.Query(upsertTags)
 	if DidFail(e, "create tags") {
 		return []Tag{}
 	}
-	result := ScanTags(rows, false)
+	result := ScanTags(rows, false, false)
 
 	return result
 }
@@ -89,7 +103,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	if DidFail(e, "insert and update tags") {
 		return []Tag{}, []UserPref{}
 	}
-	tagResult := ScanTags(rows, false)
+	tagResult := ScanTags(rows, false, false)
 
 	tagIndices := []int64{}
 	for _, tag := range tagResult {
@@ -148,13 +162,13 @@ func DBGetTagsFromIDs(db *sql.DB, ids []int64) []Tag {
 	if DidFail(e, "get tags by id") {
 		return result
 	}
-	result = ScanTags(rows, false)
+	result = ScanTags(rows, false, false)
 	return result
 }
 
 func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
-	startDate string, endDate string, forUser int64) []Tag {
+	startDate string, endDate string, forUser int64, search string) []Tag {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -177,18 +191,18 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 		}
 	}
 
-	getTags := SQLGetItems("tags p", voteTable, SQLFieldsForTagAlias(),
+	getTags := SQLGetItems("Tags p", voteTable, SQLFieldsForTagAlias(),
 		SQLFieldsForTag(), joins, popularIn, cond, usingVotesTable,
 		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate, forUser)
+		sortOrder, limit, offset, startDate, endDate, forUser, search)
 
 	rows, e := db.Query(getTags)
-	if DidFail(e, "get tags") {
+	if DidFail(e, "get tags", getTags) {
 		return []Tag{}
 	}
 	defer rows.Close()
 
-	result := ScanTags(rows, true)
+	result := ScanTags(rows, true, usingVotesTable)
 
 	return result
 }

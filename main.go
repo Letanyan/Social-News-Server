@@ -48,16 +48,16 @@ func main() {
 		// Get
 		v1.GET("/users/:uid", APIGetUser)
 		v1.GET("/users/:uid/prefs/users", APIGetUserPrefUsers)
-		v1.GET("/users/:uid/prefs/posts", APIGetUserPrefPosts(false))
-		v1.GET("/users/:uid/prefs/comments", APIGetUserPrefPosts(true))
+		v1.GET("/users/:uid/prefs/posts", APIGetUserPrefPosts)
+		v1.GET("/users/:uid/prefs/comments", APIGetUserPrefComments)
 		v1.GET("/users/:uid/prefs/tags", APIGetUserPrefTags)
-		v1.GET("/users/:uid/content/posts", APIGetUserContent(true))
-		v1.GET("/users/:uid/content/comments", APIGetUserContent(false))
+		v1.GET("/users/:uid/content/posts", APIGetUserContPost)
+		v1.GET("/users/:uid/content/comments", APIGetUserContComments)
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
 		v1.GET("/posts", APIGetPosts)
 		v1.GET("/posts/:pid/comments/:cid", APIGetComment)
-		v1.GET("/posts/:pid/comments", APIGetComments)
+		v1.GET("/posts/comments", APIGetComments)
 		v1.GET("/tags/:tid", APIGetTag)
 		v1.GET("/tags", APIGetTags)
 		v1.POST("/tags", APIGetTagsFromIDs)
@@ -93,6 +93,9 @@ func main() {
 	defer mainDB.Close()
 
 	// DBClearAllTables(db)
+
+	DBVoteComment(mainDB, 1, 3, 102022, 10, []string{}, formatTime(utc()))
+	DBVoteComment(mainDB, 1, 5, 422022, 15, []string{}, formatTime(utc()))
 
 	DBSetup(mainDB)
 

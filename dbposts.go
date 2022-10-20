@@ -117,7 +117,6 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 		tagIndices = append(tagIndices, t.ID)
 	}
 
-	// year := t.Year()
 	insertPost := fmt.Sprintf(`
 	INSERT INTO posts(userId, content, tags, createdAt, location) 
 	VALUES ($1, $2, %s, '%s', %s) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, SQLFormattedArray(location), SQLFieldsForPost())
@@ -177,12 +176,12 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 func DBDeletePost(db *sql.DB, postId int64) {
 	// year := yearFromId(postId)
 
-	deleteFromPosts := `UPDATE posts SET thrashed=true WHERE id=$1 RETURNING userId`
+	deleteFromPosts := `UPDATE posts SET trashed=true WHERE id=$1 RETURNING userId`
 	row := db.QueryRow(deleteFromPosts, postId)
 	var userId int64
 	e := row.Scan(&userId)
 	if !DidFail(e, "get userId for deleting post ", postId) {
-		deletePostFromUser := `UPDATE UserCont SET thrashed=true WHERE userId=$1 AND postId=$2`
+		deletePostFromUser := `UPDATE UserCont SET trashed=true WHERE userId=$1 AND postId=$2`
 		_, e = db.Exec(deletePostFromUser, userId, postId)
 		DidFail(e, "delete post ", postId, " for user ", userId)
 	}
@@ -256,15 +255,14 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
 func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
-	start string, end string, startDate string, endDate string, forUser int64) []PostResult {
+	start string, end string, startDate string, endDate string, forUser int64, search string) []PostResult {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
 	}
 
 	joins := "JOIN users u ON p.userId = u.id\n"
-	cond := []string{}
-	// cond = append(cond, "p.thrashed = false")
+	cond := []string{"p.trashed = false"}
 	if len(start) > 0 && len(end) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')", start, end))
 	} else if len(start) > 0 {
@@ -289,10 +287,10 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 		cond = append(cond, "kind=3")
 	}
 
-	getPosts := SQLGetItems("posts p", voteTable, SQLFieldsForPostResultAlias(),
+	getPosts := SQLGetItems("Posts p", voteTable, SQLFieldsForPostResultAlias(),
 		SQLFieldsForPostResult(), joins, popularIn, cond, usingVotesTable,
 		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate, forUser)
+		sortOrder, limit, offset, startDate, endDate, forUser, search)
 
 	rows, e := db.Query(getPosts)
 	result := []PostResult{}

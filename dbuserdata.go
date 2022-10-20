@@ -33,7 +33,12 @@ type UserPrefUser struct {
 
 type UserPrefPost struct {
 	Post      PostResult
-	CommentID int64
+	Upvotes   float64
+	Downvotes float64
+}
+
+type UserPrefComment struct {
+	Comment   CommentResult
 	Upvotes   float64
 	Downvotes float64
 }
@@ -110,7 +115,11 @@ func SQLFieldsForUserPrefUser() string {
 }
 
 func SQLFieldsForUserPrefPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.sid, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes AS sec_up, up.downvotes AS sec_down"
+}
+
+func SQLFieldsForUserPrefComment() string {
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefTag() string {
@@ -165,18 +174,40 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
-		var commentId int64
 		var up float64
 		var down float64
 		var userId int64
 		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt,
 			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &u.ID, &u.Name, &u.RegisterDate,
-			&u.Upvotes, &u.Upvotes, &commentId, &up, &down, &cred, &score)
+			&u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
 			continue
 		}
 		p.Author = u
-		result = append(result, UserPrefPost{p, int64(commentId), up, down})
+		result = append(result, UserPrefPost{p, up, down})
+	}
+	return result
+}
+
+func ScanUserPrefComments(rows *sql.Rows) []UserPrefComment {
+	result := []UserPrefComment{}
+	var cred float64
+	var score float64
+	var e error
+	for rows.Next() {
+		c := CommentResult{}
+		u := UserProfile{}
+		var up float64
+		var down float64
+		var userId int64
+		e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt,
+			&c.ReplyCount, &c.Upvotes, &c.Downvotes, &u.ID, &u.Name, &u.RegisterDate,
+			&u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+		if DidFail(e, "scan user pref post") {
+			continue
+		}
+		c.Author = u
+		result = append(result, UserPrefComment{c, up, down})
 	}
 	return result
 }
@@ -241,7 +272,9 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	return result
 }
 
-func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmount int64, downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefUser {
+func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmount int64,
+	downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder,
+	limit int64, offset int64) []UserPrefUser {
 	getUsers := fmt.Sprintf(`
 	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
 	FROM UserPref up 
@@ -284,19 +317,24 @@ func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmoun
 	return result
 }
 
-func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, isComment bool, authorId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []UserPrefPost {
-	kind := upPost
-	if isComment {
-		kind = upComment
-	}
+func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64,
+	downvoteAmount int64, authorId int64, tags []string,
+	location []string, upvotes int64, downvotes int64, sortOrder SortOrder,
+	limit int64, offset int64, startDate string, endDate string) []UserPrefPost {
 	getPosts := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 		FROM UserPref up 
 		JOIN posts p ON up.pid = p.id
 		JOIN users u ON p.userId = u.id
-		WHERE p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') 
-		AND up.kind = %d AND up.uid = %d AND p.thrashed=false 
-		`, SQLFieldsForUserPrefPost(), startDate, endDate, kind, userId)
+		WHERE up.kind = %d AND up.uid = %d AND p.trashed=false 
+		`, SQLFieldsForUserPrefPost(), upPost, userId)
 
+	if len(startDate) > 0 && len(endDate) > 0 {
+		getPosts += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		getPosts += fmt.Sprintf("AND p.createdAt > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		getPosts += fmt.Sprintf("AND p.createdAt < (TIMESTAMP '%s') ", endDate)
+	}
 	if upvoteAmount > 0 {
 		getPosts += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
 	} else if upvoteAmount < 0 {
@@ -343,7 +381,68 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64, downvoteAm
 	return result
 }
 
-func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64) []UserPrefTag {
+func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
+	downvoteAmount int64, authorId int64, replyId int64,
+	upvotes int64, downvotes int64, sortOrder SortOrder,
+	limit int64, offset int64, startDate string, endDate string) []UserPrefComment {
+	getComments := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
+		FROM UserPref up 
+		JOIN Comments p ON up.pid = p.postId AND up.sid = p.id
+		JOIN Users u ON p.userId = u.id
+		WHERE up.kind = %d AND up.uid = %d AND p.trashed=false 
+		`, SQLFieldsForUserPrefComment(), upComment, userId)
+
+	if len(startDate) > 0 && len(endDate) > 0 {
+		getComments += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		getComments += fmt.Sprintf("AND p.createdAt > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		getComments += fmt.Sprintf("AND p.createdAt < (TIMESTAMP '%s') ", endDate)
+	}
+	if upvoteAmount > 0 {
+		getComments += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
+	} else if upvoteAmount < 0 {
+		getComments += fmt.Sprintf("AND up.upvotes < %d ", -upvoteAmount)
+	}
+	if downvoteAmount > 0 {
+		getComments += fmt.Sprintf("AND up.downvotes > %d ", downvoteAmount)
+	} else if downvoteAmount < 0 {
+		getComments += fmt.Sprintf("AND up.downvotes < %d ", -downvoteAmount)
+	}
+	if authorId != 0 {
+		getComments += fmt.Sprintf("AND p.userId = %d ", authorId)
+	}
+	if replyId != 0 {
+		getComments += fmt.Sprintf("AND p.replyId = %d ", replyId)
+	}
+	if upvotes > 0 {
+		getComments += fmt.Sprintf("AND p.upvotes > %d ", upvotes)
+	} else if upvotes < 0 {
+		getComments += fmt.Sprintf("AND p.upvotes < %d ", -upvotes)
+	}
+	if downvotes > 0 {
+		getComments += fmt.Sprintf("AND p.downvotes > %d ", downvotes)
+	} else if downvotes < 0 {
+		getComments += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
+	}
+
+	getComments += SQLSortOrder(sortOrder)
+
+	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+
+	rows, e := db.Query(getComments)
+	if DidFail(e, "get posts") {
+		return []UserPrefComment{}
+	}
+	defer rows.Close()
+
+	result := ScanUserPrefComments(rows)
+	return result
+}
+
+func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64,
+	tags []string, location []string, upvotes int64, downvotes int64,
+	sortOrder SortOrder, limit int64, offset int64) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
 	JOIN tags t ON up.pid = t.id
@@ -399,35 +498,24 @@ type UserCont struct {
 	CommentID int64
 }
 
-type UserContResult struct {
-	Post      PostResult
-	CommentId int64
-}
-
 func SQLFieldsForUserCont() string {
 	return "postId, commentId"
 }
 
-func SQLFieldsForUserContResult() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes," +
-		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.commentId"
+func SQLFieldsForUserContPost() string {
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down," +
+		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+}
+
+func SQLFieldsForUserContComment() string {
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down," +
+		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
 func ScanUserCont(row *sql.Row) (UserCont, error) {
 	up := UserCont{}
 	e := row.Scan(&up.PostID, &up.CommentID)
 	return up, e
-}
-
-func ScanUserContResult(row *sql.Row) (UserContResult, error) {
-	p := PostResult{}
-	u := UserProfile{}
-	var userId int64
-	var commentId int64
-	e := row.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-		&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &commentId)
-	p.Author = u
-	return UserContResult{p, commentId}, e
 }
 
 func ScanUserConts(rows *sql.Rows) []UserCont {
@@ -444,40 +532,14 @@ func ScanUserConts(rows *sql.Rows) []UserCont {
 	return result
 }
 
-func ScanUserContResults(rows *sql.Rows) []UserContResult {
-	result := []UserContResult{}
-	var e error
-	for rows.Next() {
-		p := PostResult{}
-		u := UserProfile{}
-		var userId int64
-		var commentId int64
-		var score float64
-		var cred float64
-		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-			&p.Downvotes, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &commentId, &cred, &score)
-		p.Author = u
-		if DidFail(e, "scan user pref") {
-			continue
-		}
-		result = append(result, UserContResult{p, commentId})
-	}
-	return result
-}
-
-func DBGetUserCont(db *sql.DB, userId int64, isPosts bool, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []UserContResult {
+func DBGetUserContPost(db *sql.DB, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []PostResult {
 	query := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 	FROM UserCont up 
 	JOIN posts p ON up.postId = p.id 
 	JOIN users u ON p.userId = u.id
-	WHERE up.userId = %d AND p.thrashed=false
-	`, SQLFieldsForUserContResult(), userId)
+	WHERE up.userId = %d AND p.trashed=false AND up.commentId <= 0
+	`, SQLFieldsForPostResultAlias(), userId)
 
-	if isPosts {
-		query += "AND up.commentId <= 0 "
-	} else {
-		query += "AND up.commentId > 0 "
-	}
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)
 		query += fmt.Sprintf("AND %s && p.tags ", queryTags)
@@ -511,11 +573,59 @@ func DBGetUserCont(db *sql.DB, userId int64, isPosts bool, tags []string, locati
 	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(query)
-	result := []UserContResult{}
+	result := []PostResult{}
 	if DidFail(e, "get user content") {
 		return result
 	}
-	result = ScanUserContResults(rows)
+	result = ScanPostResults(rows, false)
 
+	return result
+}
+
+func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int64,
+	upvotes int64, downvotes int64, sortOrder SortOrder,
+	limit int64, offset int64, startDate string, endDate string) []CommentResult {
+	getComments := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
+		FROM UserCont up 
+		JOIN Comments p ON up.postId = p.postId AND up.commentId = p.id
+		JOIN Users u ON p.userId = u.id
+		WHERE up.commentid > 0 AND up.userid = %d AND p.trashed=false 
+		`, SQLFieldsForCommentResultAlias(), userId)
+
+	if len(startDate) > 0 && len(endDate) > 0 {
+		getComments += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		getComments += fmt.Sprintf("AND p.createdAt > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		getComments += fmt.Sprintf("AND p.createdAt < (TIMESTAMP '%s') ", endDate)
+	}
+	if authorId != 0 {
+		getComments += fmt.Sprintf("AND p.userId = %d ", authorId)
+	}
+	if replyId != 0 {
+		getComments += fmt.Sprintf("AND p.replyId = %d ", replyId)
+	}
+	if upvotes > 0 {
+		getComments += fmt.Sprintf("AND p.upvotes > %d ", upvotes)
+	} else if upvotes < 0 {
+		getComments += fmt.Sprintf("AND p.upvotes < %d ", -upvotes)
+	}
+	if downvotes > 0 {
+		getComments += fmt.Sprintf("AND p.downvotes > %d ", downvotes)
+	} else if downvotes < 0 {
+		getComments += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
+	}
+
+	getComments += SQLSortOrder(sortOrder)
+
+	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+
+	rows, e := db.Query(getComments)
+	if DidFail(e, "get posts") {
+		return []CommentResult{}
+	}
+	defer rows.Close()
+
+	result := ScanCommentResults(rows, false)
 	return result
 }

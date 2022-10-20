@@ -26,7 +26,7 @@ type WebsiteScrapings struct {
 	Description string
 	URLs        []string
 	Tags        []string
-	Author      string
+	Authors     []string
 	Image       string
 	Type        string
 }
@@ -212,7 +212,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	tags := []string{}
 	image := ""
 	description := ""
-	author := ""
+	authors := []string{}
 	contentType := ""
 
 	getHTMLNodes(node, false, func(n *html.Node) bool {
@@ -232,7 +232,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				} else if names["og:description"] || properties["og:description"] {
 					description = getFirstValForAttr(n, "content")
 				} else if names["article:author"] || properties["article:author"] {
-					author = getFirstValForAttr(n, "content")
+					authors = append(authors, getFirstValForAttr(n, "content"))
 				} else if names["article:section"] || properties["article:section"] {
 					tags = append(tags, tagFormat(getFirstValForAttr(n, "content")))
 				} else if names["og:type"] || properties["og:type"] {
@@ -266,11 +266,11 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 
 	title := strings.TrimSpace(titleText)
 
-	return WebsiteScrapings{title, description, links, tags, author, image, contentType}
+	return WebsiteScrapings{title, description, links, tags, authors, image, contentType}
 }
 
 func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
-	body := url + "\n" + scrape.Title
+	body := url + "\n!" + scrape.Title
 
 	if len(scrape.Image) > 0 {
 		body += "\n" + scrape.Image
@@ -278,8 +278,14 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 	if len(scrape.Description) > 0 {
 		body += "\n" + scrape.Description
 	}
-	if len(scrape.Author) > 0 {
-		body += "\n\nBy: " + scrape.Author
+	if len(scrape.Authors) > 0 {
+		body += "\n\nBy: "
+		for i, author := range scrape.Authors {
+			body += author
+			if i < len(scrape.Authors)-1 {
+				body += ", "
+			}
+		}
 	}
 
 	DBCreatePost(mainDB, userId, body, scrape.Tags, []string{})

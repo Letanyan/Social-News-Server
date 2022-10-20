@@ -37,7 +37,7 @@ func DBUsersSetup(db *sql.DB) {
 		userId BIGINT NOT NULL,
 		postId BIGINT NOT NULL,
 		commentId BIGINT NOT NULL,
-		thrashed BOOLEAN DEFAULT false,
+		trashed BOOLEAN DEFAULT false,
 
 		PRIMARY KEY (userId, postId, commentId)
 	) PARTITION BY HASH(userId);`
@@ -125,7 +125,8 @@ func DBCommentsSetup(db *sql.DB) {
 		createdAt TIMESTAMP,
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		thrashed BOOLEAN DEFAULT false,
+		trashed BOOLEAN DEFAULT false,
+		replyCount SMALLINT DEFAULT 0,
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`
@@ -145,6 +146,9 @@ func DBCommentsSetup(db *sql.DB) {
 	for i := 0; i < mod; i += 1 {
 		createCommentsTable(mod, i)
 	}
+	addCol := `ALTER TABLE Comments ADD COLUMN IF NOT EXISTS replyCount SMALLINT DEFAULT 0`
+	_, e = db.Exec(addCol)
+	DidFail(e, "add replyCount col to comments")
 }
 
 func DBVotesSetup(db *sql.DB) {
