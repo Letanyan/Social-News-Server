@@ -127,9 +127,8 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 		return Post{}
 	}
 
-	insertPostForUser := fmt.Sprintf(`INSERT INTO UserCont(userId, postId, commentId) VALUES(%d, %d, -1)`, post.UserID, post.ID)
-	_, e = db.Exec(insertPostForUser)
-	if DidFail(e, "insert post to user") {
+	cont := DBCreateUserCont(mainDB, ucpCreated, post.UserID, post.ID, -1)
+	if cont.PostID == 0 {
 		return Post{}
 	}
 

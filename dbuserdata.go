@@ -483,7 +483,7 @@ func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmo
 
 	fmt.Println(getTags)
 	rows, e := db.Query(getTags)
-	if DidFail(e, "get tags") {
+	if DidFail(e, "get tags", getTags) {
 		return []UserPrefTag{}
 	}
 	defer rows.Close()
@@ -532,13 +532,35 @@ func ScanUserConts(rows *sql.Rows) []UserCont {
 	return result
 }
 
-func DBGetUserContPost(db *sql.DB, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []PostResult {
+type UserContPlaylist int
+
+const (
+	ucpCreated UserContPlaylist = iota
+	ucpViewed
+	ucpReadLater
+)
+
+func DBCreateUserCont(db *sql.DB, kind UserContPlaylist, userId int64, postId int64, commentId int64) UserCont {
+	query := fmt.Sprintf(`
+	INSERT INTO UserCont(userId, postId, commentId, kind)
+	VALUES(%d, %d, %d, %d)
+	RETURNING %s;
+	`, userId, postId, commentId, kind, SQLFieldsForUserCont())
+	row := db.QueryRow(query)
+	userCont, e := ScanUserCont(row)
+	if DidFail(e, "insert into user cont") {
+		return UserCont{}
+	}
+	return userCont
+}
+
+func DBGetUserContPost(db *sql.DB, kind UserContPlaylist, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []PostResult {
 	query := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 	FROM UserCont up 
 	JOIN posts p ON up.postId = p.id 
 	JOIN users u ON p.userId = u.id
-	WHERE up.userId = %d AND p.trashed=false AND up.commentId <= 0
-	`, SQLFieldsForPostResultAlias(), userId)
+	WHERE up.userId = %d AND p.trashed=false AND up.commentId <= 0 AND kind = %d
+	`, SQLFieldsForPostResultAlias(), userId, kind)
 
 	if len(tags) > 0 {
 		queryTags := SQLFormattedArray(tags)

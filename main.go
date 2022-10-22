@@ -37,6 +37,8 @@ func main() {
 		// Sign in
 		v1.POST("/auth/callbacks/sign-in", APISignIn)
 		v1.POST("/auth/callbacks/sign-in-with-apple", APISignInWithApple)
+		v1.POST("/auth/verification/users/:uid", APIResendVerificationLink)
+		v1.GET("/users/:uid/verification/:key", APIVerifyUserEmail)
 		// Create
 		v1.POST("/users", APICreateUser)
 		v1.POST("/posts", APICreatePost)
@@ -51,7 +53,9 @@ func main() {
 		v1.GET("/users/:uid/prefs/posts", APIGetUserPrefPosts)
 		v1.GET("/users/:uid/prefs/comments", APIGetUserPrefComments)
 		v1.GET("/users/:uid/prefs/tags", APIGetUserPrefTags)
-		v1.GET("/users/:uid/content/posts", APIGetUserContPost)
+		v1.GET("/users/:uid/content/posts", APIGetUserContPost(ucpCreated))
+		v1.GET("/users/:uid/content/posts/read-later", APIGetUserContPost(ucpReadLater))
+		v1.GET("/users/:uid/content/posts/viewed", APIGetUserContPost(ucpViewed))
 		v1.GET("/users/:uid/content/comments", APIGetUserContComments)
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
@@ -66,6 +70,9 @@ func main() {
 		v1.POST("/users/:uid", APIVoteUser)
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
+
+		v1.POST("/users/:uid/content/posts/:pid/read-later", APIAddPostToPlaylist(ucpReadLater))
+		v1.POST("/users/:uid/content/posts/:pid/viewed", APIAddPostToPlaylist(ucpViewed))
 
 		v1.POST("/users/:uid/watch", APIWatchUser)
 		v1.GET("/users/:uid/blacklist/:tid", APIBlacklistUser)

@@ -61,7 +61,7 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	tagArray := SQLFormattedArray(tags)
 
 	upsertTags := fmt.Sprintf(`
-	INSERT INTO tags (name)
+	INSERT INTO tags p (name)
 	VALUES %s ON CONFLICT (name) DO NOTHING;
 	SELECT %s
 	FROM Tags p
@@ -91,7 +91,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 		upvoteAmount = -upvoteAmount
 	}
 	upsertTags := fmt.Sprintf(`
-	UPDATE tags SET 
+	UPDATE tags p SET 
 	%s = %s + %d
 	WHERE id = ANY(%s)
 	RETURNING %s;

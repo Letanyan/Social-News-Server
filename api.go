@@ -58,8 +58,30 @@ func APICreateUser(c *gin.Context) {
 		return
 	}
 
+	validUsername := validateLength("username", input.Name, 3, 15)
+	if len(validUsername) > 0 {
+		APIReturn(c, false, validUsername)
+		return
+	}
+	validPassword := validateLength("password", input.Password, 8, 2048)
+	if len(validPassword) > 0 {
+		APIReturn(c, false, validPassword)
+		return
+	}
+	if !validEmailMatch(input.Email) {
+		APIReturn(c, false, "email address appears to be invalid")
+		return
+	}
+
+	emailTaken := DBContainsEmail(mainDB, input.Email)
+	if emailTaken {
+		APIReturn(c, false, "the email address "+input.Email+" is already taken")
+		return
+	}
+
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID != 0 {
+		SendValidationKey(user.ID, user.Email, user.ValidationKey)
 		APIReturn(c, true, user)
 	} else {
 		APIReturn(c, false, "could not create user")
@@ -496,53 +518,55 @@ func APIGetUserPrefTags(c *gin.Context) {
 	APIReturn(c, true, result)
 }
 
-func APIGetUserContPost(c *gin.Context) {
-	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
-	if APIFailed(c, e, "invalid uid given") {
-		return
-	}
+func APIGetUserContPost(kind UserContPlaylist) func(*gin.Context) {
+	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid uid given") {
+			return
+		}
 
-	location := strings.Split(c.DefaultQuery("location", ""), ",")
-	if len(location) == 1 && location[0] == "" {
-		location = []string{}
-	}
-	tags := strings.Split(c.DefaultQuery("tags", ""), ",")
-	if len(tags) == 1 && tags[0] == "" {
-		tags = []string{}
-	}
+		location := strings.Split(c.DefaultQuery("location", ""), ",")
+		if len(location) == 1 && location[0] == "" {
+			location = []string{}
+		}
+		tags := strings.Split(c.DefaultQuery("tags", ""), ",")
+		if len(tags) == 1 && tags[0] == "" {
+			tags = []string{}
+		}
 
-	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
-	if APIFailed(c, e, "invalid upvotes value given") {
-		return
+		upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+		if APIFailed(c, e, "invalid upvotes value given") {
+			return
+		}
+
+		downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+		if APIFailed(c, e, "invalid downvotes value given") {
+			return
+		}
+
+		order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+		if APIFailed(c, e, "invalid order given") {
+			return
+		}
+
+		offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+		if APIFailed(c, e, "invalid offset given") {
+			return
+		}
+
+		limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+		if APIFailed(c, e, "invalid limit given") {
+			return
+		}
+
+		now := utc()
+		lastWeek := now.AddDate(0, 0, -7)
+		startDate := c.DefaultQuery("start", formatTime(lastWeek))
+		endDate := c.DefaultQuery("end", formatTime(now))
+
+		result := DBGetUserContPost(mainDB, kind, uid, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+		APIReturn(c, true, result)
 	}
-
-	downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
-	if APIFailed(c, e, "invalid downvotes value given") {
-		return
-	}
-
-	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
-	if APIFailed(c, e, "invalid order given") {
-		return
-	}
-
-	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
-	if APIFailed(c, e, "invalid offset given") {
-		return
-	}
-
-	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
-	if APIFailed(c, e, "invalid limit given") {
-		return
-	}
-
-	now := utc()
-	lastWeek := now.AddDate(0, 0, -7)
-	startDate := c.DefaultQuery("start", formatTime(lastWeek))
-	endDate := c.DefaultQuery("end", formatTime(now))
-
-	result := DBGetUserContPost(mainDB, uid, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
-	APIReturn(c, true, result)
 }
 
 func APIGetUserContComments(c *gin.Context) {
@@ -942,6 +966,25 @@ func APIVoteComment(c *gin.Context) {
 	}
 }
 
+func APIAddPostToPlaylist(kind UserContPlaylist) func(*gin.Context) {
+	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid user id") {
+			APIReturn(c, false, "invalid user id")
+			return
+		}
+
+		pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+		if APIFailed(c, e, "invalid post id") {
+			APIReturn(c, false, "invalid post id")
+			return
+		}
+
+		cont := DBCreateUserCont(mainDB, kind, uid, pid, -1)
+		APIReturn(c, true, cont)
+	}
+}
+
 func APIPurchaseCredit(c *gin.Context) {
 	type Input struct {
 		Amount int64 `json:"amount"`
@@ -1129,4 +1172,47 @@ jAhjLaPD
 
 	// Voila!
 	fmt.Println(unique)
+}
+
+func APIResendVerificationLink(c *gin.Context) {
+	type Input struct {
+		Email string `json:"email"`
+		Key   int32  `json:"key"`
+	}
+
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for verification link") {
+		APIFailed(c, e, "invalid input values")
+		return
+	}
+
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		APIReturn(c, false, "invalid user id")
+		return
+	}
+
+	SendValidationKey(uid, in.Email, in.Key)
+	APIReturn(c, true, 0)
+}
+
+func APIVerifyUserEmail(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		APIReturn(c, false, "invalid user id")
+		return
+	}
+
+	key, e := strconv.ParseInt(c.Param("key"), 10, 32)
+	if APIFailed(c, e, "invalid key") {
+		APIReturn(c, false, "invalid key")
+		return
+	}
+
+	res := DBValidateUser(mainDB, uid, int32(key))
+	if res {
+		APIReturn(c, true, 1)
+	} else {
+		APIReturn(c, false, "invalid verification key")
+	}
 }

@@ -18,7 +18,7 @@ type User struct {
 	Upvotes       float64
 	Downvotes     float64
 	Credits       int32
-	ValidationKey int64
+	ValidationKey int32
 }
 
 type UserProfile struct {
@@ -83,16 +83,29 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []User {
 	return result
 }
 
-func DBVerifyUserName(name string) bool {
-	return len(name) <= 21 && len(name) > 0
+type UserValidationError int
+
+func validateLength(name string, value string, min int, max int) string {
+	if len(value) > max {
+		return fmt.Sprintf("%s must be at most %d characters long", name, max)
+	}
+	if len(value) < min {
+		return fmt.Sprintf("%s must be at least %d characters long", name, min)
+	}
+	return ""
 }
 
-func DBIsValidEmail(db *sql.DB, email string) bool {
+func DBContainsEmail(db *sql.DB, email string) bool {
 	isUsed := `SELECT email FROM users WHERE email = $1`
-	res := db.QueryRow(isUsed, email)
+	res, e := db.Query(isUsed, email)
+	if DidFail(e, "get matching email") {
+		return true
+	}
 	var found string
-	e := res.Scan(&found)
-	return e != nil
+	for res.Next() {
+		res.Scan(&found)
+	}
+	return len(found) > 0
 }
 
 func DBHashPassword(password string) string {
@@ -110,7 +123,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	insertUser := fmt.Sprintf(`INSERT INTO users(name, email, password, validationKey) 
 	VALUES ($1, $2, $3, $4) RETURNING %s`, SQLFieldsForUser())
 	rand.Seed(utc().UnixNano())
-	vKey := rand.Int63()
+	vKey := rand.Int31()
 	row := db.QueryRow(insertUser, name, email, DBHashPassword(password), vKey)
 	user, e := ScanUser(row)
 	if DidFail(e, "create and get user") {
@@ -120,7 +133,7 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	return user
 }
 
-func DBValidateUser(db *sql.DB, userId int64, key int64) bool {
+func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
 	validate := `UPDATE users SET validationKey = 0 WHERE id = $1 AND validationKey = $2 RETURNING id, validationKey`
 	row := db.QueryRow(validate, userId, key)
 	e := row.Scan(&userId, &key)
@@ -130,12 +143,12 @@ func DBValidateUser(db *sql.DB, userId int64, key int64) bool {
 	return key == 0
 }
 
-func SendValidationKey(userId int64, email string, key int64) {
+func SendValidationKey(userId int64, email string, key int32) {
 	host := "smtp.gmail.com"
 	port := "587"
-	from := "from email goes here"
-	auth := smtp.PlainAuth("", from, "password for the from email", host)
-	mess := fmt.Sprintf("to verify your email please click the link https://localhost:8080/verify?id=%d&key=%d", userId, key)
+	from := "letanyan.a@gmail.com"
+	auth := smtp.PlainAuth("", from, "wlyoihckobjsbzlv", host)
+	mess := fmt.Sprintf("To verify your email please click the link https://localhost:8080/api/v1/users/%d/verification/%d", userId, key)
 	message := []byte(mess)
 
 	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, message)
@@ -182,7 +195,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	}
 	row := db.QueryRow(getUser, arg)
 	user, e := ScanUser(row)
-	if DidFail(e, "get user from email/id", arg) {
+	if DidFail(e, "get user from email/id ", arg) {
 		return User{}
 	}
 

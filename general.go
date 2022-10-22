@@ -1,6 +1,9 @@
 package main
 
-import "unicode"
+import (
+	"regexp"
+	"unicode"
+)
 
 func replaceUnicode(original string, shouldRemove func(rune) bool) string {
 	result := ""
@@ -39,4 +42,16 @@ func ContainsItem[I comparable](item I, list []I) bool {
 		}
 	}
 	return false
+}
+
+func validMatch(value string, pattern string) bool {
+	regex, e := regexp.Compile(pattern)
+	if DidFail(e, "build regex pattern", pattern) {
+		return false
+	}
+	return regex.Match([]byte(value))
+}
+
+func validEmailMatch(value string) bool {
+	return validMatch(value, `\b[\w.!#$%&’*+\/=?^`+"`"+`{|}~-]+@[\w-]+(?:\.[\w-]+)*\b`)
 }
