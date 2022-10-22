@@ -252,7 +252,7 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 }
 
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
-func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popularIn []string,
+func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
 	start string, end string, startDate string, endDate string, forUser int64, search string) []PostResult {
 	voteTable := "p"
@@ -273,7 +273,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 		cond = append(cond, fmt.Sprintf("p.userId = %d", userId))
 	}
 	if len(tags) > 0 {
-		queryTags := SQLFormattedArray(tags)
+		queryTags := SQLFormattedIndexArray(tags)
 		cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 	}
 	if len(origin) > 0 {
@@ -283,7 +283,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []string, origin []string, popula
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	if usingVotesTable {
 		joins += "JOIN Votes v ON v.pid = p.id\n"
-		cond = append(cond, "kind=3")
+		cond = append(cond, "v.kind=3")
 	}
 
 	getPosts := SQLGetItems("Posts p", voteTable, SQLFieldsForPostResultAlias(),

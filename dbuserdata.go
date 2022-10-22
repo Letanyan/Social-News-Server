@@ -273,7 +273,7 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 }
 
 func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmount int64,
-	downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder,
+	downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64) []UserPrefUser {
 	getUsers := fmt.Sprintf(`
 	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
@@ -303,6 +303,12 @@ func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmoun
 	} else if downvotes < 0 {
 		getUsers += fmt.Sprintf("AND u.downvotes < %d ", -downvotes)
 	}
+	if len(search) > 0 {
+		search, _ := DBPrepareSearchString(search)
+		if len(search) > 0 {
+			getUsers += fmt.Sprintf("AND u.Name @@ websearch_to_tsquery('%s') ", search)
+		}
+	}
 
 	getUsers += SQLSortOrder(sortOrder)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
@@ -318,8 +324,8 @@ func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmoun
 }
 
 func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64,
-	downvoteAmount int64, authorId int64, tags []string,
-	location []string, upvotes int64, downvotes int64, sortOrder SortOrder,
+	downvoteAmount int64, authorId int64, tags []int64,
+	location []string, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []UserPrefPost {
 	getPosts := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 		FROM UserPref up 
@@ -348,8 +354,15 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64,
 	if authorId != 0 {
 		getPosts += fmt.Sprintf("AND p.userId = %d ", authorId)
 	}
+	if len(search) > 0 {
+		search, altTags := DBPrepareSearchString(search)
+		tags = append(tags, altTags...)
+		if len(search) > 0 {
+			getPosts += fmt.Sprintf("AND p.Content @@ websearch_to_tsquery('%s') ", search)
+		}
+	}
 	if len(tags) > 0 {
-		queryTags := SQLFormattedArray(tags)
+		queryTags := SQLFormattedIndexArray(tags)
 		getPosts += fmt.Sprintf("AND %s && p.tags ", queryTags)
 	}
 	if len(location) > 0 {
@@ -383,7 +396,7 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64,
 
 func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
 	downvoteAmount int64, authorId int64, replyId int64,
-	upvotes int64, downvotes int64, sortOrder SortOrder,
+	upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []UserPrefComment {
 	getComments := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 		FROM UserPref up 
@@ -425,6 +438,12 @@ func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
 	} else if downvotes < 0 {
 		getComments += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
+	if len(search) > 0 {
+		search, _ := DBPrepareSearchString(search)
+		if len(search) > 0 {
+			getComments += fmt.Sprintf("AND p.Content @@ websearch_to_tsquery('%s') ", search)
+		}
+	}
 
 	getComments += SQLSortOrder(sortOrder)
 
@@ -442,7 +461,7 @@ func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
 
 func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64,
 	tags []string, location []string, upvotes int64, downvotes int64,
-	sortOrder SortOrder, limit int64, offset int64) []UserPrefTag {
+	sortOrder SortOrder, search string, limit int64, offset int64) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
 	JOIN tags t ON up.pid = t.id
@@ -477,11 +496,16 @@ func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmo
 	} else if downvotes < 0 {
 		getTags += fmt.Sprintf("t.downvotes < %d\n", -downvotes)
 	}
+	if len(search) > 0 {
+		search, _ := DBPrepareSearchString(search)
+		if len(search) > 0 {
+			getTags += fmt.Sprintf("AND t.Name @@ websearch_to_tsquery('%s') ", search)
+		}
+	}
 
 	getTags += SQLSortOrder(sortOrder)
 	getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
-	fmt.Println(getTags)
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags", getTags) {
 		return []UserPrefTag{}
@@ -554,7 +578,9 @@ func DBCreateUserCont(db *sql.DB, kind UserContPlaylist, userId int64, postId in
 	return userCont
 }
 
-func DBGetUserContPost(db *sql.DB, kind UserContPlaylist, userId int64, tags []string, location []string, upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, startDate string, endDate string) []PostResult {
+func DBGetUserContPost(db *sql.DB, kind UserContPlaylist, userId int64, tags []int64,
+	location []string, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
+	limit int64, offset int64, startDate string, endDate string) []PostResult {
 	query := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 	FROM UserCont up 
 	JOIN posts p ON up.postId = p.id 
@@ -562,8 +588,15 @@ func DBGetUserContPost(db *sql.DB, kind UserContPlaylist, userId int64, tags []s
 	WHERE up.userId = %d AND p.trashed=false AND up.commentId <= 0 AND kind = %d
 	`, SQLFieldsForPostResultAlias(), userId, kind)
 
+	if len(search) > 0 {
+		search, altTags := DBPrepareSearchString(search)
+		tags = append(tags, altTags...)
+		if len(search) > 0 {
+			query += fmt.Sprintf("AND p.Content @@ websearch_to_tsquery('%s') ", search)
+		}
+	}
 	if len(tags) > 0 {
-		queryTags := SQLFormattedArray(tags)
+		queryTags := SQLFormattedIndexArray(tags)
 		query += fmt.Sprintf("AND %s && p.tags ", queryTags)
 	}
 	if len(location) > 0 {
@@ -605,7 +638,7 @@ func DBGetUserContPost(db *sql.DB, kind UserContPlaylist, userId int64, tags []s
 }
 
 func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int64,
-	upvotes int64, downvotes int64, sortOrder SortOrder,
+	upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []CommentResult {
 	getComments := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 		FROM UserCont up 
@@ -636,6 +669,12 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 		getComments += fmt.Sprintf("AND p.downvotes > %d ", downvotes)
 	} else if downvotes < 0 {
 		getComments += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
+	}
+	if len(search) > 0 {
+		search, _ := DBPrepareSearchString(search)
+		if len(search) > 0 {
+			getComments += fmt.Sprintf("AND p.Content @@ websearch_to_tsquery('%s') ", search)
+		}
 	}
 
 	getComments += SQLSortOrder(sortOrder)

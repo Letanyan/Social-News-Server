@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"unicode"
 )
@@ -35,6 +36,10 @@ func isNotAlphanumeric(c rune) bool {
 	return !(unicode.IsLetter(c) || unicode.IsNumber(c))
 }
 
+func isNotAlphanumericWhitespace(c rune) bool {
+	return !(unicode.IsLetter(c) || unicode.IsNumber(c) || unicode.IsSpace(c))
+}
+
 func ContainsItem[I comparable](item I, list []I) bool {
 	for _, x := range list {
 		if x == item {
@@ -54,4 +59,35 @@ func validMatch(value string, pattern string) bool {
 
 func validEmailMatch(value string) bool {
 	return validMatch(value, `\b[\w.!#$%&’*+\/=?^`+"`"+`{|}~-]+@[\w-]+(?:\.[\w-]+)*\b`)
+}
+
+func DBPrepareSearchString(query string) (string, []int64) {
+	tagRe, e := regexp.Compile(`#\(?([\w\d\s]+)\)?`)
+	tagNames := []string{}
+	tags := []int64{}
+	if DidFail(e, "compile tag regex") {
+		query = replaceUnicode(query, isNotAlphanumericWhitespace)
+		return query, tags
+	}
+	query = tagRe.ReplaceAllStringFunc(query, func(m string) string {
+		fmt.Println(m)
+		if m[1] == '(' {
+			m = m[2:]
+		} else {
+			m = m[1:]
+		}
+		if m[len(m)-1] == ')' {
+			m = m[:len(m)-1]
+		}
+		tagNames = append(tagNames, m)
+		return ""
+	})
+	query = replaceUnicode(query, isNotAlphanumericWhitespace)
+
+	tagObjs := DBGetTags(mainDB, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
+	for _, t := range tagObjs {
+		tags = append(tags, t.ID)
+	}
+
+	return query, tags
 }

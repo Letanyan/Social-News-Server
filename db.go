@@ -33,6 +33,7 @@ func DBUsersSetup(db *sql.DB) {
 	_, e := db.Exec(createUsers)
 	DidFail(e, "create users table")
 
+	// FIXME: add created at and updated at dates for UserCont and UserPref tables
 	createUserContentTable := `CREATE TABLE IF NOT EXISTS UserCont (
 		userId BIGINT NOT NULL,
 		postId BIGINT NOT NULL,

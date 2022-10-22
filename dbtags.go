@@ -61,7 +61,7 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	tagArray := SQLFormattedArray(tags)
 
 	upsertTags := fmt.Sprintf(`
-	INSERT INTO tags p (name)
+	INSERT INTO tags (name)
 	VALUES %s ON CONFLICT (name) DO NOTHING;
 	SELECT %s
 	FROM Tags p
@@ -177,7 +177,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	cond := []string{}
 	joins := ""
-	if id != 0 {
+	if id > 0 {
 		cond = append(cond, fmt.Sprintf("p.id = %d\n", id))
 	} else {
 		if len(tags) > 0 {

@@ -42,7 +42,7 @@ func SQLFormattedArray(array []string) string {
 func SQLFormattedIndexArray(array []int64) string {
 	result := "'{"
 	for i, s := range array {
-		result += fmt.Sprintf("\"%d\"", s)
+		result += fmt.Sprintf("%d", s)
 		if i < len(array)-1 {
 			result += ","
 		}

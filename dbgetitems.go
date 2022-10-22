@@ -19,8 +19,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			SELECT * 
 			FROM UserPref
 			WHERE uid=%d
-		),
-		Total AS (
+		), Total AS (
 			SELECT SUM(upvotes) up, SUM(downvotes) down
 			FROM UserPrefs
 			WHERE kind=4
@@ -77,9 +76,17 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	if len(search) > 0 {
 		// FIXME: sanitize search string
 		if table == "Posts p" || table == "Comments p" {
-			cond = append(cond, fmt.Sprintf("p.content LIKE '%%%s%%'", search))
+			search, altTags := DBPrepareSearchString(search)
+			if table == "Posts p" && len(altTags) > 0 {
+				queryTags := SQLFormattedIndexArray(altTags)
+				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
+			}
+			if len(search) > 0 {
+				cond = append(cond, fmt.Sprintf("p.content @@ websearch_to_tsquery('%s')", search))
+			}
 		} else if table == "Users p" || table == "Tags p" {
-			cond = append(cond, fmt.Sprintf("p.name LIKE '%%%s%%'", search))
+			search, _ := DBPrepareSearchString(search)
+			cond = append(cond, fmt.Sprintf("p.name @@ websearch_to_tsquery('%s')", search))
 		}
 	}
 

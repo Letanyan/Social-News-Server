@@ -101,9 +101,6 @@ func main() {
 
 	// DBClearAllTables(db)
 
-	DBVoteComment(mainDB, 1, 3, 102022, 10, []string{}, formatTime(utc()))
-	DBVoteComment(mainDB, 1, 5, 422022, 15, []string{}, formatTime(utc()))
-
 	DBSetup(mainDB)
 
 	agents = NAReadAllNewsAgents()

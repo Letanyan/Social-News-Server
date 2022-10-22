@@ -17,8 +17,8 @@ const (
 	frHarassment
 	frHarmful
 	frAbuse
-	frTerror
 	frSpam
+	frOther
 )
 
 type FlaggedContent struct {

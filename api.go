@@ -339,8 +339,9 @@ func APIGetUserPrefUsers(c *gin.Context) {
 	if isBlacklist == 1 {
 		kind = upBlacklistUser
 	}
+	search := c.DefaultQuery("search", "")
 
-	users := DBGetUserPrefUsers(mainDB, kind, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, limit, offset)
+	users := DBGetUserPrefUsers(mainDB, kind, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
 	APIReturn(c, true, users)
 }
 
@@ -354,9 +355,16 @@ func APIGetUserPrefPosts(c *gin.Context) {
 	if len(location) == 1 && location[0] == "" {
 		location = []string{}
 	}
-	tags := strings.Split(c.DefaultQuery("tags", ""), ",")
-	if len(tags) == 1 && tags[0] == "" {
-		tags = []string{}
+	tags := []int64{}
+	stringTags := strings.Split(c.DefaultQuery("tags", ""), ",")
+	if !(len(stringTags) == 1 && stringTags[0] == "") {
+		for _, s := range stringTags {
+			t, e := strconv.ParseInt(s, 10, 64)
+			if DidFail(e, "convert tag index") {
+				continue
+			}
+			tags = append(tags, t)
+		}
 	}
 
 	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
@@ -401,8 +409,9 @@ func APIGetUserPrefPosts(c *gin.Context) {
 
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
+	search := c.DefaultQuery("search", "")
 
-	posts := DBGetUserPrefPosts(mainDB, uid, upvoteAmount, downvoteAmount, author, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	posts := DBGetUserPrefPosts(mainDB, uid, upvoteAmount, downvoteAmount, author, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, posts)
 }
 
@@ -459,8 +468,9 @@ func APIGetUserPrefComments(c *gin.Context) {
 
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
+	search := c.DefaultQuery("search", "")
 
-	comments := DBGetUserPrefComments(mainDB, uid, upvoteAmount, downvoteAmount, author, replyId, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	comments := DBGetUserPrefComments(mainDB, uid, upvoteAmount, downvoteAmount, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
 }
 
@@ -514,7 +524,9 @@ func APIGetUserPrefTags(c *gin.Context) {
 		return
 	}
 
-	result := DBGetUserPrefTags(mainDB, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, limit, offset)
+	search := c.DefaultQuery("search", "")
+
+	result := DBGetUserPrefTags(mainDB, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset)
 	APIReturn(c, true, result)
 }
 
@@ -529,9 +541,16 @@ func APIGetUserContPost(kind UserContPlaylist) func(*gin.Context) {
 		if len(location) == 1 && location[0] == "" {
 			location = []string{}
 		}
-		tags := strings.Split(c.DefaultQuery("tags", ""), ",")
-		if len(tags) == 1 && tags[0] == "" {
-			tags = []string{}
+		tags := []int64{}
+		stringTags := strings.Split(c.DefaultQuery("tags", ""), ",")
+		if !(len(stringTags) == 1 && stringTags[0] == "") {
+			for _, s := range stringTags {
+				t, e := strconv.ParseInt(s, 10, 64)
+				if DidFail(e, "convert tag index") {
+					continue
+				}
+				tags = append(tags, t)
+			}
 		}
 
 		upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
@@ -563,8 +582,9 @@ func APIGetUserContPost(kind UserContPlaylist) func(*gin.Context) {
 		lastWeek := now.AddDate(0, 0, -7)
 		startDate := c.DefaultQuery("start", formatTime(lastWeek))
 		endDate := c.DefaultQuery("end", formatTime(now))
+		search := c.DefaultQuery("search", "")
 
-		result := DBGetUserContPost(mainDB, kind, uid, tags, location, upvotes, downvotes, order, limit, offset, startDate, endDate)
+		result := DBGetUserContPost(mainDB, kind, uid, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 		APIReturn(c, true, result)
 	}
 }
@@ -612,8 +632,9 @@ func APIGetUserContComments(c *gin.Context) {
 
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
+	search := c.DefaultQuery("search", "")
 
-	comments := DBGetUserContComments(mainDB, uid, author, replyId, upvotes, downvotes, order, limit, offset, startDate, endDate)
+	comments := DBGetUserContComments(mainDB, uid, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
 }
 
@@ -650,9 +671,16 @@ func APIGetPosts(c *gin.Context) {
 		popularIn = []string{}
 	}
 
-	tags := strings.Split(c.DefaultQuery("tags", ""), ",")
-	if len(tags) == 1 && tags[0] == "" {
-		tags = []string{}
+	tags := []int64{}
+	stringTags := strings.Split(c.DefaultQuery("tags", ""), ",")
+	if !(len(stringTags) == 1 && stringTags[0] == "") {
+		for _, s := range stringTags {
+			t, e := strconv.ParseInt(s, 10, 64)
+			if DidFail(e, "convert tag index") {
+				continue
+			}
+			tags = append(tags, t)
+		}
 	}
 
 	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
