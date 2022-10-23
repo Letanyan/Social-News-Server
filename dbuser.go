@@ -53,11 +53,11 @@ func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	return u, e
 }
 
-func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []User {
-	result := []User{}
+func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []UserProfile {
+	result := []UserProfile{}
 	var e error
 	for rows.Next() {
-		u := User{}
+		u := UserProfile{}
 		var score float64
 		var cred float64
 		var up float64
@@ -204,7 +204,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 
 func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
-	startDate string, endDate string, forUser int64, search string) []User {
+	startDate string, endDate string, forUser int64, search string) []UserProfile {
 	voteTable := "p"
 	if len(popularIn) > 0 {
 		voteTable = "v"
@@ -225,7 +225,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 
 	rows, e := db.Query(getUsers)
 	if DidFail(e, "get users", getUsers) {
-		return []User{}
+		return []UserProfile{}
 	}
 
 	result := ScanUserProfiles(rows, true, usingVotesTable)

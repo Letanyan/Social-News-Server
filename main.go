@@ -44,9 +44,15 @@ func main() {
 		v1.POST("/posts", APICreatePost)
 		v1.POST("/posts/:pid/comments", APICreateComment)
 		// Delete
-		v1.DELETE("/users/:uid", APIDeleteUser)
-		v1.DELETE("/posts/:pid", APIDeletePost)
-		v1.DELETE("/posts/:pid/comments/:cid", APIDeleteComment)
+		v1.POST("/trash/users/:uid", APIDeleteUser)
+		v1.POST("/trash/posts/:pid", APIDeletePost)
+		v1.POST("/trash/posts/:pid/comments/:cid", APIDeleteComment)
+
+		v1.POST("/trash/users/:uid/content/posts/read-later/:pid", APIDeleteUserContPlaylist(ucpReadLater))
+		v1.POST("/trash/users/:uid/content/posts/viewed/:pid", APIDeleteUserContPlaylist(ucpViewed))
+		v1.POST("/trash/users/:uid/content/user-follows/:pid", APIDeleteUserContPlaylist(ucpUserFollow))
+		v1.POST("/trash/users/:uid/content/ignored/:pid", APIDeleteUserContPlaylist(ucpUserIgnored))
+
 		// Get
 		v1.GET("/users/:uid", APIGetUser)
 		v1.GET("/users/:uid/prefs/users", APIGetUserPrefUsers)
@@ -57,6 +63,8 @@ func main() {
 		v1.GET("/users/:uid/content/posts/read-later", APIGetUserContPost(ucpReadLater))
 		v1.GET("/users/:uid/content/posts/viewed", APIGetUserContPost(ucpViewed))
 		v1.GET("/users/:uid/content/comments", APIGetUserContComments)
+		v1.GET("/users/:uid/content/user-follows", APIGetUserContUsers(ucpUserFollow))
+		v1.GET("/users/:uid/content/ignored", APIGetUserContUsers(ucpUserIgnored))
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
 		v1.GET("/posts", APIGetPosts)
@@ -71,16 +79,17 @@ func main() {
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
 
-		v1.POST("/users/:uid/content/posts/:pid/read-later", APIAddPostToPlaylist(ucpReadLater))
-		v1.POST("/users/:uid/content/posts/:pid/viewed", APIAddPostToPlaylist(ucpViewed))
+		v1.POST("/users/:uid/content/posts/read-later", APIAddUserCont(ucpReadLater))
+		v1.POST("/users/:uid/content/posts/viewed", APIAddUserCont(ucpViewed))
+		v1.POST("/users/:uid/content/user-follows", APIAddUserCont(ucpUserFollow))
+		v1.POST("/users/:uid/content/ignored", APIAddUserCont(ucpUserIgnored))
 
 		v1.POST("/users/:uid/watch", APIWatchUser)
-		v1.GET("/users/:uid/blacklist/:tid", APIBlacklistUser)
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)
 		v1.GET("/flags", APIGetFlags)
-		v1.DELETE("/flags/:id", APIHandleFlag)
+		v1.POST("/trash/flags/:id", APIHandleFlag)
 	}
 
 	apih := router.Group("/apih")

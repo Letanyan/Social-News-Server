@@ -29,6 +29,7 @@ type WebsiteScrapings struct {
 	Authors     []string
 	Image       string
 	Type        string
+	Date        time.Time
 }
 
 func NACreateNewsAgent(id int64, name string, origin string) (NewsAgent, error) {
@@ -214,6 +215,8 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	description := ""
 	authors := []string{}
 	contentType := ""
+	modTime := ""
+	pubTime := ""
 
 	getHTMLNodes(node, false, func(n *html.Node) bool {
 		if n.Type == html.ElementNode {
@@ -237,6 +240,10 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 					tags = append(tags, tagFormat(getFirstValForAttr(n, "content")))
 				} else if names["og:type"] || properties["og:type"] {
 					contentType = getFirstValForAttr(n, "content")
+				} else if names["article:modified_time"] || properties["article:modified_time"] {
+					modTime = getFirstValForAttr(n, "content")
+				} else if names["article:published_time"] || properties["article:published_time"] {
+					pubTime = getFirstValForAttr(n, "content")
 				}
 			case "a":
 				links = append(links, getFirstValForAttr(n, "href"))
@@ -266,7 +273,14 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 
 	title := strings.TrimSpace(titleText)
 
-	return WebsiteScrapings{title, description, links, tags, authors, image, contentType}
+	date := utc()
+	if len(modTime) > 0 {
+		date = parseTime(modTime)
+	} else if len(pubTime) > 0 {
+		date = parseTime(pubTime)
+	}
+
+	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, date}
 }
 
 func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
@@ -288,5 +302,5 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 		}
 	}
 
-	DBCreatePost(mainDB, userId, body, scrape.Tags, []string{})
+	DBCreatePost(mainDB, userId, body, scrape.Date, scrape.Tags, []string{})
 }

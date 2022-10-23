@@ -11,7 +11,7 @@ import (
 type FlagReason int
 
 const (
-	frSexual FlagReason = iota + 1
+	frSexual FlagReason = iota
 	frViolent
 	frHateful
 	frHarassment

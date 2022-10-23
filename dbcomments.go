@@ -159,7 +159,7 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 	%s
 	UPDATE UserCont 
 	SET trashed=true 
-	WHERE userId=%d AND postId=%d AND commentId=%d`,
+	WHERE uid=%d AND pid=%d AND sid=%d`,
 		updateReplyCount, userId, postId, commentId)
 	_, e = db.Exec(deletePostFromUser)
 	DidFail(e, "delete comment ", commentId, " for post ", postId, " for user ", userId)

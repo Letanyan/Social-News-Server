@@ -107,9 +107,12 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
 	return result
 }
 
-func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, location []string) Post {
+func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time, tags []string, location []string) Post {
 	t := utc()
 	nowTime := formatTime(t)
+	if !createdAt.IsZero() {
+		nowTime = formatTime(createdAt)
+	}
 
 	tagObjects := DBCreateTags(db, tags)
 	tagIndices := []int64{}
@@ -128,7 +131,7 @@ func DBCreatePost(db *sql.DB, userId int64, content string, tags []string, locat
 	}
 
 	cont := DBCreateUserCont(mainDB, ucpCreated, post.UserID, post.ID, -1)
-	if cont.PostID == 0 {
+	if cont.pid == 0 {
 		return Post{}
 	}
 
@@ -194,7 +197,7 @@ func DBDeletePost(db *sql.DB, postId int64) {
 type SortOrder int
 
 const (
-	soScore SortOrder = iota + 1
+	soScore SortOrder = iota
 	soCred
 	soUpvotes
 	soDownvotes

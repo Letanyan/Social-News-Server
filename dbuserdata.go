@@ -10,11 +10,10 @@ import (
 type UserPrefKind int
 
 const (
-	upUser UserPrefKind = iota + 1
+	upUser UserPrefKind = iota
 	upComment
 	upPost
 	upTag
-	upBlacklistUser
 )
 
 type UserPref struct {
@@ -272,7 +271,7 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	return result
 }
 
-func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmount int64,
+func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64,
 	downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64) []UserPrefUser {
 	getUsers := fmt.Sprintf(`
@@ -280,7 +279,7 @@ func DBGetUserPrefUsers(db *sql.DB, kind UserPrefKind, userId int64, upvoteAmoun
 	FROM UserPref up 
 	JOIN users u ON up.pid = u.id 
 	WHERE kind=%d AND up.uid = %d
-	`, SQLFieldsForUserPrefUser(), kind, userId)
+	`, SQLFieldsForUserPrefUser(), upUser, userId)
 
 	if upvoteAmount > 0 {
 		getUsers += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
@@ -518,12 +517,12 @@ func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmo
 }
 
 type UserCont struct {
-	PostID    int64
-	CommentID int64
+	pid int64
+	sid int64
 }
 
 func SQLFieldsForUserCont() string {
-	return "postId, commentId"
+	return "pid, sid"
 }
 
 func SQLFieldsForUserContPost() string {
@@ -538,7 +537,7 @@ func SQLFieldsForUserContComment() string {
 
 func ScanUserCont(row *sql.Row) (UserCont, error) {
 	up := UserCont{}
-	e := row.Scan(&up.PostID, &up.CommentID)
+	e := row.Scan(&up.pid, &up.sid)
 	return up, e
 }
 
@@ -547,7 +546,7 @@ func ScanUserConts(rows *sql.Rows) []UserCont {
 	var e error
 	for rows.Next() {
 		up := UserCont{}
-		e = rows.Scan(&up.PostID, &up.CommentID)
+		e = rows.Scan(&up.pid, &up.sid)
 		if DidFail(e, "scan user pref") {
 			continue
 		}
@@ -556,36 +555,57 @@ func ScanUserConts(rows *sql.Rows) []UserCont {
 	return result
 }
 
-type UserContPlaylist int
+type UserContKind int
 
 const (
-	ucpCreated UserContPlaylist = iota
+	ucpCreated UserContKind = iota
 	ucpViewed
 	ucpReadLater
+	ucpUserFollow
+	ucpUserIgnored
 )
 
-func DBCreateUserCont(db *sql.DB, kind UserContPlaylist, userId int64, postId int64, commentId int64) UserCont {
+func DBCreateUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64, commentId int64) UserCont {
 	query := fmt.Sprintf(`
-	INSERT INTO UserCont(userId, postId, commentId, kind)
+	INSERT INTO UserCont(uid, pid, sid, kind)
 	VALUES(%d, %d, %d, %d)
+	ON CONFLICT (uid, pid, sid, kind) DO NOTHING
+	RETURNING %s;
+	`, userId, postId, commentId, kind, SQLFieldsForUserCont())
+	rows, e := db.Query(query)
+	if DidFail(e, "insert into user cont") {
+		return UserCont{}
+	}
+	userCont := ScanUserConts(rows)
+	if len(userCont) > 0 {
+		return userCont[0]
+	} else {
+		return UserCont{}
+	}
+}
+
+func DBDeleteUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64, commentId int64) UserCont {
+	query := fmt.Sprintf(`
+	DELETE FROM UserCont
+	WHERE uid=%d AND pid=%d AND sid=%d AND kind=%d
 	RETURNING %s;
 	`, userId, postId, commentId, kind, SQLFieldsForUserCont())
 	row := db.QueryRow(query)
 	userCont, e := ScanUserCont(row)
-	if DidFail(e, "insert into user cont") {
+	if DidFail(e, "delete from user cont") {
 		return UserCont{}
 	}
 	return userCont
 }
 
-func DBGetUserContPost(db *sql.DB, kind UserContPlaylist, userId int64, tags []int64,
+func DBGetUserContPost(db *sql.DB, kind UserContKind, userId int64, tags []int64,
 	location []string, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []PostResult {
 	query := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 	FROM UserCont up 
-	JOIN posts p ON up.postId = p.id 
+	JOIN posts p ON up.pid = p.id 
 	JOIN users u ON p.userId = u.id
-	WHERE up.userId = %d AND p.trashed=false AND up.commentId <= 0 AND kind = %d
+	WHERE up.uid = %d AND p.trashed=false AND up.sid <= 0 AND kind = %d
 	`, SQLFieldsForPostResultAlias(), userId, kind)
 
 	if len(search) > 0 {
@@ -642,9 +662,9 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	limit int64, offset int64, startDate string, endDate string) []CommentResult {
 	getComments := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 		FROM UserCont up 
-		JOIN Comments p ON up.postId = p.postId AND up.commentId = p.id
+		JOIN Comments p ON up.pid = p.postId AND up.sid = p.id
 		JOIN Users u ON p.userId = u.id
-		WHERE up.commentid > 0 AND up.userid = %d AND p.trashed=false 
+		WHERE up.sid > 0 AND up.uid = %d AND p.trashed=false 
 		`, SQLFieldsForCommentResultAlias(), userId)
 
 	if len(startDate) > 0 && len(endDate) > 0 {
@@ -688,5 +708,22 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	defer rows.Close()
 
 	result := ScanCommentResults(rows, false)
+	return result
+}
+
+func DBGetUserContUsers(db *sql.DB, userId int64, kind UserContKind) []UserProfile {
+	query := fmt.Sprintf(`SELECT %s 
+	FROM UserCont up
+	JOIN Users p ON up.pid = p.id
+	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d
+	`, SQLFieldsForUserProfile(), userId, kind)
+
+	rows, e := db.Query(query)
+	result := []UserProfile{}
+	if DidFail(e, "get user content") {
+		return result
+	}
+	result = ScanUserProfiles(rows, false, false)
+
 	return result
 }

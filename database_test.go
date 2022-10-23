@@ -3,6 +3,7 @@ package main
 import (
 	"math/rand"
 	"testing"
+	"time"
 )
 
 func TestDatabase(t *testing.T) {
@@ -167,7 +168,7 @@ func TestDatabase(t *testing.T) {
 	for i, tc := range posts {
 		t.Run(tc.content, func(t *testing.T) {
 			rand.Seed(int64(i))
-			source := DBCreatePost(db, tc.userId, tc.content, tc.tags, tc.location)
+			source := DBCreatePost(db, tc.userId, tc.content, time.Time{}, tc.tags, tc.location)
 			post1 := DBGetPost(db, source.ID)
 			matchPost(source, post1)
 			matchUserProfile("", post1.Author, users[tc.userId-1])
@@ -186,10 +187,10 @@ func TestDatabase(t *testing.T) {
 				if comt.UserID != other.ID {
 					t.Errorf("comment user id not correct")
 				}
-				if cont.CommentID != comt.ID {
+				if cont.sid != comt.ID {
 					t.Errorf("comment id not correct on user cont")
 				}
-				if cont.PostID != comt.PostID {
+				if cont.pid != comt.PostID {
 					t.Errorf("comment post id not correct on user cont")
 				}
 			}

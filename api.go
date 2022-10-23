@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -105,7 +106,8 @@ func APICreatePost(c *gin.Context) {
 	if len(input.Location) == 0 {
 		input.Location = getAddress(c.ClientIP())
 	}
-	post := DBCreatePost(mainDB, input.UserID, input.Content, input.Tags, input.Location)
+	date := time.Time{}
+	post := DBCreatePost(mainDB, input.UserID, input.Content, date, input.Tags, input.Location)
 	if post.ID != 0 {
 		APIReturn(c, true, post)
 	} else {
@@ -179,6 +181,25 @@ func APIDeleteComment(c *gin.Context) {
 
 	DBDeleteComment(mainDB, pid, cid)
 	APIReturn(c, true, gin.H{})
+}
+
+func APIDeleteUserContPlaylist(kind UserContKind) func(*gin.Context) {
+	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid user id") {
+			APIReturn(c, false, "invalid user id")
+			return
+		}
+
+		pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+		if APIFailed(c, e, "invalid post/user id") {
+			APIReturn(c, false, "invalid post/user id")
+			return
+		}
+
+		cont := DBDeleteUserCont(mainDB, kind, uid, pid, -1)
+		APIReturn(c, true, cont)
+	}
 }
 
 // ------------------------------------------------------------------------
@@ -331,17 +352,9 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
-	isBlacklist, e := strconv.ParseInt(c.DefaultQuery("isBlacklist", "0"), 10, 64)
-	if APIFailed(c, e, "invalid blacklist value") {
-		return
-	}
-	kind := upUser
-	if isBlacklist == 1 {
-		kind = upBlacklistUser
-	}
 	search := c.DefaultQuery("search", "")
 
-	users := DBGetUserPrefUsers(mainDB, kind, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
+	users := DBGetUserPrefUsers(mainDB, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
 	APIReturn(c, true, users)
 }
 
@@ -530,7 +543,7 @@ func APIGetUserPrefTags(c *gin.Context) {
 	APIReturn(c, true, result)
 }
 
-func APIGetUserContPost(kind UserContPlaylist) func(*gin.Context) {
+func APIGetUserContPost(kind UserContKind) func(*gin.Context) {
 	return func(c *gin.Context) {
 		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 		if APIFailed(c, e, "invalid uid given") {
@@ -636,6 +649,18 @@ func APIGetUserContComments(c *gin.Context) {
 
 	comments := DBGetUserContComments(mainDB, uid, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
+}
+
+func APIGetUserContUsers(ucp UserContKind) func(*gin.Context) {
+	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid user id") {
+			return
+		}
+
+		users := DBGetUserContUsers(mainDB, uid, ucp)
+		APIReturn(c, true, users)
+	}
 }
 
 // ------------------------------------------------------------------------
@@ -994,7 +1019,7 @@ func APIVoteComment(c *gin.Context) {
 	}
 }
 
-func APIAddPostToPlaylist(kind UserContPlaylist) func(*gin.Context) {
+func APIAddUserCont(kind UserContKind) func(*gin.Context) {
 	return func(c *gin.Context) {
 		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 		if APIFailed(c, e, "invalid user id") {
@@ -1002,13 +1027,16 @@ func APIAddPostToPlaylist(kind UserContPlaylist) func(*gin.Context) {
 			return
 		}
 
-		pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
-		if APIFailed(c, e, "invalid post id") {
-			APIReturn(c, false, "invalid post id")
+		type Input struct {
+			PID int64 `json:"pid"`
+		}
+		var in Input
+		if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
+			APIFailed(c, e, "invalid input values")
 			return
 		}
 
-		cont := DBCreateUserCont(mainDB, kind, uid, pid, -1)
+		cont := DBCreateUserCont(mainDB, kind, uid, in.PID, -1)
 		APIReturn(c, true, cont)
 	}
 }
@@ -1048,28 +1076,11 @@ func APIWatchUser(c *gin.Context) {
 		Time float64 `json:"time"`
 	}
 	var input Input
-	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
-		APIFailed(c, e, "invalid input values")
+	if e := c.BindJSON(&input); APIFailed(c, e, "get input for vote post") {
 		return
 	}
 
 	pref := DBWatchUser(mainDB, uid, input.Tags, input.Time)
-
-	APIReturn(c, true, pref)
-}
-
-func APIBlacklistUser(c *gin.Context) {
-	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
-	if APIFailed(c, e, "invalid user id") {
-		return
-	}
-
-	tid, e := strconv.ParseInt(c.Param("tid"), 10, 64)
-	if APIFailed(c, e, "invalid target user id") {
-		return
-	}
-
-	pref := DBCreateUserPref(mainDB, uid, upBlacklistUser, tid, -1, -1)
 
 	APIReturn(c, true, pref)
 }
@@ -1088,8 +1099,7 @@ func APICreateFlag(c *gin.Context) {
 	}
 
 	var in Input
-	if e := c.BindJSON(&in); DidFail(e, "get input for flag") {
-		APIFailed(c, e, "invalid input values")
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for flag") {
 		return
 	}
 
@@ -1127,8 +1137,7 @@ func APIHandleFlag(c *gin.Context) {
 	}
 
 	var in Input
-	if e := c.BindJSON(&in); DidFail(e, "get input for flag") {
-		APIFailed(c, e, "invalid input values")
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for flag") {
 		return
 	}
 
@@ -1209,8 +1218,7 @@ func APIResendVerificationLink(c *gin.Context) {
 	}
 
 	var in Input
-	if e := c.BindJSON(&in); DidFail(e, "get input for verification link") {
-		APIFailed(c, e, "invalid input values")
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for verification link") {
 		return
 	}
 

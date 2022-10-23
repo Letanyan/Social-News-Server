@@ -35,13 +35,14 @@ func DBUsersSetup(db *sql.DB) {
 
 	// FIXME: add created at and updated at dates for UserCont and UserPref tables
 	createUserContentTable := `CREATE TABLE IF NOT EXISTS UserCont (
-		userId BIGINT NOT NULL,
-		postId BIGINT NOT NULL,
-		commentId BIGINT NOT NULL,
+		uid BIGINT NOT NULL,
+		pid BIGINT NOT NULL,
+		sid BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
+		kind SMALLINT DEFAULT 0,
 
-		PRIMARY KEY (userId, postId, commentId)
-	) PARTITION BY HASH(userId);`
+		PRIMARY KEY (uid, pid, sid)
+	) PARTITION BY HASH(uid);`
 	_, e = db.Exec(createUserContentTable)
 	DidFail(e, "create user content table")
 
@@ -73,7 +74,7 @@ func DBUsersSetup(db *sql.DB) {
 		CREATE TABLE IF NOT EXISTS UserCont%d 
 		PARTITION OF UserCont
 		FOR VALUES WITH (modulus %d, remainder %d);
-		CREATE INDEX IF NOT EXISTS UserCont%d_index ON UserCont%d (userId, postId, commentId)
+		CREATE INDEX IF NOT EXISTS UserCont%d_index ON UserCont%d (uid, kind, pid, sid)
 		`, rem, mod, rem, rem, rem)
 		_, e = db.Exec(makeContInstance)
 		DidFail(e, "create user cont instance")

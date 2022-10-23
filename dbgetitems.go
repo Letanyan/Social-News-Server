@@ -27,19 +27,23 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			SELECT pid, (upvotes - downvotes) / (total.up + total.down) AS value
 			FROM UserPrefs, Total
 			WHERE kind=4
-		), Blacklist AS (
+		), UserConts AS (
+			SELECT *
+			FROM UserCont
+			WHERE uid=%d
+		), Ignored AS (
 			SELECT pid
-			FROM UserPrefs
-			WHERE kind=5
+			FROM UserConts
+			WHERE kind=4
 		), Viewed AS (
 			SELECT pid
-			FROM UserPrefs
-			WHERE kind=3 AND (upvotes > 0 OR downvotes > 0)
+			FROM UserConts
+			WHERE kind=1
 		)
-		`, forUser)
+		`, forUser, forUser)
 
 		joins += "JOIN Scores s ON s.pid = ANY(p.tags)"
-		cond = append(cond, "p.userId NOT IN (SELECT * FROM Blacklist)")
+		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
 		scoreField = "SUM(s.value)"
 	}
