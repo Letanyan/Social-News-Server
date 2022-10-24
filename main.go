@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -14,12 +15,15 @@ import (
 )
 
 const (
-	isDebug  = true
-	host     = "localhost"
-	port     = 5432
-	user     = "dev"
-	password = "AbstractData00"
-	dbname   = "socialnewsserverdev"
+	isDebug = false
+)
+
+var (
+	host     string
+	port     int64
+	user     string
+	password string
+	dbname   string
 )
 
 var (
@@ -28,6 +32,20 @@ var (
 )
 
 func main() {
+	if isDebug {
+		host = "localhost"
+		port = 5432
+		user = "dev"
+		password = "AbstractData00"
+		dbname = "socialnewsserverdev"
+	} else {
+		host = os.Getenv("db.HOSTNAME")
+		port, _ = strconv.ParseInt(os.Getenv("db.PORT"), 10, 64)
+		user = os.Getenv("db.USERNAME")
+		password = os.Getenv("db.PASSWORD")
+		dbname = os.Getenv("db.DATABASE")
+	}
+
 	router := gin.Default()
 	router.GET("/", index)
 
