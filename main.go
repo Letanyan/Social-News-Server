@@ -39,11 +39,12 @@ func main() {
 		password = "AbstractData00"
 		dbname = "socialnewsserverdev"
 	} else {
-		host = os.Getenv("db.HOSTNAME")
-		port, _ = strconv.ParseInt(os.Getenv("db.PORT"), 10, 64)
-		user = os.Getenv("db.USERNAME")
-		password = os.Getenv("db.PASSWORD")
-		dbname = os.Getenv("db.DATABASE")
+		host = os.Getenv("DB_HOSTNAME")
+		port, _ = strconv.ParseInt(os.Getenv("DB_PORT"), 10, 64)
+		user = os.Getenv("DB_USERNAME")
+		password = os.Getenv("DB_PASSWORD")
+		dbname = os.Getenv("DB_DATABASE")
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.Default()
@@ -125,6 +126,10 @@ func main() {
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
 	mainDB, _ = sql.Open("postgres", conn)
+	e := mainDB.Ping()
+	if DidFail(e, "failed connect to db") {
+		fmt.Println(conn)
+	}
 	defer mainDB.Close()
 
 	// DBClearAllTables(db)

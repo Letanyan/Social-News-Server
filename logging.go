@@ -14,7 +14,8 @@ var (
 )
 
 func init() {
-	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	filename := fmt.Sprintf("logs/%s.txt", formatTime(utc()))
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if isDebug || err != nil {
 		fail = log.New(os.Stderr, "[ERROR]: ", log.Ldate|log.Ltime)
 	} else {
