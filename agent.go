@@ -113,10 +113,12 @@ func NAUpdateNewsAgentWithID(id int64) WebsiteScrapings {
 	return NAUpdateNewsAgent(agent)
 }
 
-func NAUpdateAllNewsAgent() []WebsiteScrapings {
+func NAUpdateAllNewsAgent(before time.Duration) []WebsiteScrapings {
 	result := []WebsiteScrapings{}
 	for _, a := range agents {
-		result = append(result, NAUpdateNewsAgent(a))
+		if a.LastUpdate.Before(utc().Add(before)) {
+			result = append(result, NAUpdateNewsAgent(a))
+		}
 	}
 	return result
 }
@@ -275,9 +277,9 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 
 	date := utc()
 	if len(modTime) > 0 {
-		date = parseTime(modTime)
+		date = parseUnknownTime(modTime)
 	} else if len(pubTime) > 0 {
-		date = parseTime(pubTime)
+		date = parseUnknownTime(pubTime)
 	}
 
 	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, date}
@@ -303,4 +305,9 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 	}
 
 	DBCreatePost(mainDB, userId, body, scrape.Date, scrape.Tags, []string{})
+}
+
+func NARegisterUpdates() {
+	NAUpdateAllNewsAgent(0)
+	time.AfterFunc(time.Hour, func() { NARegisterUpdates() })
 }

@@ -17,6 +17,26 @@ func parseTime(t string) time.Time {
 	return result
 }
 
+func parseUnknownTime(t string) time.Time {
+	result, e := time.Parse("2006-01-02T15:04:05.999999Z", t)
+	if e == nil {
+		return result
+	}
+	result, e = time.Parse("2006-01-02T15:04:05.999999+0000", t)
+	if e == nil {
+		return result
+	}
+	result, e = time.Parse("2006-01-02T15:04:05.999999", t)
+	if e == nil {
+		return result
+	}
+	result, e = time.Parse("2006-01-02 15:04:05.999999", t)
+	if e == nil {
+		return result
+	}
+	return utc()
+}
+
 func sign(t bool) int64 {
 	if t {
 		return 1

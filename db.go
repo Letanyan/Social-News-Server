@@ -22,7 +22,7 @@ func DBUsersSetup(db *sql.DB) {
 		name VARCHAR(21) NOT NULL,
 		email TEXT NOT NULL,
 		password TEXT NOT NULL,
-		registerDate TIMESTAMP DEFAULT (now() at time zone ('utc')),
+		registerDate TIMESTAMP DEFAULT (now() at time zone 'utc'),
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		credits INTEGER DEFAULT 25,
@@ -40,6 +40,7 @@ func DBUsersSetup(db *sql.DB) {
 		sid BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
 		kind SMALLINT DEFAULT 0,
+		addedOn TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (uid, pid, sid)
 	) PARTITION BY HASH(uid);`
@@ -97,6 +98,7 @@ func DBPostsSetup(db *sql.DB) {
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		location TEXT[],
 		trashed BOOLEAN DEFAULT false,
+		commentCount INTEGER DEFAULT 0,
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
@@ -107,7 +109,7 @@ func DBPostsSetup(db *sql.DB) {
 		makeInstance := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS posts%d 
 		PARTITION OF posts
-		FOR VALUES FROM (TIMESTAMP '%d-01-01' at time zone ('utc')) TO (TIMESTAMP '%d-01-01' at time zone ('utc'));
+		FOR VALUES FROM (TIMESTAMP '%d-01-01' at time zone 'utc') TO (TIMESTAMP '%d-01-01' at time zone 'utc');
 		CREATE INDEX IF NOT EXISTS posts%d_index ON posts%d (id, createdAt);
 		`, year, year, year+1, year, year)
 		_, e := db.Exec(makeInstance)
@@ -162,7 +164,7 @@ func DBVotesSetup(db *sql.DB) {
 		location TEXT[],
 		upvotes DOUBLE PRECISION DEFAULT 0.0,
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
-		updatedAt DATE DEFAULT (now() at time zone ('utc')),
+		updatedAt DATE DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (kind, pid, sid, location, updatedAt)
 	) PARTITION BY RANGE(updatedAt);`
@@ -225,7 +227,7 @@ func DBFlagsSetup(db *sql.DB) {
 		sid BIGINT,
 		kind SMALLINT,
 		reason TEXT,
-		createdAt TIMESTAMP DEFAULT (now() at time zone ('utc')),
+		createdAt TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (id, pid)
 	) PARTITION BY HASH(pid);`

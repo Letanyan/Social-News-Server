@@ -114,7 +114,7 @@ func SQLFieldsForUserPrefUser() string {
 }
 
 func SQLFieldsForUserPrefPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefComment() string {
@@ -177,7 +177,7 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 		var down float64
 		var userId int64
 		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt,
-			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &u.ID, &u.Name, &u.RegisterDate,
+			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &u.ID, &u.Name, &u.RegisterDate,
 			&u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
 			continue
@@ -526,7 +526,7 @@ func SQLFieldsForUserCont() string {
 }
 
 func SQLFieldsForUserContPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down," +
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, " +
 		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
@@ -563,6 +563,7 @@ const (
 	ucpReadLater
 	ucpUserFollow
 	ucpUserIgnored
+	ucpUserRecommended
 )
 
 func DBCreateUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64, commentId int64) UserCont {
@@ -581,6 +582,31 @@ func DBCreateUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64,
 		return userCont[0]
 	} else {
 		return UserCont{}
+	}
+}
+
+func DBRefreshUserContRecommended(db *sql.DB, userId int64, postId []int64) {
+	removeOld := fmt.Sprintf(`
+	DELETE FROM UserCont
+	WHERE kind=%d AND uid=%d 
+	AND (now() at time zone ('utc')) - addedOn > INTERVAL '18 HOURS';
+	`, ucpUserRecommended, userId)
+	_, e := db.Exec(removeOld)
+	if DidFail(e, "remove old recommendations") {
+		return
+	}
+
+	values := SQLFormattedIndexList(postId, func(id int64) string {
+		return fmt.Sprintf("(%d, %d, -1, %d)", userId, id, ucpUserRecommended)
+	})
+	addNew := fmt.Sprintf(`
+	INSERT INTO UserCont (uid, pid, sid, kind)
+	VALUES %s
+	ON CONFLICT DO NOTHING;
+	`, values)
+	_, e = db.Exec(addNew)
+	if DidFail(e, "add new recommendations") {
+		return
 	}
 }
 

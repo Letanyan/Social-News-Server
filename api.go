@@ -1031,7 +1031,7 @@ func APIAddUserCont(kind UserContKind) func(*gin.Context) {
 			PID int64 `json:"pid"`
 		}
 		var in Input
-		if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
+		if e := c.BindJSON(&in); DidFail(e, "get input for user cont") {
 			APIFailed(c, e, "invalid input values")
 			return
 		}
@@ -1039,6 +1039,25 @@ func APIAddUserCont(kind UserContKind) func(*gin.Context) {
 		cont := DBCreateUserCont(mainDB, kind, uid, in.PID, -1)
 		APIReturn(c, true, cont)
 	}
+}
+
+func APIRefreshUserContRecommendations(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		APIReturn(c, false, "invalid user id")
+		return
+	}
+
+	type Input struct {
+		PIDs []int64 `json:"pid"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for user cont") {
+		APIFailed(c, e, "invalid input values")
+		return
+	}
+
+	DBRefreshUserContRecommended(mainDB, uid, in.PIDs)
 }
 
 func APIPurchaseCredit(c *gin.Context) {

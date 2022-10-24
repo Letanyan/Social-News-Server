@@ -61,7 +61,7 @@ func APIHUpdateAgent(c *gin.Context) {
 }
 
 func APIHUpdateAgents(c *gin.Context) {
-	result := NAUpdateAllNewsAgent()
+	result := NAUpdateAllNewsAgent(0)
 
 	APIReturn(c, true, result)
 }

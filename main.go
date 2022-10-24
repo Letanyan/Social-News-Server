@@ -83,6 +83,7 @@ func main() {
 		v1.POST("/users/:uid/content/posts/viewed", APIAddUserCont(ucpViewed))
 		v1.POST("/users/:uid/content/user-follows", APIAddUserCont(ucpUserFollow))
 		v1.POST("/users/:uid/content/ignored", APIAddUserCont(ucpUserIgnored))
+		v1.POST("/users/:uid/content/recommendations", APIRefreshUserContRecommendations)
 
 		v1.POST("/users/:uid/watch", APIWatchUser)
 
@@ -121,6 +122,8 @@ func main() {
 	if err := router.Run(":" + port); err != nil {
 		log.Panicf("error: %s", err.Error())
 	}
+
+	NARegisterUpdates()
 }
 
 func index(c *gin.Context) {

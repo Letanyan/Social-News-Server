@@ -38,7 +38,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		), Viewed AS (
 			SELECT pid
 			FROM UserConts
-			WHERE kind=1
+			WHERE kind=1 OR kind=5
 		)
 		`, forUser, forUser)
 

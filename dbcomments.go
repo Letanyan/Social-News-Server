@@ -117,12 +117,18 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 		WHERE id = %d;
 		`, replyId)
 	}
+	updateCommentCount := fmt.Sprintf(`
+	UPDATE Posts
+	SET commentCount = commentCount + 1
+	WHERE id = %d;
+	`, postId)
 
 	insertCommentForUser := fmt.Sprintf(`
 	%s
-	INSERT INTO UserCont(userId, postId, commentId) 
+	%s
+	INSERT INTO UserCont(uid, pid, sid) 
 	VALUES(%d, %d, %d) 
-	RETURNING %s`, updateReplyCount, userId, postId, comment.ID, SQLFieldsForUserCont())
+	RETURNING %s`, updateReplyCount, updateCommentCount, userId, postId, comment.ID, SQLFieldsForUserCont())
 	row = db.QueryRow(insertCommentForUser)
 	userCont, e := ScanUserCont(row)
 	if DidFail(e, "insert comment ", comment.ID, " for user pref", userId) {
