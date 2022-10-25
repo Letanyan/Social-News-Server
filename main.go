@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	isDebug = false
+	isDebug = true
 )
 
 var (
@@ -138,6 +138,7 @@ func main() {
 
 	agents = NAReadAllNewsAgents()
 
+	NARegisterUpdates()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -145,8 +146,6 @@ func main() {
 	if err := router.Run(":" + port); err != nil {
 		log.Panicf("error: %s", err.Error())
 	}
-
-	NARegisterUpdates()
 }
 
 func index(c *gin.Context) {

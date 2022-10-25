@@ -40,8 +40,8 @@ func NACreateNewsAgent(id int64, name string, origin string) (NewsAgent, error) 
 	agent := NewsAgent{id, name, origin, utc()}
 	agents = append(agents, agent)
 	NAWriteAllNewsAgents(agents)
-	bloom := NewBloomFilterP(0.99, 100_000_000)
-	bloom.Write(fmt.Sprintf("./agents/%d.gob", id))
+	visited := map[string]bool{}
+	HashSetWriteToFile(visited, fmt.Sprintf("./agents/%d.gob", id))
 	return agent, nil
 }
 
@@ -136,17 +136,18 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	if DidFail(e, "invalid origin url") {
 		return WebsiteScrapings{}
 	}
-	bloomFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
-	bloom := NewBloomFilterF(bloomFile)
-	defer bloom.Write(bloomFile)
+	hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
+	visited := HashSetFromFile(hashFile)
+	defer HashSetWriteToFile(visited, hashFile)
 	for _, urlString := range scraping.URLs {
 		url, e := nurl.Parse(urlString)
 		canURLString := CanonicalURL(url.String())
 		if e != nil || !IsSameHost(url, baseURL) {
 			continue
 		}
-		if !bloom.Contains(canURLString) {
-			bloom.Insert(canURLString)
+		canURLString = strings.TrimPrefix(canURLString, baseURL.Hostname())
+		if !visited[canURLString] {
+			visited[canURLString] = true
 			subScraping := NAScrapeWebsite(urlString)
 			if subScraping.Type == "article" {
 				NACreatePost(agent.ID, urlString, subScraping)
@@ -303,11 +304,14 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 			}
 		}
 	}
+	if scrape.Date.Year() != utc().Year() {
+		createPostsPartitionTable(mainDB, scrape.Date.Year())
+	}
 
 	DBCreatePost(mainDB, userId, body, scrape.Date, scrape.Tags, []string{})
 }
 
 func NARegisterUpdates() {
-	NAUpdateAllNewsAgent(0)
+	NAUpdateAllNewsAgent(time.Minute * 30)
 	time.AfterFunc(time.Hour, func() { NARegisterUpdates() })
 }

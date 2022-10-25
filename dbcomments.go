@@ -235,7 +235,7 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64,
 	}
 
 	joins := "JOIN users u ON p.userId = u.id\n"
-	cond := []string{"trashed=false"}
+	cond := []string{"p.trashed=false"}
 	if postId != 0 {
 		cond = append(cond, fmt.Sprintf("postId = %d\n", postId))
 	}

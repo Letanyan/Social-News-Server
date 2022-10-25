@@ -169,17 +169,13 @@ func DBSignIn(db *sql.DB, email string, password string) User {
 }
 
 func DBDeleteUser(db *sql.DB, userId int64) {
-	deleteFromUsers := `DELETE FROM users WHERE id=$1`
+	deleteFromUsers := `UPDATE users SET trashed=true WHERE id=$1`
 	_, e := db.Exec(deleteFromUsers, userId)
 	DidFail(e, "delete user from users table")
 
-	deleteUserContTable := `DELETE FROM UserPref WHERE uid=$1`
+	deleteUserContTable := `UPDATE UserCont SET trashed=true WHERE uid=$1`
 	_, e = db.Exec(deleteUserContTable, userId)
 	DidFail(e, "delete user content table")
-
-	deleteUserPrefTable := `DELETE FROM UserPref WHERE userId=$1`
-	_, e = db.Exec(deleteUserPrefTable, userId)
-	DidFail(e, "delete user preference table")
 }
 
 // ignore email if userId > 0

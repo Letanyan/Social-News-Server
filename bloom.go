@@ -81,6 +81,35 @@ func (bloom *BloomFilter) Write(fileName string) {
 	}
 }
 
+func HashSetFromFile(fileName string) map[string]bool {
+	result := map[string]bool{}
+	file, e := os.Open(fileName)
+	if DidFail(e, "open file ", fileName) {
+		return result
+	}
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	e = dec.Decode(&result)
+	if DidFail(e, "decode file ", fileName, " to hash map") {
+		return result
+	}
+	return result
+}
+
+func HashSetWriteToFile(hashSet map[string]bool, fileName string) {
+	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
+	if DidFail(e, "open file ", fileName) {
+		return
+	}
+	defer file.Close()
+	enc := gob.NewEncoder(file)
+	e = enc.Encode(hashSet)
+	if DidFail(e, "gob write file") {
+		return
+	}
+}
+
 func MurmurHash(word string, seed uint32) uint32 {
 	m := uint32(0x5bd1e995)
 	r := int32(24)
@@ -123,45 +152,3 @@ func MurmurHash(word string, seed uint32) uint32 {
 
 	return h
 }
-
-/*
-
-guint32 MurmurHash2(gconstpointer key, gsize len, guint32 seed)
-{
-	const guint32 m = 0x5bd1e995;
-	const gint r = 24;
-
-	guint32 h = seed ^ len;
-
-	const guchar * data = key;
-	while(len >= 4)
-	{
-		guint32 k = *(guint32 *)data;
-
-		k *= m;
-		k ^= k >> r;
-		k *= m;
-
-		h *= m;
-		h ^= k;
-
-		data += 4;
-		len -= 4;
-	}
-
-	switch(len)
-	{
-	case 3: h ^= data[2] << 16;
-	case 2: h ^= data[1] << 8;
-	case 1: h ^= data[0];
-		h *= m;
-	};
-
-	h ^= h >> 13;
-	h *= m;
-	h ^= h >> 15;
-
-	return h;
-}
-
-*/

@@ -27,6 +27,7 @@ func DBUsersSetup(db *sql.DB) {
 		downvotes DOUBLE PRECISION DEFAULT 0.0,
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
+		trashed BOOLEAN DEFAULT false,
 
 		PRIMARY KEY (id)
 	);`
@@ -105,18 +106,19 @@ func DBPostsSetup(db *sql.DB) {
 	_, e := db.Exec(createPosts)
 	DidFail(e, "create posts table")
 
-	createPostsTable := func(year int) {
-		makeInstance := fmt.Sprintf(`
-		CREATE TABLE IF NOT EXISTS posts%d 
-		PARTITION OF posts
-		FOR VALUES FROM (TIMESTAMP '%d-01-01' at time zone 'utc') TO (TIMESTAMP '%d-01-01' at time zone 'utc');
-		CREATE INDEX IF NOT EXISTS posts%d_index ON posts%d (id, createdAt);
-		`, year, year, year+1, year, year)
-		_, e := db.Exec(makeInstance)
-		DidFail(e, "create posts instance")
-	}
-	createPostsTable(year)
-	createPostsTable(year + 1)
+	createPostsPartitionTable(db, year)
+	createPostsPartitionTable(db, year+1)
+}
+
+func createPostsPartitionTable(db *sql.DB, year int) {
+	makeInstance := fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS posts%d 
+	PARTITION OF posts
+	FOR VALUES FROM (TIMESTAMP '%d-01-01' at time zone 'utc') TO (TIMESTAMP '%d-01-01' at time zone 'utc');
+	CREATE INDEX IF NOT EXISTS posts%d_index ON posts%d (id, createdAt);
+	`, year, year, year+1, year, year)
+	_, e := db.Exec(makeInstance)
+	DidFail(e, "create posts instance")
 }
 
 func DBCommentsSetup(db *sql.DB) {

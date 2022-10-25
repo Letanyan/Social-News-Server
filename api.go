@@ -43,6 +43,16 @@ func APIFailed(c *gin.Context, e error, reason string) bool {
 	}
 }
 
+func APIMatchSecret(c *gin.Context, user int64) bool {
+	secret := c.DefaultQuery("secret", "")
+	if AUTHMatchSecret(user, secret) {
+		return true
+	} else {
+		APIReturn(c, false, "Re-sign in to refresh session")
+		return false
+	}
+}
+
 // ------------------------------------------------------------------------
 // Create
 // ------------------------------------------------------------------------
@@ -83,7 +93,8 @@ func APICreateUser(c *gin.Context) {
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID != 0 {
 		SendValidationKey(user.ID, user.Email, user.ValidationKey)
-		APIReturn(c, true, user)
+		secret := AUTHRegister(user.ID)
+		APIReturn(c, true, gin.H{"user": user, "token": secret})
 	} else {
 		APIReturn(c, false, "could not create user")
 	}
@@ -96,18 +107,22 @@ func APICreatePost(c *gin.Context) {
 		Tags     []string `json:"tags"`
 		Location []string `json:"location"`
 	}
-	var input Input
+	var in Input
 
-	if e := c.BindJSON(&input); DidFail(e, "get input for create post") {
+	if e := c.BindJSON(&in); DidFail(e, "get input for create post") {
 		APIReturn(c, false, "invalid input values")
 		return
 	}
 
-	if len(input.Location) == 0 {
-		input.Location = getAddress(c.ClientIP())
+	if !APIMatchSecret(c, in.UserID) {
+		return
+	}
+
+	if len(in.Location) == 0 {
+		in.Location = getAddress(c.ClientIP())
 	}
 	date := time.Time{}
-	post := DBCreatePost(mainDB, input.UserID, input.Content, date, input.Tags, input.Location)
+	post := DBCreatePost(mainDB, in.UserID, in.Content, date, in.Tags, in.Location)
 	if post.ID != 0 {
 		APIReturn(c, true, post)
 	} else {
@@ -125,6 +140,10 @@ func APICreateComment(c *gin.Context) {
 
 	if e := c.BindJSON(&in); DidFail(e, "get input for create comment") {
 		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	if !APIMatchSecret(c, in.UserID) {
 		return
 	}
 
@@ -147,6 +166,10 @@ func APICreateComment(c *gin.Context) {
 func APIDeleteUser(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	if !APIMatchSecret(c, uid) {
 		return
 	}
 
@@ -188,6 +211,10 @@ func APIDeleteUserContPlaylist(kind UserContKind) func(*gin.Context) {
 		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 		if APIFailed(c, e, "invalid user id") {
 			APIReturn(c, false, "invalid user id")
+			return
+		}
+
+		if !APIMatchSecret(c, uid) {
 			return
 		}
 
@@ -925,21 +952,25 @@ func APIVoteUser(c *gin.Context) {
 		UID    int64 `json:"uid"`
 		Amount int64 `json:"amount"`
 	}
-	var input Input
-	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
 		APIFailed(c, e, "invalid input values")
 		return
 	}
 
-	if !DBCanUpdateCredit(mainDB, input.UID, input.Amount) {
+	if !APIMatchSecret(c, in.UID) {
+		return
+	}
+
+	if !DBCanUpdateCredit(mainDB, in.UID, in.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
 		return
 	}
 
 	addr := getAddress(c.ClientIP())
 
-	DBVoteForUser(mainDB, input.UID, targetId, input.Amount, addr, "")
-	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
+	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, addr, "")
+	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
 		APIReturn(c, true, remaining)
@@ -958,21 +989,25 @@ func APIVotePost(c *gin.Context) {
 		UID    int64 `json:"uid"`
 		Amount int64 `json:"amount"`
 	}
-	var input Input
-	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
 		APIFailed(c, e, "invalid input values")
 		return
 	}
 
-	if !DBCanUpdateCredit(mainDB, input.UID, input.Amount) {
+	if !APIMatchSecret(c, in.UID) {
+		return
+	}
+
+	if !DBCanUpdateCredit(mainDB, in.UID, in.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
 		return
 	}
 
 	addr := getAddress(c.ClientIP())
 
-	DBVotePost(mainDB, input.UID, pid, input.Amount, addr, "")
-	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
+	DBVotePost(mainDB, in.UID, pid, in.Amount, addr, "")
+	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
 		APIReturn(c, true, remaining)
@@ -996,21 +1031,25 @@ func APIVoteComment(c *gin.Context) {
 		UID    int64 `json:"uid"`
 		Amount int64 `json:"amount"`
 	}
-	var input Input
-	if e := c.BindJSON(&input); DidFail(e, "get input for vote post") {
+	var in Input
+	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
 		APIFailed(c, e, "invalid input values")
 		return
 	}
 
-	if !DBCanUpdateCredit(mainDB, input.UID, input.Amount) {
+	if !APIMatchSecret(c, in.UID) {
+		return
+	}
+
+	if !DBCanUpdateCredit(mainDB, in.UID, in.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
 		return
 	}
 
 	addr := getAddress(c.ClientIP())
 
-	DBVoteComment(mainDB, input.UID, pid, cid, input.Amount, addr, "")
-	remaining := DBSubtractUserCredit(mainDB, input.UID, input.Amount)
+	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr, "")
+	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
 		APIReturn(c, true, remaining)
@@ -1024,6 +1063,9 @@ func APIAddUserCont(kind UserContKind) func(*gin.Context) {
 		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 		if APIFailed(c, e, "invalid user id") {
 			APIReturn(c, false, "invalid user id")
+			return
+		}
+		if !APIMatchSecret(c, uid) {
 			return
 		}
 
@@ -1045,6 +1087,9 @@ func APIRefreshUserContRecommendations(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid user id") {
 		APIReturn(c, false, "invalid user id")
+		return
+	}
+	if !APIMatchSecret(c, uid) {
 		return
 	}
 
@@ -1074,6 +1119,9 @@ func APIPurchaseCredit(c *gin.Context) {
 	if APIFailed(c, e, "invalid target user id") {
 		return
 	}
+	if !APIMatchSecret(c, targetId) {
+		return
+	}
 
 	newAmount := DBAddUserCredit(mainDB, targetId, input.Amount)
 
@@ -1087,6 +1135,9 @@ func APIPurchaseCredit(c *gin.Context) {
 func APIWatchUser(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+	if !APIMatchSecret(c, uid) {
 		return
 	}
 
@@ -1186,9 +1237,8 @@ func APISignIn(c *gin.Context) {
 
 	user := DBSignIn(mainDB, in.Email, in.Password)
 	if user.ID != 0 {
-		// FIXME: return proper token which is stored on the server
-		// to cross reference with user to ensure user updates only their data
-		APIReturn(c, true, gin.H{"user": user, "token": "secret"})
+		secret := AUTHRegister(user.ID)
+		APIReturn(c, true, gin.H{"user": user, "token": secret})
 	} else {
 		APIReturn(c, false, "password or email incorrect")
 	}
