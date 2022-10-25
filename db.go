@@ -29,6 +29,16 @@ func DBUsersSetup(db *sql.DB) {
 		validationKey BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
 
+		publicViews BOOLEAN DEFAULT true,
+		publicReadLater BOOLEAN DEFAULT true,
+		publicFollowing BOOLEAN DEFAULT true,
+		publicIgnored BOOLEAN DEFAULT true,
+		
+		publicPostVotes BOOLEAN DEFAULT true,
+		publicCommentVotes BOOLEAN DEFAULT true,
+		publicUserVotes BOOLEAN DEFAULT true,
+		publicTagVotes BOOLEAN DEFAULT true,
+
 		PRIMARY KEY (id)
 	);`
 	_, e := db.Exec(createUsers)

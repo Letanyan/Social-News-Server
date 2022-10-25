@@ -43,9 +43,13 @@ func APIFailed(c *gin.Context, e error, reason string) bool {
 	}
 }
 
-func APIMatchSecret(c *gin.Context, user int64) bool {
+func ContextMatchSecret(c *gin.Context, user int64) bool {
 	secret := c.DefaultQuery("secret", "")
-	if AUTHMatchSecret(user, secret) {
+	return AUTHMatchSecret(user, secret)
+}
+
+func APIMatchSecret(c *gin.Context, user int64) bool {
+	if ContextMatchSecret(c, user) {
 		return true
 	} else {
 		APIReturn(c, false, "Re-sign in to refresh session")
@@ -238,6 +242,10 @@ func APIGetUser(c *gin.Context) {
 		return
 	}
 
+	if !APIMatchSecret(c, uid) {
+		return
+	}
+
 	user := DBGetUser(mainDB, uid, "")
 	if user.ID == 0 {
 		APIReturn(c, false, "no user found with id"+fmt.Sprint(uid))
@@ -332,8 +340,9 @@ func APIGetUserPrefs(kind UserPrefKind) func(*gin.Context) {
 		if APIFailed(c, e, "invalid sid given") {
 			return
 		}
+		isOwner := ContextMatchSecret(c, uid)
 
-		prefs := DBGetUserPref(mainDB, uid, order, kind, pid, sid, upvotes, downvotes, limit, offset)
+		prefs := DBGetUserPref(mainDB, isOwner, uid, order, kind, pid, sid, upvotes, downvotes, limit, offset)
 		APIReturn(c, true, prefs)
 	}
 }
@@ -380,8 +389,9 @@ func APIGetUserPrefUsers(c *gin.Context) {
 	}
 
 	search := c.DefaultQuery("search", "")
+	isOwner := ContextMatchSecret(c, uid)
 
-	users := DBGetUserPrefUsers(mainDB, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
+	users := DBGetUserPrefUsers(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
 	APIReturn(c, true, users)
 }
 
@@ -451,7 +461,9 @@ func APIGetUserPrefPosts(c *gin.Context) {
 	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
 
-	posts := DBGetUserPrefPosts(mainDB, uid, upvoteAmount, downvoteAmount, author, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	isOwner := ContextMatchSecret(c, uid)
+
+	posts := DBGetUserPrefPosts(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, author, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, posts)
 }
 
@@ -510,7 +522,9 @@ func APIGetUserPrefComments(c *gin.Context) {
 	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
 
-	comments := DBGetUserPrefComments(mainDB, uid, upvoteAmount, downvoteAmount, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	isOwner := ContextMatchSecret(c, uid)
+
+	comments := DBGetUserPrefComments(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
 }
 
@@ -565,8 +579,9 @@ func APIGetUserPrefTags(c *gin.Context) {
 	}
 
 	search := c.DefaultQuery("search", "")
+	isOwner := ContextMatchSecret(c, uid)
 
-	result := DBGetUserPrefTags(mainDB, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset)
+	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset)
 	APIReturn(c, true, result)
 }
 
@@ -623,8 +638,9 @@ func APIGetUserContPost(kind UserContKind) func(*gin.Context) {
 		startDate := c.DefaultQuery("start", formatTime(lastWeek))
 		endDate := c.DefaultQuery("end", formatTime(now))
 		search := c.DefaultQuery("search", "")
+		isOwner := ContextMatchSecret(c, uid)
 
-		result := DBGetUserContPost(mainDB, kind, uid, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+		result := DBGetUserContPost(mainDB, isOwner, kind, uid, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 		APIReturn(c, true, result)
 	}
 }
@@ -684,8 +700,9 @@ func APIGetUserContUsers(ucp UserContKind) func(*gin.Context) {
 		if APIFailed(c, e, "invalid user id") {
 			return
 		}
+		isOwner := ContextMatchSecret(c, uid)
 
-		users := DBGetUserContUsers(mainDB, uid, ucp)
+		users := DBGetUserContUsers(mainDB, isOwner, uid, ucp)
 		APIReturn(c, true, users)
 	}
 }
@@ -1130,6 +1147,35 @@ func APIPurchaseCredit(c *gin.Context) {
 	} else {
 		APIFailed(c, errors.New(""), "could not complete top up")
 	}
+}
+
+func APIUpdateUserPermission(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	type Input struct {
+		PublicViews     bool
+		PublicReadLater bool
+		PublicFollowing bool
+		PublicIgnored   bool
+
+		PublicPostVotes    bool
+		PublicCommentVotes bool
+		PublicUserVotes    bool
+		PublicTagVotes     bool
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for user permissions") {
+		return
+	}
+
+	DBUpdateUserPublicPermissions(mainDB, uid,
+		in.PublicViews, in.PublicReadLater, in.PublicIgnored, in.PublicFollowing,
+		in.PublicPostVotes, in.PublicCommentVotes, in.PublicTagVotes, in.PublicUserVotes)
+
+	APIReturn(c, true, "")
 }
 
 func APIWatchUser(c *gin.Context) {

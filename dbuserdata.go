@@ -231,30 +231,45 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 }
 
 // ignore kind if it equals 0. ignore pid if it equals 0. ignore sid if it equals 0
-func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, upvotes int64, downvotes int64, limit int64, offset int64) []UserPref {
+func DBGetUserPref(db *sql.DB, isOwner bool, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, upvotes int64, downvotes int64, limit int64, offset int64) []UserPref {
 	query := fmt.Sprintf(`
 	SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
-	FROM UserPref WHERE uid=%d `, SQLFieldsForUserPref(), userId)
+	FROM UserPref up
+	JOIN Users u ON u.ID == up.uid
+	WHERE up.uid=%d `, SQLFieldsForUserPref(), userId)
 
 	cond := ""
 	if kind > 0 {
-		cond = fmt.Sprintf("AND kind = %d ", kind)
+		cond = fmt.Sprintf("AND up.kind = %d ", kind)
 	}
+	if !isOwner {
+		switch kind {
+		case upComment:
+			cond += "AND u.publicCommentVotes "
+		case upPost:
+			cond += "AND u.publicPostVotes "
+		case upTag:
+			cond += "AND u.publicTagVotes "
+		case upUser:
+			cond += "AND u.publicUserVotes "
+		}
+	}
+
 	if pid > 0 {
-		cond += fmt.Sprintf("AND pid = %d ", pid)
+		cond += fmt.Sprintf("AND up.pid = %d ", pid)
 	}
 	if sid > 0 {
-		cond += fmt.Sprintf("AND sid = %d ", sid)
+		cond += fmt.Sprintf("AND up.sid = %d ", sid)
 	}
 	if upvotes > 0 {
-		cond += fmt.Sprintf("AND upvotes > %d ", upvotes)
+		cond += fmt.Sprintf("AND up.upvotes > %d ", upvotes)
 	} else if upvotes < 0 {
-		cond += fmt.Sprintf("AND upvotes < %d ", -upvotes)
+		cond += fmt.Sprintf("AND up.upvotes < %d ", -upvotes)
 	}
 	if downvotes > 0 {
-		cond += fmt.Sprintf("AND downvotes > %d ", downvotes)
+		cond += fmt.Sprintf("AND up.downvotes > %d ", downvotes)
 	} else if downvotes < 0 {
-		cond += fmt.Sprintf("AND downvotes < %d ", -downvotes)
+		cond += fmt.Sprintf("AND up.downvotes < %d ", -downvotes)
 	}
 
 	query += cond + "\n"
@@ -271,16 +286,20 @@ func DBGetUserPref(db *sql.DB, userId int64, sortOrder SortOrder, kind UserPrefK
 	return result
 }
 
-func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64,
+func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64,
 	downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64) []UserPrefUser {
 	getUsers := fmt.Sprintf(`
 	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
 	FROM UserPref up 
-	JOIN users u ON up.pid = u.id 
-	WHERE kind=%d AND up.uid = %d
+	JOIN Users u ON up.pid = u.id 
+	JOIN Users x ON up.uid = x.id 
+	WHERE kind=%d AND up.uid=%d
 	`, SQLFieldsForUserPrefUser(), upUser, userId)
 
+	if !isOwner {
+		getUsers += "AND x.publicUserVotes "
+	}
 	if upvoteAmount > 0 {
 		getUsers += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
 	} else if upvoteAmount < 0 {
@@ -322,17 +341,20 @@ func DBGetUserPrefUsers(db *sql.DB, userId int64, upvoteAmount int64,
 	return result
 }
 
-func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64,
+func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64,
 	downvoteAmount int64, authorId int64, tags []int64,
 	location []string, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []UserPrefPost {
 	getPosts := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 		FROM UserPref up 
-		JOIN posts p ON up.pid = p.id
-		JOIN users u ON p.userId = u.id
+		JOIN Posts p ON up.pid=p.id
+		JOIN Users u ON p.userId=u.id
 		WHERE up.kind = %d AND up.uid = %d AND p.trashed=false 
 		`, SQLFieldsForUserPrefPost(), upPost, userId)
 
+	if !isOwner {
+		getPosts += "AND u.publicPostVotes "
+	}
 	if len(startDate) > 0 && len(endDate) > 0 {
 		getPosts += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
 	} else if len(startDate) > 0 {
@@ -393,7 +415,7 @@ func DBGetUserPrefPosts(db *sql.DB, userId int64, upvoteAmount int64,
 	return result
 }
 
-func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
+func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64,
 	downvoteAmount int64, authorId int64, replyId int64,
 	upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []UserPrefComment {
@@ -404,6 +426,9 @@ func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
 		WHERE up.kind = %d AND up.uid = %d AND p.trashed=false 
 		`, SQLFieldsForUserPrefComment(), upComment, userId)
 
+	if !isOwner {
+		getComments += "AND u.publicCommentVotes "
+	}
 	if len(startDate) > 0 && len(endDate) > 0 {
 		getComments += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
 	} else if len(startDate) > 0 {
@@ -458,15 +483,19 @@ func DBGetUserPrefComments(db *sql.DB, userId int64, upvoteAmount int64,
 	return result
 }
 
-func DBGetUserPrefTags(db *sql.DB, userId int64, upvoteAmount int64, downvoteAmount int64,
+func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64, downvoteAmount int64,
 	tags []string, location []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, search string, limit int64, offset int64) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
 	JOIN tags t ON up.pid = t.id
-	WHERE up.kind = 4 AND up.uid = %d
-	`, SQLFieldsForUserPrefTag(), userId)
+	JOIN Users u ON u.id = up.uid
+	WHERE up.kind=%d AND up.uid=%d
+	`, SQLFieldsForUserPrefTag(), upTag, userId)
 
+	if !isOwner {
+		getTags += "AND u.publicTagVotes "
+	}
 	if upvoteAmount > 0 {
 		getTags += fmt.Sprintf("AND up.upvotes > %d ", upvoteAmount)
 	} else if upvoteAmount < 0 {
@@ -624,7 +653,7 @@ func DBDeleteUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64,
 	return userCont
 }
 
-func DBGetUserContPost(db *sql.DB, kind UserContKind, userId int64, tags []int64,
+func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64, tags []int64,
 	location []string, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
 	limit int64, offset int64, startDate string, endDate string) []PostResult {
 	query := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
@@ -639,6 +668,14 @@ func DBGetUserContPost(db *sql.DB, kind UserContKind, userId int64, tags []int64
 		tags = append(tags, altTags...)
 		if len(search) > 0 {
 			query += fmt.Sprintf("AND p.Content @@ websearch_to_tsquery('%s') ", search)
+		}
+	}
+	if !isOwner {
+		switch kind {
+		case ucpReadLater:
+			query += "AND u.publicReadLater "
+		case ucpViewed:
+			query += "AND u.publicViews "
 		}
 	}
 	if len(tags) > 0 {
@@ -737,12 +774,22 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	return result
 }
 
-func DBGetUserContUsers(db *sql.DB, userId int64, kind UserContKind) []UserProfile {
+func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKind) []UserProfile {
+	permission := ""
+	if !isOwner {
+		switch kind {
+		case ucpUserFollow:
+			permission = "AND p.publicFollowing "
+		case ucpUserIgnored:
+			permission = "AND p.publicIgnored "
+		}
+	}
+
 	query := fmt.Sprintf(`SELECT %s 
 	FROM UserCont up
 	JOIN Users p ON up.pid = p.id
-	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d
-	`, SQLFieldsForUserProfile(), userId, kind)
+	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d %s
+	`, SQLFieldsForUserProfile(), userId, kind, permission)
 
 	rows, e := db.Query(query)
 	result := []UserProfile{}

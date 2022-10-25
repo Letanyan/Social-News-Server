@@ -94,6 +94,7 @@ func main() {
 		v1.POST("/tags", APIGetTagsFromIDs)
 		// Vote
 		v1.POST("/credits/:uid", APIPurchaseCredit)
+		v1.POST("/permissions/:uid", APIUpdateUserPermission)
 		v1.POST("/users/:uid", APIVoteUser)
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)

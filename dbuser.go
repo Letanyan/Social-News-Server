@@ -19,6 +19,16 @@ type User struct {
 	Downvotes     float64
 	Credits       int32
 	ValidationKey int32
+
+	PublicViews     bool
+	PublicReadLater bool
+	PublicFollowing bool
+	PublicIgnored   bool
+
+	PublicPostVotes    bool
+	PublicCommentVotes bool
+	PublicUserVotes    bool
+	PublicTagVotes     bool
 }
 
 type UserProfile struct {
@@ -30,7 +40,9 @@ type UserProfile struct {
 }
 
 func SQLFieldsForUser() string {
-	return "id, name, email, password, registerDate, upvotes, downvotes, credits, validationKey"
+	return "id, name, email, password, registerDate, upvotes, downvotes, credits, validationKey, " +
+		"publicViews, publicReadLater, publicFollowing, publicIgnored, " +
+		"publicPostVotes, publicCommentVotes, publicUserVotes, publicTagVotes"
 }
 
 func SQLFieldsForUserProfile() string {
@@ -43,7 +55,10 @@ func SQLFieldsForUserProfileAlias() string {
 
 func ScanUser(row *sql.Row) (User, error) {
 	u := User{}
-	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Credits, &u.ValidationKey)
+	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes,
+		&u.Downvotes, &u.Credits, &u.ValidationKey,
+		&u.PublicViews, &u.PublicReadLater, &u.PublicFollowing, &u.PublicIgnored,
+		&u.PublicPostVotes, &u.PublicCommentVotes, &u.PublicTagVotes, &u.PublicTagVotes)
 	return u, e
 }
 
@@ -316,5 +331,27 @@ func DBAddUserCredit(db *sql.DB, userId int64, amount int64) int64 {
 		return -1
 	} else {
 		return result
+	}
+}
+
+func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi bool, pf bool,
+	ppv bool, pcv bool, ptv bool, puv bool) {
+
+	update := fmt.Sprintf(`UPDATE Users 
+	SET 
+	PublicViews=$1,     
+	PublicReadLater=$2, 
+	PublicFollowing=$3, 
+	PublicIgnored=$4,   
+	PublicPostVotes=$5,    
+	PublicCommentVotes=$6, 
+	PublicUserVotes=$7,    
+	PublicTagVotes=$8  
+	WHERE id=%d
+	`, uid)
+
+	_, e := db.Exec(update, pv, prl, pf, pi, ppv, pcv, puv, ptv)
+	if DidFail(e, "update user permissions") {
+		return
 	}
 }

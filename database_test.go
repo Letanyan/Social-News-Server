@@ -101,7 +101,7 @@ func TestDatabase(t *testing.T) {
 			}
 			matchUserProfile("match vote and get user", srcUser, user5)
 
-			userPrefs := DBGetUserPref(db, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
+			userPrefs := DBGetUserPref(db, true, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
 			if len(userPrefs) != 1 {
 				t.Errorf("failed to get user prefs for user %d", source.ID)
 			} else {

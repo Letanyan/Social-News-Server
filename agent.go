@@ -312,6 +312,6 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 }
 
 func NARegisterUpdates() {
-	NAUpdateAllNewsAgent(time.Minute * 30)
+	time.AfterFunc(0, func() { NAUpdateAllNewsAgent(time.Minute * 30) })
 	time.AfterFunc(time.Hour, func() { NARegisterUpdates() })
 }

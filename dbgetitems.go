@@ -22,11 +22,11 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		), Total AS (
 			SELECT SUM(upvotes) up, SUM(downvotes) down
 			FROM UserPrefs
-			WHERE kind=4
+			WHERE kind=3
 		), Scores AS (
 			SELECT pid, (upvotes - downvotes) / (total.up + total.down) AS value
 			FROM UserPrefs, Total
-			WHERE kind=4
+			WHERE kind=3
 		), UserConts AS (
 			SELECT *
 			FROM UserCont
