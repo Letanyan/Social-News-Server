@@ -36,9 +36,17 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			FROM UserConts
 			WHERE kind=4
 		), Viewed AS (
-			SELECT pid
-			FROM UserConts
-			WHERE kind=1 OR kind=5
+			(
+				SELECT pid
+				FROM UserConts
+				WHERE kind=5
+			) 
+			UNION 
+			(
+				SELECT pid
+				FROM UserPrefs
+				WHERE kind=2
+			)
 		)
 		`, forUser, forUser)
 
@@ -57,12 +65,12 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	result = strings.ReplaceAll(result, "{score}", scoreField)
 
 	if upvotes > 0 {
-		cond = append(cond, fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes))
+		cond = append(cond, fmt.Sprintf("%s.upvotes >= %d", voteTable, upvotes))
 	} else if upvotes < 0 {
 		cond = append(cond, fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes))
 	}
 	if downvotes > 0 {
-		cond = append(cond, fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes))
+		cond = append(cond, fmt.Sprintf("%s.downvotes >= %d", voteTable, downvotes))
 	} else if downvotes < 0 {
 		cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
 	}
@@ -115,3 +123,18 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 
 	return result
 }
+
+// func SQLGetSimilarRecommendedPosts(userId int64, sortOrder SortOrder, limit int64, offset int64) string {
+// 	result := fmt.Sprintf(`
+// 	WITH
+// 	Viewed AS (
+// 		SELECT pid
+// 		FROM UserCont
+// 		WHERE uid=%d AND (kind=1 OR kind=5)
+// 	)
+// 	SELECT %s
+// 	FROM Posts p
+// 	JOIN Viewed v ON v.pid = p.id
+// 	`, userId, SQLFieldsForPostResultAlias(), )
+
+// }
