@@ -123,18 +123,3 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 
 	return result
 }
-
-// func SQLGetSimilarRecommendedPosts(userId int64, sortOrder SortOrder, limit int64, offset int64) string {
-// 	result := fmt.Sprintf(`
-// 	WITH
-// 	Viewed AS (
-// 		SELECT pid
-// 		FROM UserCont
-// 		WHERE uid=%d AND (kind=1 OR kind=5)
-// 	)
-// 	SELECT %s
-// 	FROM Posts p
-// 	JOIN Viewed v ON v.pid = p.id
-// 	`, userId, SQLFieldsForPostResultAlias(), )
-
-// }

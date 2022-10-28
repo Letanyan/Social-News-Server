@@ -8,8 +8,8 @@ import (
 type Tag struct {
 	ID        int64
 	Name      string
-	Upvotes   float64
-	Downvotes float64
+	Upvotes   int64
+	Downvotes int64
 }
 
 func SQLFieldsForTag() string {
@@ -26,8 +26,8 @@ func ScanTags(rows *sql.Rows, includeScore bool, hasVotes bool) []Tag {
 	for rows.Next() {
 		var cred float64
 		var score float64
-		var up float64
-		var down float64
+		var up int64
+		var down int64
 		tag := Tag{}
 		if hasVotes {
 			if includeScore {
@@ -111,10 +111,10 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	}
 
 	tagIndexRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(%d, 4, %d, -1)", userId, i)
+		return fmt.Sprintf("(%d, 3, %d, -1)", userId, i)
 	})
 	tagVoteRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(4, %d, -1, %s{date_value})", i, locArray)
+		return fmt.Sprintf("(3, %d, -1, %s{date_value})", i, locArray)
 	})
 	tagIndexArray := SQLFormattedIndexArray(tagIndices)
 	upsertUserTags := fmt.Sprintf(`
@@ -122,13 +122,14 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	VALUES %s ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = %s + %d
-	WHERE kind=4 AND pid=ANY(%s) AND location=%s AND updatedAt={date_value_res};
+	WHERE kind=3 AND pid=ANY(%s) AND location=%s AND updatedAt={date_value_res};
 
 	INSERT INTO UserPref (uid, kind, pid, sid)
 	VALUES %s ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
 	UPDATE UserPref SET 
-	%s = %s + %d
-	WHERE kind=4 AND uid=%d AND pid = ANY(%s)
+	%s = %s + %d,
+	updatedOn = (now() at time zone 'utc')
+	WHERE kind=3 AND uid=%d AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
 	`, tagVoteRows,
 		updatedField, updatedField, upvoteAmount,
@@ -187,7 +188,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 
 		if usingVotesTable {
 			joins += "JOIN votes v ON v.pid = p.id\n"
-			cond = append(cond, "kind=4")
+			cond = append(cond, "kind=3")
 		}
 	}
 

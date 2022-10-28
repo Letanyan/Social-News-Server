@@ -15,8 +15,8 @@ type User struct {
 	Email         string
 	Password      string
 	RegisterDate  time.Time
-	Upvotes       float64
-	Downvotes     float64
+	Upvotes       int64
+	Downvotes     int64
 	Credits       int32
 	ValidationKey int32
 
@@ -35,8 +35,8 @@ type UserProfile struct {
 	ID           int64
 	Name         string
 	RegisterDate time.Time
-	Upvotes      float64
-	Downvotes    float64
+	Upvotes      int64
+	Downvotes    int64
 }
 
 func SQLFieldsForUser() string {
@@ -75,8 +75,8 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []UserPr
 		u := UserProfile{}
 		var score float64
 		var cred float64
-		var up float64
-		var down float64
+		var up int64
+		var down int64
 		if hasVotes {
 			if includeScore {
 				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
@@ -227,7 +227,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 
 	if usingVotesTable {
 		joins = "JOIN Votes v ON v.pid = p.id\n"
-		cond = append(cond, "kind=1")
+		cond = append(cond, "v.kind=0")
 	}
 
 	getUsers := SQLGetItems("Users p", voteTable, SQLFieldsForUserProfileAlias(),

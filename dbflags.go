@@ -21,36 +21,76 @@ const (
 	frOther
 )
 
-type FlaggedContent struct {
+type FlaggedPost struct {
+	ID        int64
 	Content   PostResult
 	Kind      FlagReason
 	Reason    string
 	CreatedAt time.Time
+	Count     int64
+}
+
+type FlaggedComment struct {
+	ID        int64
+	Content   CommentResult
+	Kind      FlagReason
+	Reason    string
+	CreatedAt time.Time
+	Count     int64
 }
 
 func SQLFieldsForFlaggedPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, f.sid, f.kind, f.reason, f.createdAt"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, f.id, f.kind, f.reason, f.createdAt"
 }
 
-func ScanFlaggedPosts(rows *sql.Rows) []FlaggedContent {
-	result := []FlaggedContent{}
+func SQLFieldsForFlaggedComment() string {
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, f.id, f.kind, f.reason, f.createdAt"
+}
+
+func ScanFlaggedPosts(rows *sql.Rows) []FlaggedPost {
+	result := []FlaggedPost{}
 	var e error
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
-		var commentId int64
 		var kind FlagReason
 		var createdAt time.Time
 		var userId int64
 		var reason string
+		var id int64
+		var count int64
 		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt,
 			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &u.ID, &u.Name, &u.RegisterDate,
-			&u.Upvotes, &u.Upvotes, &commentId, &kind, &reason, &createdAt)
+			&u.Upvotes, &u.Upvotes, &id, &kind, &reason, &createdAt, &count)
 		if DidFail(e, "scan user pref post") {
 			continue
 		}
 		p.Author = u
-		result = append(result, FlaggedContent{p, kind, reason, createdAt})
+		result = append(result, FlaggedPost{id, p, kind, reason, createdAt, count})
+	}
+	return result
+}
+
+func ScanFlaggedComments(rows *sql.Rows) []FlaggedComment {
+	result := []FlaggedComment{}
+	var e error
+	for rows.Next() {
+		p := CommentResult{}
+		u := UserProfile{}
+		var kind FlagReason
+		var createdAt time.Time
+		var userId int64
+		var reason string
+		var id int64
+		var count int64
+		e = rows.Scan(&p.ID, &p.PostID, &userId, &p.ReplyID, &p.Content, &p.CreatedAt, &p.Upvotes, &p.Downvotes, &p.ReplyCount,
+			&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes,
+			&id, &kind, &reason, &createdAt, &count)
+		if DidFail(e, "scan user pref post") {
+			continue
+		}
+		p.Author = u
+		result = append(result, FlaggedComment{id, p, kind, reason, createdAt, count})
 	}
 	return result
 }
@@ -67,21 +107,29 @@ func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, 
 	}
 }
 
-func DBGetFlags(db *sql.DB, kind FlagReason, limit int64, offset int64) []FlaggedContent {
+func DBGetFlaggedPosts(db *sql.DB, kind FlagReason, limit int64, offset int64) []FlaggedPost {
 	getPosts := fmt.Sprintf(`
-	SELECT %s
+	WITH
+	Total AS (
+		SELECT pid, sid, COUNT(*) AS c
+		FROM Flags f
+		GROUP BY pid, sid
+		ORDER BY c
+	)
+	SELECT %s, t.c
 	FROM Flags f 
 	JOIN posts p ON f.pid = p.id
 	JOIN users u ON p.userId = u.id
-	WHERE f.kind = %d
-	ORDER BY f.createdAt
+	JOIN Total t ON f.pid=t.pid AND f.sid=t.sid
+	WHERE f.kind = %d AND sid < 0
+	ORDER BY t.c DESC
 	`, SQLFieldsForFlaggedPost(), kind)
 
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getPosts)
 	if DidFail(e, "get flagged posts") {
-		return []FlaggedContent{}
+		return []FlaggedPost{}
 	}
 	defer rows.Close()
 
@@ -89,10 +137,42 @@ func DBGetFlags(db *sql.DB, kind FlagReason, limit int64, offset int64) []Flagge
 	return result
 }
 
+func DBGetFlaggedComments(db *sql.DB, kind FlagReason, limit int64, offset int64) []FlaggedComment {
+	getComments := fmt.Sprintf(`
+	WITH
+	Total AS (
+		SELECT pid, sid, COUNT(*) AS c
+		FROM Flags f
+		GROUP BY pid, sid
+		ORDER BY c
+	)
+	SELECT %s, t.c
+	FROM Flags f 
+	JOIN Comments p ON f.pid=p.postId AND f.sid=p.id
+	JOIN Users u ON p.userId=u.id
+	JOIN Total t ON f.pid=t.pid AND f.sid=t.sid
+	WHERE f.kind = %d
+	ORDER BY t.c DESC
+	`, SQLFieldsForFlaggedComment(), kind)
+
+	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+
+	rows, e := db.Query(getComments)
+	if DidFail(e, "get flagged posts") {
+		return []FlaggedComment{}
+	}
+	defer rows.Close()
+
+	result := ScanFlaggedComments(rows)
+	return result
+}
+
 func DBHandleFlag(db *sql.DB, id int64, pid int64, sid int64, action string) {
 	switch action {
 	case "ignore":
 		DBDeleteFlag(db, id)
+	case "ignore_all":
+		DBIgnoreFlagContent(db, pid, sid)
 	case "remove":
 		DBRemoveFlagContent(db, id, pid, sid)
 	case "report":
@@ -105,6 +185,16 @@ func DBDeleteFlag(db *sql.DB, id int64) {
 	DELETE FROM Flags WHERE id = $1
 	`
 	_, e := db.Exec(action, id)
+	if DidFail(e, "delete flag") {
+		return
+	}
+}
+
+func DBIgnoreFlagContent(db *sql.DB, pid int64, sid int64) {
+	action := `
+	DELETE FROM Flags WHERE pid=$1 AND sid=$2
+	`
+	_, e := db.Exec(action, pid, sid)
 	if DidFail(e, "delete flag") {
 		return
 	}

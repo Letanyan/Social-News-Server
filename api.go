@@ -136,9 +136,10 @@ func APICreatePost(c *gin.Context) {
 
 func APICreateComment(c *gin.Context) {
 	type Input struct {
-		UserID  int64  `json:"userId"`
-		ReplyID int64  `json:"replyId"`
-		Content string `json:"content"`
+		UserID   int64  `json:"userId"`
+		ReplyID  int64  `json:"replyId"`
+		Content  string `json:"content"`
+		IsReview bool   `json:"isReview"`
 	}
 	var in Input
 
@@ -156,7 +157,7 @@ func APICreateComment(c *gin.Context) {
 		APIFailed(c, e, "invalid post id")
 	}
 
-	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID)
+	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
 	if comment.ID != 0 {
 		APIReturn(c, true, comment)
 	} else {
@@ -183,9 +184,12 @@ func APIDeleteUser(c *gin.Context) {
 
 func APIDeletePost(c *gin.Context) {
 	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
-
 	if APIFailed(c, e, "invalid post id") {
-		APIReturn(c, false, "invalid post id provided")
+		return
+	}
+
+	post := DBGetPost(mainDB, pid)
+	if !APIMatchSecret(c, post.Author.ID) {
 		return
 	}
 
@@ -204,6 +208,17 @@ func APIDeleteComment(c *gin.Context) {
 	if APIFailed(c, e, "invalid post id") {
 		APIReturn(c, false, "invalid post id provided")
 		return
+	}
+
+	comment := DBGetComment(mainDB, pid, cid)
+	isCommenter := ContextMatchSecret(c, comment.Author.ID)
+	if !isCommenter {
+		post := DBGetPost(mainDB, pid)
+		isPoster := ContextMatchSecret(c, post.Author.ID)
+		if !isPoster {
+			APIReturn(c, false, "Re-sign in to refresh session")
+			return
+		}
 	}
 
 	DBDeleteComment(mainDB, pid, cid)
@@ -689,8 +704,9 @@ func APIGetUserContComments(c *gin.Context) {
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
+	isReview := c.DefaultQuery("isReview", "0") == "1"
 
-	comments := DBGetUserContComments(mainDB, uid, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	comments := DBGetUserContComments(mainDB, uid, author, replyId, isReview, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
 }
 
@@ -793,6 +809,39 @@ func APIGetPosts(c *gin.Context) {
 	APIReturn(c, true, posts)
 }
 
+func APIGetSimilarPosts(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+	if APIFailed(c, e, "invalid order given") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset given") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit given") {
+		return
+	}
+
+	// startDate := c.DefaultQuery("start", "")
+	// endDate := c.DefaultQuery("end", "")
+
+	pid, e := strconv.ParseInt(c.DefaultQuery("pid", "0"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	posts := DBGetSimilarPosts(mainDB, uid, pid, order, limit, offset)
+	APIReturn(c, true, posts)
+}
+
 // ------------------------------------------------------------------------
 // Get Comment
 // ------------------------------------------------------------------------
@@ -861,6 +910,7 @@ func APIGetComments(c *gin.Context) {
 	endCreated := c.DefaultQuery("endCreated", "")
 	start := c.DefaultQuery("start", "")
 	end := c.DefaultQuery("end", "")
+	isReview := c.DefaultQuery("isReview", "0") == "1"
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -869,7 +919,7 @@ func APIGetComments(c *gin.Context) {
 
 	search := c.DefaultQuery("search", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
+	result := DBGetComments(mainDB, pid, uid, replyId, isReview, start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
 	APIReturn(c, true, result)
 }
 
@@ -1224,7 +1274,7 @@ func APICreateFlag(c *gin.Context) {
 	APIReturn(c, true, gin.H{})
 }
 
-func APIGetFlags(c *gin.Context) {
+func APIGetFlaggedPosts(c *gin.Context) {
 	kind, e := strconv.ParseInt(c.DefaultQuery("kind", fmt.Sprint(frSpam)), 10, 64)
 	if APIFailed(c, e, "invalid flag kind") {
 		return
@@ -1240,7 +1290,28 @@ func APIGetFlags(c *gin.Context) {
 		return
 	}
 
-	content := DBGetFlags(mainDB, FlagReason(kind), limit, offset)
+	content := DBGetFlaggedPosts(mainDB, FlagReason(kind), limit, offset)
+
+	APIReturn(c, true, content)
+}
+
+func APIGetFlaggedComments(c *gin.Context) {
+	kind, e := strconv.ParseInt(c.DefaultQuery("kind", fmt.Sprint(frSpam)), 10, 64)
+	if APIFailed(c, e, "invalid flag kind") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit value") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset value") {
+		return
+	}
+
+	content := DBGetFlaggedComments(mainDB, FlagReason(kind), limit, offset)
 
 	APIReturn(c, true, content)
 }

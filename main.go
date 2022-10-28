@@ -84,6 +84,7 @@ func main() {
 		v1.GET("/users/:uid/content/comments", APIGetUserContComments)
 		v1.GET("/users/:uid/content/user-follows", APIGetUserContUsers(ucpUserFollow))
 		v1.GET("/users/:uid/content/ignored", APIGetUserContUsers(ucpUserIgnored))
+		v1.GET("/users/:uid/recommend", APIGetSimilarPosts)
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
 		v1.GET("/posts", APIGetPosts)
@@ -109,7 +110,8 @@ func main() {
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)
-		v1.GET("/flags", APIGetFlags)
+		v1.GET("/flags/posts", APIGetFlaggedPosts)
+		v1.GET("/flags/comments", APIGetFlaggedComments)
 		v1.POST("/trash/flags/:id", APIHandleFlag)
 	}
 

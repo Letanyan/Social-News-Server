@@ -23,8 +23,8 @@ func DBUsersSetup(db *sql.DB) {
 		email TEXT NOT NULL,
 		password TEXT NOT NULL,
 		registerDate TIMESTAMP DEFAULT (now() at time zone 'utc'),
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0.0,
+		downvotes BIGINT DEFAULT 0.0,
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
@@ -33,7 +33,7 @@ func DBUsersSetup(db *sql.DB) {
 		publicReadLater BOOLEAN DEFAULT true,
 		publicFollowing BOOLEAN DEFAULT true,
 		publicIgnored BOOLEAN DEFAULT true,
-		
+
 		publicPostVotes BOOLEAN DEFAULT true,
 		publicCommentVotes BOOLEAN DEFAULT true,
 		publicUserVotes BOOLEAN DEFAULT true,
@@ -64,8 +64,9 @@ func DBUsersSetup(db *sql.DB) {
 		kind SMALLINT NOT NULL,
 		pid BIGINT NOT NULL,
 		sid BIGINT NOT NULL,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0.0,
+		downvotes BIGINT DEFAULT 0.0,
+		updatedOn TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (uid, kind, pid, sid)
 	) PARTITION BY HASH(uid);`
@@ -105,8 +106,8 @@ func DBPostsSetup(db *sql.DB) {
 		content TEXT,
 		tags BIGINT[],
 		createdAt TIMESTAMP,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0.0,
+		downvotes BIGINT DEFAULT 0.0,
 		location TEXT[],
 		trashed BOOLEAN DEFAULT false,
 		commentCount INTEGER DEFAULT 0,
@@ -139,8 +140,8 @@ func DBCommentsSetup(db *sql.DB) {
 		replyId BIGINT,
 		content TEXT,
 		createdAt TIMESTAMP,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0.0,
+		downvotes BIGINT DEFAULT 0.0,
 		trashed BOOLEAN DEFAULT false,
 		replyCount SMALLINT DEFAULT 0,
 
@@ -174,8 +175,8 @@ func DBVotesSetup(db *sql.DB) {
 		pid BIGINT NOT NULL,
 		sid BIGINT NOT NULL,
 		location TEXT[],
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0.0,
+		downvotes BIGINT DEFAULT 0.0,
 		updatedAt DATE DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (kind, pid, sid, location, updatedAt)
@@ -222,8 +223,8 @@ func DBTagsSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
-		upvotes DOUBLE PRECISION DEFAULT 0.0,
-		downvotes DOUBLE PRECISION DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0.0,
+		downvotes BIGINT DEFAULT 0.0,
 
 		PRIMARY KEY (name)
 	);`
@@ -306,6 +307,16 @@ func DBFunctionSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createDepreciationOverTime)
 	DidFail(e, "create deprecation over time function")
+
+	createInverse := `
+	CREATE OR REPLACE FUNCTION InverseNumber(n DOUBLE PRECISION, max DOUBLE PRECISION) 
+	RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN LEAST(COALESCE(1 / NULLIF(n, 0), max), max);
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createInverse)
+	DidFail(e, "create inverse function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {
