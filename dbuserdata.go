@@ -289,7 +289,7 @@ func DBGetUserPref(db *sql.DB, isOwner bool, userId int64, sortOrder SortOrder, 
 
 func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64,
 	downvoteAmount int64, upvotes int64, downvotes int64, sortOrder SortOrder, search string,
-	limit int64, offset int64) []UserPrefUser {
+	limit int64, offset int64, startDate string, endDate string) []UserPrefUser {
 	getUsers := fmt.Sprintf(`
 	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score  
 	FROM UserPref up 
@@ -300,6 +300,13 @@ func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 
 	if !isOwner {
 		getUsers += "AND x.publicUserVotes "
+	}
+	if len(startDate) > 0 && len(endDate) > 0 {
+		getUsers += fmt.Sprintf("AND up.updatedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		getUsers += fmt.Sprintf("AND up.updatedOn > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		getUsers += fmt.Sprintf("AND up.updatedOn < (TIMESTAMP '%s') ", endDate)
 	}
 	if upvoteAmount > 0 {
 		getUsers += fmt.Sprintf("AND up.upvotes >= %d ", upvoteAmount)
@@ -358,11 +365,11 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getPosts += "AND x.publicPostVotes "
 	}
 	if len(startDate) > 0 && len(endDate) > 0 {
-		getPosts += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+		getPosts += fmt.Sprintf("AND up.updatedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
 	} else if len(startDate) > 0 {
-		getPosts += fmt.Sprintf("AND p.createdAt > (TIMESTAMP '%s') ", startDate)
+		getPosts += fmt.Sprintf("AND up.updatedOn > (TIMESTAMP '%s') ", startDate)
 	} else if len(endDate) > 0 {
-		getPosts += fmt.Sprintf("AND p.createdAt < (TIMESTAMP '%s') ", endDate)
+		getPosts += fmt.Sprintf("AND up.updatedOn < (TIMESTAMP '%s') ", endDate)
 	}
 	if upvoteAmount > 0 {
 		getPosts += fmt.Sprintf("AND up.upvotes >= %d ", upvoteAmount)
@@ -434,11 +441,11 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 		getComments += "AND x.publicCommentVotes "
 	}
 	if len(startDate) > 0 && len(endDate) > 0 {
-		getComments += fmt.Sprintf("AND p.createdAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+		getComments += fmt.Sprintf("AND up.updatedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
 	} else if len(startDate) > 0 {
-		getComments += fmt.Sprintf("AND p.createdAt > (TIMESTAMP '%s') ", startDate)
+		getComments += fmt.Sprintf("AND up.updatedOn > (TIMESTAMP '%s') ", startDate)
 	} else if len(endDate) > 0 {
-		getComments += fmt.Sprintf("AND p.createdAt < (TIMESTAMP '%s') ", endDate)
+		getComments += fmt.Sprintf("AND up.updatedOn < (TIMESTAMP '%s') ", endDate)
 	}
 	if upvoteAmount > 0 {
 		getComments += fmt.Sprintf("AND up.upvotes >= %d ", upvoteAmount)
@@ -489,7 +496,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 
 func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64, downvoteAmount int64,
 	tags []string, location []string, upvotes int64, downvotes int64,
-	sortOrder SortOrder, search string, limit int64, offset int64) []UserPrefTag {
+	sortOrder SortOrder, search string, limit int64, offset int64, startDate string, endDate string) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
 	JOIN tags t ON up.pid = t.id
@@ -500,6 +507,13 @@ func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int6
 
 	if !isOwner {
 		getTags += "AND x.publicTagVotes "
+	}
+	if len(startDate) > 0 && len(endDate) > 0 {
+		getTags += fmt.Sprintf("AND up.updatedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		getTags += fmt.Sprintf("AND up.updatedOn > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		getTags += fmt.Sprintf("AND up.updatedOn < (TIMESTAMP '%s') ", endDate)
 	}
 	if upvoteAmount > 0 {
 		getTags += fmt.Sprintf("AND up.upvotes >= %d ", upvoteAmount)
@@ -706,11 +720,17 @@ func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64
 			query += fmt.Sprintf("AND p.downvotes < %d ", -upvotes)
 		}
 	}
-
-	sDate := parseTime(startDate)
-	eDate := parseTime(endDate)
-	years := yearsBetweenDates(sDate, eDate)
-	query = BuildUnionForYears(query, years)
+	dateField := "createdAt"
+	if kind == ucpReadLater || kind == ucpViewed {
+		dateField = "addedOn"
+	}
+	if len(startDate) > 0 && len(endDate) > 0 {
+		query += fmt.Sprintf("AND p.%s BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", dateField, startDate, endDate)
+	} else if len(startDate) > 0 {
+		query += fmt.Sprintf("AND p.%s > (TIMESTAMP '%s') ", dateField, startDate)
+	} else if len(endDate) > 0 {
+		query += fmt.Sprintf("AND p.%s < (TIMESTAMP '%s') ", dateField, endDate)
+	}
 
 	query += SQLSortOrder(sortOrder)
 
@@ -785,7 +805,7 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	return result
 }
 
-func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKind) []UserProfile {
+func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKind, startDate string, endDate string) []UserProfile {
 	permission := ""
 	if !isOwner {
 		switch kind {
@@ -801,6 +821,13 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 	JOIN Users p ON up.pid = p.id
 	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d %s
 	`, SQLFieldsForUserProfile(), userId, kind, permission)
+	if len(startDate) > 0 && len(endDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn < (TIMESTAMP '%s') ", endDate)
+	}
 
 	rows, e := db.Query(query)
 	result := []UserProfile{}

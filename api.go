@@ -403,10 +403,12 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
 	isOwner := ContextMatchSecret(c, uid)
 
-	users := DBGetUserPrefUsers(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
+	users := DBGetUserPrefUsers(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, users)
 }
 
@@ -593,10 +595,12 @@ func APIGetUserPrefTags(c *gin.Context) {
 		return
 	}
 
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
 	isOwner := ContextMatchSecret(c, uid)
 
-	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset)
+	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, result)
 }
 
@@ -648,10 +652,8 @@ func APIGetUserContPost(kind UserContKind) func(*gin.Context) {
 			return
 		}
 
-		now := utc()
-		lastWeek := now.AddDate(0, 0, -7)
-		startDate := c.DefaultQuery("start", formatTime(lastWeek))
-		endDate := c.DefaultQuery("end", formatTime(now))
+		startDate := c.DefaultQuery("start", "")
+		endDate := c.DefaultQuery("end", "")
 		search := c.DefaultQuery("search", "")
 		isOwner := ContextMatchSecret(c, uid)
 
@@ -717,8 +719,10 @@ func APIGetUserContUsers(ucp UserContKind) func(*gin.Context) {
 			return
 		}
 		isOwner := ContextMatchSecret(c, uid)
+		startDate := c.DefaultQuery("start", "")
+		endDate := c.DefaultQuery("end", "")
 
-		users := DBGetUserContUsers(mainDB, isOwner, uid, ucp)
+		users := DBGetUserContUsers(mainDB, isOwner, uid, ucp, startDate, endDate)
 		APIReturn(c, true, users)
 	}
 }
@@ -1074,6 +1078,9 @@ func APIVotePost(c *gin.Context) {
 	addr := getAddress(c.ClientIP())
 
 	DBVotePost(mainDB, in.UID, pid, in.Amount, addr, "")
+	if in.Amount < 0 {
+		in.Amount = -in.Amount
+	}
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1116,6 +1123,9 @@ func APIVoteComment(c *gin.Context) {
 	addr := getAddress(c.ClientIP())
 
 	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr, "")
+	if in.Amount < 0 {
+		in.Amount = -in.Amount
+	}
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1193,7 +1203,7 @@ func APIPurchaseCredit(c *gin.Context) {
 	newAmount := DBAddUserCredit(mainDB, targetId, input.Amount)
 
 	if newAmount >= 0 {
-		APIReturn(c, true, gin.H{"credits_remaining": newAmount})
+		APIReturn(c, true, newAmount)
 	} else {
 		APIFailed(c, errors.New(""), "could not complete top up")
 	}
