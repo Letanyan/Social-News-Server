@@ -43,9 +43,13 @@ func APIFailed(c *gin.Context, e error, reason string) bool {
 	}
 }
 
-func APIMatchSecret(c *gin.Context, user int64) bool {
+func ContextMatchSecret(c *gin.Context, user int64) bool {
 	secret := c.DefaultQuery("secret", "")
-	if AUTHMatchSecret(user, secret) {
+	return AUTHMatchSecret(user, secret)
+}
+
+func APIMatchSecret(c *gin.Context, user int64) bool {
+	if ContextMatchSecret(c, user) {
 		return true
 	} else {
 		APIReturn(c, false, "Re-sign in to refresh session")
@@ -132,9 +136,10 @@ func APICreatePost(c *gin.Context) {
 
 func APICreateComment(c *gin.Context) {
 	type Input struct {
-		UserID  int64  `json:"userId"`
-		ReplyID int64  `json:"replyId"`
-		Content string `json:"content"`
+		UserID   int64  `json:"userId"`
+		ReplyID  int64  `json:"replyId"`
+		Content  string `json:"content"`
+		IsReview bool   `json:"isReview"`
 	}
 	var in Input
 
@@ -152,7 +157,7 @@ func APICreateComment(c *gin.Context) {
 		APIFailed(c, e, "invalid post id")
 	}
 
-	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID)
+	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
 	if comment.ID != 0 {
 		APIReturn(c, true, comment)
 	} else {
@@ -179,9 +184,12 @@ func APIDeleteUser(c *gin.Context) {
 
 func APIDeletePost(c *gin.Context) {
 	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
-
 	if APIFailed(c, e, "invalid post id") {
-		APIReturn(c, false, "invalid post id provided")
+		return
+	}
+
+	post := DBGetPost(mainDB, pid)
+	if !APIMatchSecret(c, post.Author.ID) {
 		return
 	}
 
@@ -200,6 +208,17 @@ func APIDeleteComment(c *gin.Context) {
 	if APIFailed(c, e, "invalid post id") {
 		APIReturn(c, false, "invalid post id provided")
 		return
+	}
+
+	comment := DBGetComment(mainDB, pid, cid)
+	isCommenter := ContextMatchSecret(c, comment.Author.ID)
+	if !isCommenter {
+		post := DBGetPost(mainDB, pid)
+		isPoster := ContextMatchSecret(c, post.Author.ID)
+		if !isPoster {
+			APIReturn(c, false, "Re-sign in to refresh session")
+			return
+		}
 	}
 
 	DBDeleteComment(mainDB, pid, cid)
@@ -235,6 +254,10 @@ func APIDeleteUserContPlaylist(kind UserContKind) func(*gin.Context) {
 func APIGetUser(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	if !APIMatchSecret(c, uid) {
 		return
 	}
 
@@ -332,8 +355,9 @@ func APIGetUserPrefs(kind UserPrefKind) func(*gin.Context) {
 		if APIFailed(c, e, "invalid sid given") {
 			return
 		}
+		isOwner := ContextMatchSecret(c, uid)
 
-		prefs := DBGetUserPref(mainDB, uid, order, kind, pid, sid, upvotes, downvotes, limit, offset)
+		prefs := DBGetUserPref(mainDB, isOwner, uid, order, kind, pid, sid, upvotes, downvotes, limit, offset)
 		APIReturn(c, true, prefs)
 	}
 }
@@ -379,9 +403,12 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
+	isOwner := ContextMatchSecret(c, uid)
 
-	users := DBGetUserPrefUsers(mainDB, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset)
+	users := DBGetUserPrefUsers(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, users)
 }
 
@@ -451,7 +478,9 @@ func APIGetUserPrefPosts(c *gin.Context) {
 	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
 
-	posts := DBGetUserPrefPosts(mainDB, uid, upvoteAmount, downvoteAmount, author, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	isOwner := ContextMatchSecret(c, uid)
+
+	posts := DBGetUserPrefPosts(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, author, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, posts)
 }
 
@@ -510,7 +539,9 @@ func APIGetUserPrefComments(c *gin.Context) {
 	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
 
-	comments := DBGetUserPrefComments(mainDB, uid, upvoteAmount, downvoteAmount, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	isOwner := ContextMatchSecret(c, uid)
+
+	comments := DBGetUserPrefComments(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
 }
 
@@ -564,9 +595,12 @@ func APIGetUserPrefTags(c *gin.Context) {
 		return
 	}
 
+	startDate := c.DefaultQuery("start", "")
+	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
+	isOwner := ContextMatchSecret(c, uid)
 
-	result := DBGetUserPrefTags(mainDB, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset)
+	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, result)
 }
 
@@ -618,13 +652,12 @@ func APIGetUserContPost(kind UserContKind) func(*gin.Context) {
 			return
 		}
 
-		now := utc()
-		lastWeek := now.AddDate(0, 0, -7)
-		startDate := c.DefaultQuery("start", formatTime(lastWeek))
-		endDate := c.DefaultQuery("end", formatTime(now))
+		startDate := c.DefaultQuery("start", "")
+		endDate := c.DefaultQuery("end", "")
 		search := c.DefaultQuery("search", "")
+		isOwner := ContextMatchSecret(c, uid)
 
-		result := DBGetUserContPost(mainDB, kind, uid, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+		result := DBGetUserContPost(mainDB, isOwner, kind, uid, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 		APIReturn(c, true, result)
 	}
 }
@@ -673,8 +706,9 @@ func APIGetUserContComments(c *gin.Context) {
 	startDate := c.DefaultQuery("start", "")
 	endDate := c.DefaultQuery("end", "")
 	search := c.DefaultQuery("search", "")
+	isReview := c.DefaultQuery("isReview", "0") == "1"
 
-	comments := DBGetUserContComments(mainDB, uid, author, replyId, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	comments := DBGetUserContComments(mainDB, uid, author, replyId, isReview, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, comments)
 }
 
@@ -684,8 +718,11 @@ func APIGetUserContUsers(ucp UserContKind) func(*gin.Context) {
 		if APIFailed(c, e, "invalid user id") {
 			return
 		}
+		isOwner := ContextMatchSecret(c, uid)
+		startDate := c.DefaultQuery("start", "")
+		endDate := c.DefaultQuery("end", "")
 
-		users := DBGetUserContUsers(mainDB, uid, ucp)
+		users := DBGetUserContUsers(mainDB, isOwner, uid, ucp, startDate, endDate)
 		APIReturn(c, true, users)
 	}
 }
@@ -776,6 +813,39 @@ func APIGetPosts(c *gin.Context) {
 	APIReturn(c, true, posts)
 }
 
+func APIGetSimilarPosts(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+	if APIFailed(c, e, "invalid order given") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset given") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit given") {
+		return
+	}
+
+	// startDate := c.DefaultQuery("start", "")
+	// endDate := c.DefaultQuery("end", "")
+
+	pid, e := strconv.ParseInt(c.DefaultQuery("pid", "0"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	posts := DBGetSimilarPosts(mainDB, uid, pid, order, limit, offset)
+	APIReturn(c, true, posts)
+}
+
 // ------------------------------------------------------------------------
 // Get Comment
 // ------------------------------------------------------------------------
@@ -844,6 +914,7 @@ func APIGetComments(c *gin.Context) {
 	endCreated := c.DefaultQuery("endCreated", "")
 	start := c.DefaultQuery("start", "")
 	end := c.DefaultQuery("end", "")
+	isReview := c.DefaultQuery("isReview", "0") == "1"
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -852,7 +923,7 @@ func APIGetComments(c *gin.Context) {
 
 	search := c.DefaultQuery("search", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
+	result := DBGetComments(mainDB, pid, uid, replyId, isReview, start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
 	APIReturn(c, true, result)
 }
 
@@ -1007,6 +1078,9 @@ func APIVotePost(c *gin.Context) {
 	addr := getAddress(c.ClientIP())
 
 	DBVotePost(mainDB, in.UID, pid, in.Amount, addr, "")
+	if in.Amount < 0 {
+		in.Amount = -in.Amount
+	}
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1049,6 +1123,9 @@ func APIVoteComment(c *gin.Context) {
 	addr := getAddress(c.ClientIP())
 
 	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr, "")
+	if in.Amount < 0 {
+		in.Amount = -in.Amount
+	}
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1126,10 +1203,46 @@ func APIPurchaseCredit(c *gin.Context) {
 	newAmount := DBAddUserCredit(mainDB, targetId, input.Amount)
 
 	if newAmount >= 0 {
-		APIReturn(c, true, gin.H{"credits_remaining": newAmount})
+		APIReturn(c, true, newAmount)
 	} else {
 		APIFailed(c, errors.New(""), "could not complete top up")
 	}
+}
+
+func APIUpdateUser(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+	if !APIMatchSecret(c, uid) {
+		return
+	}
+
+	type Input struct {
+		Name string `json:"name"`
+
+		PublicViews     bool
+		PublicReadLater bool
+		PublicFollowing bool
+		PublicIgnored   bool
+
+		PublicPostVotes    bool
+		PublicCommentVotes bool
+		PublicUserVotes    bool
+		PublicTagVotes     bool
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for user permissions") {
+		return
+	}
+
+	DBUpdateUserPublicPermissions(mainDB, uid,
+		in.PublicViews, in.PublicReadLater, in.PublicIgnored, in.PublicFollowing,
+		in.PublicPostVotes, in.PublicCommentVotes, in.PublicTagVotes, in.PublicUserVotes)
+
+	DBUpdateUser(mainDB, uid, in.Name)
+
+	APIReturn(c, true, "")
 }
 
 func APIWatchUser(c *gin.Context) {
@@ -1178,7 +1291,7 @@ func APICreateFlag(c *gin.Context) {
 	APIReturn(c, true, gin.H{})
 }
 
-func APIGetFlags(c *gin.Context) {
+func APIGetFlaggedPosts(c *gin.Context) {
 	kind, e := strconv.ParseInt(c.DefaultQuery("kind", fmt.Sprint(frSpam)), 10, 64)
 	if APIFailed(c, e, "invalid flag kind") {
 		return
@@ -1194,7 +1307,28 @@ func APIGetFlags(c *gin.Context) {
 		return
 	}
 
-	content := DBGetFlags(mainDB, FlagReason(kind), limit, offset)
+	content := DBGetFlaggedPosts(mainDB, FlagReason(kind), limit, offset)
+
+	APIReturn(c, true, content)
+}
+
+func APIGetFlaggedComments(c *gin.Context) {
+	kind, e := strconv.ParseInt(c.DefaultQuery("kind", fmt.Sprint(frSpam)), 10, 64)
+	if APIFailed(c, e, "invalid flag kind") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit value") {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset value") {
+		return
+	}
+
+	content := DBGetFlaggedComments(mainDB, FlagReason(kind), limit, offset)
 
 	APIReturn(c, true, content)
 }
@@ -1278,6 +1412,25 @@ jAhjLaPD
 
 	// Voila!
 	fmt.Println(unique)
+}
+
+func APISignOut(c *gin.Context) {
+	type Input struct {
+		UserId int64 `json:"userId"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for sign out") {
+		return
+	}
+
+	secret := c.DefaultQuery("secret", "")
+	if !AUTHMatchSecret(in.UserId, secret) {
+		APIReturn(c, true, "")
+	}
+
+	AUTHDeregister(in.UserId, secret)
+
+	APIReturn(c, true, "")
 }
 
 func APIResendVerificationLink(c *gin.Context) {

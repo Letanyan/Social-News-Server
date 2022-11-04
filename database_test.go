@@ -101,14 +101,14 @@ func TestDatabase(t *testing.T) {
 			}
 			matchUserProfile("match vote and get user", srcUser, user5)
 
-			userPrefs := DBGetUserPref(db, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
+			userPrefs := DBGetUserPref(db, true, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
 			if len(userPrefs) != 1 {
 				t.Errorf("failed to get user prefs for user %d", source.ID)
 			} else {
 				p := userPrefs[0]
-				if amount < 0 && p.Downvotes < float64(amount) {
+				if amount < 0 && p.Downvotes < amount {
 					t.Errorf("failed to update user pref downvotes for other user")
-				} else if amount > 0 && p.Upvotes < float64(amount) {
+				} else if amount > 0 && p.Upvotes < amount {
 					t.Errorf("failed to update user pref upvotes for other user")
 				}
 				if p.Downvotes != srcPref.Downvotes || p.Upvotes != srcPref.Upvotes ||
@@ -156,10 +156,10 @@ func TestDatabase(t *testing.T) {
 			t.Errorf("Mismatch createdAt %v != %v", a.CreatedAt, b.CreatedAt)
 		}
 		if a.Upvotes != b.Upvotes {
-			t.Errorf("Mismatch upvotes %f != %f", a.Upvotes, b.Upvotes)
+			t.Errorf("Mismatch upvotes %d != %d", a.Upvotes, b.Upvotes)
 		}
 		if a.Downvotes != b.Downvotes {
-			t.Errorf("Mismatch downvotes %f != %f", a.Downvotes, b.Downvotes)
+			t.Errorf("Mismatch downvotes %d != %d", a.Downvotes, b.Downvotes)
 		}
 	}
 
@@ -179,7 +179,7 @@ func TestDatabase(t *testing.T) {
 				other := DBGetUser(db, 0, otherUser.Email)
 				pidx := rand.Intn(len(posts))
 
-				comt, cont := DBCreateComment(db, other.ID, posts[pidx].content, post1.ID, 0)
+				comt, cont := DBCreateComment(db, other.ID, posts[pidx].content, post1.ID, 0, false)
 
 				if comt.Content != posts[pidx].content {
 					t.Errorf("comment content not correct")
@@ -205,32 +205,32 @@ func TestDatabase(t *testing.T) {
 				date := utc().AddDate(0, 0, rand.Intn(25)*int(sign(rand.Intn(2) == 0))).Format("2006-01-02")
 				post2, userPoster, tags, prefs := DBVotePost(db, other.ID, source.ID, amount, loc, date)
 
-				if amount < 0 && post2.Downvotes < float64(amount) {
+				if amount < 0 && post2.Downvotes < amount {
 					t.Errorf("Post downvotes not updated")
-				} else if amount > 0 && post2.Upvotes < float64(amount) {
+				} else if amount > 0 && post2.Upvotes < amount {
 					t.Errorf("Post upvotes not updated")
 				}
-				if amount < 0 && userPoster.Downvotes < float64(amount) {
+				if amount < 0 && userPoster.Downvotes < amount {
 					t.Errorf("Post downvotes for poster not updated")
-				} else if amount > 0 && userPoster.Upvotes < float64(amount) {
+				} else if amount > 0 && userPoster.Upvotes < amount {
 					t.Errorf("Post upvotes for poster not updated")
 				}
 				uPref := prefs[0]
 				if uPref.Kind != upUser && uPref.PID != other.ID {
 					t.Errorf("User pref not update user voted for")
 				}
-				if amount < 0 && uPref.Downvotes < float64(amount) {
+				if amount < 0 && uPref.Downvotes < amount {
 					t.Errorf("User pref downvotes for poster not updated")
-				} else if amount > 0 && uPref.Upvotes < float64(amount) {
+				} else if amount > 0 && uPref.Upvotes < amount {
 					t.Errorf("User pref upvotes for poster not updated")
 				}
 				pPref := prefs[1]
 				if pPref.Kind != upPost && pPref.PID != source.ID {
 					t.Errorf("User pref not update user voted for")
 				}
-				if amount < 0 && pPref.Downvotes < float64(amount) {
+				if amount < 0 && pPref.Downvotes < amount {
 					t.Errorf("User pref downvotes for post not updated")
-				} else if amount > 0 && pPref.Upvotes < float64(amount) {
+				} else if amount > 0 && pPref.Upvotes < amount {
 					t.Errorf("User pref upvotes for post not updated")
 				}
 

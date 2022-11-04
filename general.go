@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
+	"os"
 	"regexp"
 	"unicode"
 )
@@ -90,4 +92,38 @@ func DBPrepareSearchString(query string) (string, []int64) {
 	}
 
 	return query, tags
+}
+
+func AUTHLoadFromFile(fileName string) map[int64][]string {
+	result := map[int64][]string{}
+	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+	if DidFail(e, "open file ", fileName) {
+		return result
+	}
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	e = dec.Decode(&result)
+	if DidFail(e, "decode file ", fileName, " to hash map") {
+		return result
+	}
+	return result
+}
+
+func AUTHWriteToFile(data map[int64][]string, fileName string) {
+	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
+	if DidFail(e, "open file ", fileName) {
+		return
+	}
+	defer file.Close()
+	enc := gob.NewEncoder(file)
+	e = enc.Encode(data)
+	if DidFail(e, "gob write file") {
+		return
+	}
+}
+
+func Zero[T any]() T {
+	var result T
+	return result
 }

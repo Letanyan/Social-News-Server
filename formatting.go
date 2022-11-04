@@ -16,12 +16,6 @@ func formatTimestamp(t time.Time) string {
 	return nowTime
 }
 
-func parseTime(t string) time.Time {
-	result, e := time.Parse("2006-01-02 15:04:05.999999", t)
-	DidFail(e, "parsing time", t)
-	return result
-}
-
 func parseUnknownTime(t string) time.Time {
 	result, e := time.Parse("2006-01-02T15:04:05.999999Z", t)
 	if e == nil {

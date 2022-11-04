@@ -22,11 +22,11 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		), Total AS (
 			SELECT SUM(upvotes) up, SUM(downvotes) down
 			FROM UserPrefs
-			WHERE kind=4
+			WHERE kind=3
 		), Scores AS (
 			SELECT pid, (upvotes - downvotes) / (total.up + total.down) AS value
 			FROM UserPrefs, Total
-			WHERE kind=4
+			WHERE kind=3
 		), UserConts AS (
 			SELECT *
 			FROM UserCont
@@ -36,9 +36,17 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			FROM UserConts
 			WHERE kind=4
 		), Viewed AS (
-			SELECT pid
-			FROM UserConts
-			WHERE kind=1 OR kind=5
+			(
+				SELECT pid
+				FROM UserConts
+				WHERE kind=5
+			) 
+			UNION 
+			(
+				SELECT pid
+				FROM UserPrefs
+				WHERE kind=2
+			)
 		)
 		`, forUser, forUser)
 
@@ -49,7 +57,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	}
 
 	result := fmt.Sprintf(`%s
-	SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, {score} AS score
+	SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, {score} AS score{rank}
 	FROM %s
 	%s
 	`, withTable, aliasFields, table, joins)
@@ -57,12 +65,12 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	result = strings.ReplaceAll(result, "{score}", scoreField)
 
 	if upvotes > 0 {
-		cond = append(cond, fmt.Sprintf("%s.upvotes > %d", voteTable, upvotes))
+		cond = append(cond, fmt.Sprintf("%s.upvotes >= %d", voteTable, upvotes))
 	} else if upvotes < 0 {
 		cond = append(cond, fmt.Sprintf("%s.upvotes < %d", voteTable, -upvotes))
 	}
 	if downvotes > 0 {
-		cond = append(cond, fmt.Sprintf("%s.downvotes > %d", voteTable, downvotes))
+		cond = append(cond, fmt.Sprintf("%s.downvotes >= %d", voteTable, downvotes))
 	} else if downvotes < 0 {
 		cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
 	}
@@ -88,10 +96,22 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			if len(search) > 0 {
 				cond = append(cond, fmt.Sprintf("p.content @@ websearch_to_tsquery('%s')", search))
 			}
+			if sortOrder == soRank {
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.content), websearch_to_tsquery('%s')) AS rank", search))
+			} else {
+				result = strings.ReplaceAll(result, "{rank}", "")
+			}
 		} else if table == "Users p" || table == "Tags p" {
 			search, _ := DBPrepareSearchString(search)
 			cond = append(cond, fmt.Sprintf("p.name @@ websearch_to_tsquery('%s')", search))
+			if sortOrder == soRank {
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.name), websearch_to_tsquery('%s')) AS rank", search))
+			} else {
+				result = strings.ReplaceAll(result, "{rank}", "")
+			}
 		}
+	} else {
+		result = strings.ReplaceAll(result, "{rank}", "")
 	}
 
 	if len(cond) > 0 {

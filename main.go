@@ -27,8 +27,9 @@ var (
 )
 
 var (
-	mainDB *sql.DB
-	agents []NewsAgent
+	mainDB         *sql.DB
+	agents         []NewsAgent
+	updatingAgents bool
 )
 
 func main() {
@@ -56,6 +57,7 @@ func main() {
 		// Sign in
 		v1.POST("/auth/callbacks/sign-in", APISignIn)
 		v1.POST("/auth/callbacks/sign-in-with-apple", APISignInWithApple)
+		v1.POST("/auth/callbacks/sign-out", APISignOut)
 		v1.POST("/auth/verification/users/:uid", APIResendVerificationLink)
 		v1.GET("/users/:uid/verification/:key", APIVerifyUserEmail)
 		// Create
@@ -84,6 +86,7 @@ func main() {
 		v1.GET("/users/:uid/content/comments", APIGetUserContComments)
 		v1.GET("/users/:uid/content/user-follows", APIGetUserContUsers(ucpUserFollow))
 		v1.GET("/users/:uid/content/ignored", APIGetUserContUsers(ucpUserIgnored))
+		v1.GET("/users/:uid/recommend", APIGetSimilarPosts)
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
 		v1.GET("/posts", APIGetPosts)
@@ -94,6 +97,7 @@ func main() {
 		v1.POST("/tags", APIGetTagsFromIDs)
 		// Vote
 		v1.POST("/credits/:uid", APIPurchaseCredit)
+		v1.POST("/users/:uid/details", APIUpdateUser)
 		v1.POST("/users/:uid", APIVoteUser)
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
@@ -108,19 +112,19 @@ func main() {
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)
-		v1.GET("/flags", APIGetFlags)
+		v1.GET("/flags/posts", APIGetFlaggedPosts)
+		v1.GET("/flags/comments", APIGetFlaggedComments)
 		v1.POST("/trash/flags/:id", APIHandleFlag)
-	}
 
-	apih := router.Group("/apih")
-	hv1 := apih.Group("/v1")
-	{
-		hv1.POST("/agents", APIHCreateAgent)
-		hv1.POST("/agents/:aid", APIHUpdateAgent)
-		hv1.DELETE("/agents/:aid", APIHDeleteAgent)
-		hv1.POST("/all-agents", APIHUpdateAgents)
-		hv1.GET("/agents/:aid", APIHGetAgent)
-		hv1.GET("/agents", APIHGetAllAgents)
+		// Agents
+		v1.POST("/agents", APICreateAgent)
+		v1.POST("/agents/:aid", APIUpdateAgent)
+		v1.POST("/trash/agents/:aid", APIDeleteAgent)
+		v1.POST("/all-agents", APIUpdateAgents)
+		v1.GET("/agents/:aid", APIGetAgent)
+		v1.GET("/agents", APIGetAllAgents)
+		v1.POST("/update/agents/:aid", APIEditAgent)
+		v1.POST("/agents/:aid/sub", APIEditSubNewsAgent)
 	}
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
@@ -136,7 +140,10 @@ func main() {
 
 	DBSetup(mainDB)
 
+	// SendValidationKey(10, "letanyan@icloud.com", 6347)
+
 	agents = NAReadAllNewsAgents()
+	updatingAgents = false
 
 	NARegisterUpdates()
 	port := os.Getenv("PORT")

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func APIHCreateAgent(c *gin.Context) {
+func APICreateAgent(c *gin.Context) {
 	type Input struct {
 		Name   string `json:"name"`
 		Origin string `json:"origin"`
@@ -16,6 +16,10 @@ func APIHCreateAgent(c *gin.Context) {
 
 	if e := c.BindJSON(&input); DidFail(e, "get input for create user") {
 		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	if !APIMatchSecret(c, -1) {
 		return
 	}
 
@@ -33,9 +37,68 @@ func APIHCreateAgent(c *gin.Context) {
 	}
 }
 
-func APIHDeleteAgent(c *gin.Context) {
+func APIEditAgent(c *gin.Context) {
+	type Input struct {
+		Name   string `json:"name"`
+		Origin string `json:"origin"`
+	}
+	var in Input
+
+	if e := c.BindJSON(&in); DidFail(e, "get input for create user") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	if !APIMatchSecret(c, -1) {
+		return
+	}
+
 	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
 	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+
+	agent := NAEditNewsAgent(aid, in.Name, in.Origin)
+
+	APIReturn(c, true, agent)
+}
+
+func APIEditSubNewsAgent(c *gin.Context) {
+	type Input struct {
+		Sub string `json:"sub"`
+	}
+	var in Input
+
+	if e := c.BindJSON(&in); DidFail(e, "get input for news agent sub") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	if !APIMatchSecret(c, -1) {
+		return
+	}
+
+	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
+	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+
+	var agent NewsAgent
+	if in.Sub[0] == '+' {
+		agent = NAAddSub(aid, in.Sub[1:len(in.Sub)])
+	} else if in.Sub[0] == '-' {
+		agent = NARemoveSub(aid, in.Sub[1:len(in.Sub)])
+	}
+	APIReturn(c, true, agent)
+}
+
+func APIDeleteAgent(c *gin.Context) {
+	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
+	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+
+	if !APIMatchSecret(c, -1) {
 		return
 	}
 
@@ -49,9 +112,13 @@ func APIHDeleteAgent(c *gin.Context) {
 	APIReturn(c, true, "deleted agent")
 }
 
-func APIHUpdateAgent(c *gin.Context) {
+func APIUpdateAgent(c *gin.Context) {
 	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
 	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+
+	if !APIMatchSecret(c, -1) {
 		return
 	}
 
@@ -60,15 +127,22 @@ func APIHUpdateAgent(c *gin.Context) {
 	APIReturn(c, true, result)
 }
 
-func APIHUpdateAgents(c *gin.Context) {
+func APIUpdateAgents(c *gin.Context) {
+	if !APIMatchSecret(c, -1) {
+		return
+	}
+
 	result := NAUpdateAllNewsAgent(0)
 
 	APIReturn(c, true, result)
 }
 
-func APIHGetAgent(c *gin.Context) {
+func APIGetAgent(c *gin.Context) {
 	aid, e := strconv.ParseInt(c.Param("aid"), 10, 64)
 	if APIFailed(c, e, "invalid aid param") {
+		return
+	}
+	if !APIMatchSecret(c, -1) {
 		return
 	}
 
@@ -87,6 +161,9 @@ func APIHGetAgent(c *gin.Context) {
 	}
 }
 
-func APIHGetAllAgents(c *gin.Context) {
+func APIGetAllAgents(c *gin.Context) {
+	if !APIMatchSecret(c, -1) {
+		return
+	}
 	APIReturn(c, true, agents)
 }

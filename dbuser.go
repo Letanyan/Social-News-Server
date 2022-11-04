@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"math/rand"
 	"net/smtp"
+	"text/template"
 	"time"
 )
 
@@ -15,22 +17,34 @@ type User struct {
 	Email         string
 	Password      string
 	RegisterDate  time.Time
-	Upvotes       float64
-	Downvotes     float64
+	Upvotes       int64
+	Downvotes     int64
 	Credits       int32
 	ValidationKey int32
+
+	PublicViews     bool
+	PublicReadLater bool
+	PublicFollowing bool
+	PublicIgnored   bool
+
+	PublicPostVotes    bool
+	PublicCommentVotes bool
+	PublicUserVotes    bool
+	PublicTagVotes     bool
 }
 
 type UserProfile struct {
 	ID           int64
 	Name         string
 	RegisterDate time.Time
-	Upvotes      float64
-	Downvotes    float64
+	Upvotes      int64
+	Downvotes    int64
 }
 
 func SQLFieldsForUser() string {
-	return "id, name, email, password, registerDate, upvotes, downvotes, credits, validationKey"
+	return "id, name, email, password, registerDate, upvotes, downvotes, credits, validationKey, " +
+		"publicViews, publicReadLater, publicFollowing, publicIgnored, " +
+		"publicPostVotes, publicCommentVotes, publicUserVotes, publicTagVotes"
 }
 
 func SQLFieldsForUserProfile() string {
@@ -43,7 +57,10 @@ func SQLFieldsForUserProfileAlias() string {
 
 func ScanUser(row *sql.Row) (User, error) {
 	u := User{}
-	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Credits, &u.ValidationKey)
+	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes,
+		&u.Downvotes, &u.Credits, &u.ValidationKey,
+		&u.PublicViews, &u.PublicReadLater, &u.PublicFollowing, &u.PublicIgnored,
+		&u.PublicPostVotes, &u.PublicCommentVotes, &u.PublicTagVotes, &u.PublicTagVotes)
 	return u, e
 }
 
@@ -53,28 +70,46 @@ func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	return u, e
 }
 
-func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []UserProfile {
+func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []UserProfile {
 	result := []UserProfile{}
 	var e error
 	for rows.Next() {
 		u := UserProfile{}
 		var score float64
 		var cred float64
-		var up float64
-		var down float64
-		if hasVotes {
-			if includeScore {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+		var up int64
+		var down int64
+		var rank float64
+		if hasRank {
+			if hasVotes {
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score, &rank)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &rank)
+				}
 			} else {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score, &rank)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &rank)
+				}
 			}
 		} else {
-			if includeScore {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score)
+			if hasVotes {
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
+				}
 			} else {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+				}
 			}
 		}
+
 		if DidFail(e, "get user from email/id") {
 			continue
 		}
@@ -133,6 +168,14 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	return user
 }
 
+func DBUpdateUser(db *sql.DB, id int64, name string) {
+	update := `UPDATE Users SET Name=$1 WHERE id=$2`
+	_, e := db.Exec(update, name, id)
+	if DidFail(e, "update user name") {
+		return
+	}
+}
+
 func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
 	validate := `UPDATE users SET validationKey = 0 WHERE id = $1 AND validationKey = $2 RETURNING id, validationKey`
 	row := db.QueryRow(validate, userId, key)
@@ -148,10 +191,22 @@ func SendValidationKey(userId int64, email string, key int32) {
 	port := "587"
 	from := "letanyan.a@gmail.com"
 	auth := smtp.PlainAuth("", from, "wlyoihckobjsbzlv", host)
-	mess := fmt.Sprintf("To verify your email please click the link https://localhost:8080/api/v1/users/%d/verification/%d", userId, key)
-	message := []byte(mess)
+	t, _ := template.ParseFiles("verify.html")
+	var body bytes.Buffer
+	mimeHeaders := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+	body.Write([]byte(fmt.Sprintf("Subject: New Source Email Verification \n%s\n\n", mimeHeaders)))
+	t.Execute(&body, struct {
+		UserId int64
+		Key    int32
+	}{
+		UserId: userId,
+		Key:    key,
+	})
 
-	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, message)
+	// mess := fmt.Sprintf("To verify your email please click the link https://localhost:8080/api/v1/users/%d/verification/%d", userId, key)
+	// message := []byte(mess)
+
+	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, body.Bytes())
 
 	if DidFail(e, "send mail") {
 		return
@@ -212,7 +267,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 
 	if usingVotesTable {
 		joins = "JOIN Votes v ON v.pid = p.id\n"
-		cond = append(cond, "kind=1")
+		cond = append(cond, "v.kind=0")
 	}
 
 	getUsers := SQLGetItems("Users p", voteTable, SQLFieldsForUserProfileAlias(),
@@ -224,7 +279,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 		return []UserProfile{}
 	}
 
-	result := ScanUserProfiles(rows, true, usingVotesTable)
+	result := ScanUserProfiles(rows, true, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 
 	return result
 }
@@ -316,5 +371,27 @@ func DBAddUserCredit(db *sql.DB, userId int64, amount int64) int64 {
 		return -1
 	} else {
 		return result
+	}
+}
+
+func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi bool, pf bool,
+	ppv bool, pcv bool, ptv bool, puv bool) {
+
+	update := fmt.Sprintf(`UPDATE Users 
+	SET 
+	PublicViews=$1,     
+	PublicReadLater=$2, 
+	PublicFollowing=$3, 
+	PublicIgnored=$4,   
+	PublicPostVotes=$5,    
+	PublicCommentVotes=$6, 
+	PublicUserVotes=$7,    
+	PublicTagVotes=$8  
+	WHERE id=%d
+	`, uid)
+
+	_, e := db.Exec(update, pv, prl, pf, pi, ppv, pcv, puv, ptv)
+	if DidFail(e, "update user permissions") {
+		return
 	}
 }

@@ -8,8 +8,8 @@ import (
 type Tag struct {
 	ID        int64
 	Name      string
-	Upvotes   float64
-	Downvotes float64
+	Upvotes   int64
+	Downvotes int64
 }
 
 func SQLFieldsForTag() string {
@@ -20,26 +20,43 @@ func SQLFieldsForTagAlias() string {
 	return "p.id, p.name, p.upvotes AS item_up, p.downvotes AS item_down"
 }
 
-func ScanTags(rows *sql.Rows, includeScore bool, hasVotes bool) []Tag {
+func ScanTags(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []Tag {
 	result := []Tag{}
 	var e error
 	for rows.Next() {
 		var cred float64
 		var score float64
-		var up float64
-		var down float64
+		var up int64
+		var down int64
+		var rank float64
 		tag := Tag{}
-		if hasVotes {
-			if includeScore {
-				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score)
+		if hasRank {
+			if hasVotes {
+				if includeScore {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score, &rank)
+				} else {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &rank)
+				}
 			} else {
-				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down)
+				if includeScore {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score, &rank)
+				} else {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &rank)
+				}
 			}
 		} else {
-			if includeScore {
-				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score)
+			if hasVotes {
+				if includeScore {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score)
+				} else {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down)
+				}
 			} else {
-				e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes)
+				if includeScore {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score)
+				} else {
+					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes)
+				}
 			}
 		}
 		if DidFail(e, "read row") {
@@ -71,7 +88,7 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	if DidFail(e, "create tags") {
 		return []Tag{}
 	}
-	result := ScanTags(rows, false, false)
+	result := ScanTags(rows, false, false, false)
 
 	return result
 }
@@ -103,7 +120,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	if DidFail(e, "insert and update tags") {
 		return []Tag{}, []UserPref{}
 	}
-	tagResult := ScanTags(rows, false, false)
+	tagResult := ScanTags(rows, false, false, false)
 
 	tagIndices := []int64{}
 	for _, tag := range tagResult {
@@ -111,10 +128,10 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	}
 
 	tagIndexRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(%d, 4, %d, -1)", userId, i)
+		return fmt.Sprintf("(%d, 3, %d, -1)", userId, i)
 	})
 	tagVoteRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(4, %d, -1, %s{date_value})", i, locArray)
+		return fmt.Sprintf("(3, %d, -1, %s{date_value})", i, locArray)
 	})
 	tagIndexArray := SQLFormattedIndexArray(tagIndices)
 	upsertUserTags := fmt.Sprintf(`
@@ -122,13 +139,14 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	VALUES %s ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = %s + %d
-	WHERE kind=4 AND pid=ANY(%s) AND location=%s AND updatedAt={date_value_res};
+	WHERE kind=3 AND pid=ANY(%s) AND location=%s AND updatedAt={date_value_res};
 
 	INSERT INTO UserPref (uid, kind, pid, sid)
 	VALUES %s ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
 	UPDATE UserPref SET 
-	%s = %s + %d
-	WHERE kind=4 AND uid=%d AND pid = ANY(%s)
+	%s = %s + %d,
+	updatedOn = (now() at time zone 'utc')
+	WHERE kind=3 AND uid=%d AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
 	`, tagVoteRows,
 		updatedField, updatedField, upvoteAmount,
@@ -162,7 +180,7 @@ func DBGetTagsFromIDs(db *sql.DB, ids []int64) []Tag {
 	if DidFail(e, "get tags by id") {
 		return result
 	}
-	result = ScanTags(rows, false, false)
+	result = ScanTags(rows, false, false, false)
 	return result
 }
 
@@ -187,7 +205,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 
 		if usingVotesTable {
 			joins += "JOIN votes v ON v.pid = p.id\n"
-			cond = append(cond, "kind=4")
+			cond = append(cond, "kind=3")
 		}
 	}
 
@@ -202,7 +220,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	}
 	defer rows.Close()
 
-	result := ScanTags(rows, true, usingVotesTable)
+	result := ScanTags(rows, true, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 
 	return result
 }

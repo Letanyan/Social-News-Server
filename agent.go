@@ -19,6 +19,7 @@ type NewsAgent struct {
 	Name       string
 	Origin     string
 	LastUpdate time.Time
+	Subs       []string
 }
 
 type WebsiteScrapings struct {
@@ -37,12 +38,81 @@ func NACreateNewsAgent(id int64, name string, origin string) (NewsAgent, error) 
 	if e != nil {
 		return NewsAgent{}, e
 	}
-	agent := NewsAgent{id, name, origin, utc()}
+	agent := NewsAgent{id, name, origin, utc(), []string{}}
 	agents = append(agents, agent)
 	NAWriteAllNewsAgents(agents)
 	visited := map[string]bool{}
 	HashSetWriteToFile(visited, fmt.Sprintf("./agents/%d.gob", id))
 	return agent, nil
+}
+
+func NAEditNewsAgent(id int64, name string, origin string) NewsAgent {
+	var found = -1
+	for i, a := range agents {
+		if a.ID == id {
+			found = i
+			break
+		}
+	}
+	if found == -1 {
+		return NewsAgent{}
+	}
+	if name != agents[found].Name {
+		DBUpdateUser(mainDB, id, name)
+	}
+	agents[found].Name = name
+	agents[found].Origin = origin
+	NAWriteAllNewsAgents(agents)
+
+	return agents[found]
+}
+
+func NAAddSub(id int64, dir string) NewsAgent {
+	var found = -1
+	for i, a := range agents {
+		if a.ID == id {
+			found = i
+			break
+		}
+	}
+	if found == -1 {
+		return NewsAgent{}
+	}
+	agents[found].Subs = append(agents[found].Subs, dir)
+	NAWriteAllNewsAgents(agents)
+
+	return agents[found]
+}
+
+func NARemoveSub(id int64, dir string) NewsAgent {
+	var found = -1
+	for i, a := range agents {
+		if a.ID == id {
+			found = i
+			break
+		}
+	}
+	if found == -1 {
+		return NewsAgent{}
+	}
+
+	agent := agents[found]
+	remove := -1
+	for i, s := range agent.Subs {
+		if s == dir {
+			remove = i
+			break
+		}
+	}
+	if remove == -1 {
+		return agent
+	}
+
+	agent.Subs[remove] = agent.Subs[len(agent.Subs)-1]
+	agents[found].Subs = agent.Subs[:len(agent.Subs)-1]
+	NAWriteAllNewsAgents(agents)
+
+	return agents[found]
 }
 
 func NAAgentExists(name string, origin string) error {
@@ -124,7 +194,12 @@ func NAUpdateAllNewsAgent(before time.Duration) []WebsiteScrapings {
 }
 
 func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
+	if updatingAgents {
+		return WebsiteScrapings{}
+	}
+	updatingAgents = true
 	if agent.ID == 0 {
+		updatingAgents = false
 		return WebsiteScrapings{}
 	}
 	scraping := NAScrapeWebsite(agent.Origin)
@@ -134,12 +209,15 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
+		updatingAgents = false
 		return WebsiteScrapings{}
 	}
 	hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
 	visited := HashSetFromFile(hashFile)
 	defer HashSetWriteToFile(visited, hashFile)
-	for _, urlString := range scraping.URLs {
+	allUrls := NATraverseSubDomains(agent.Origin, agent.Subs)
+	allUrls = append(allUrls, scraping.URLs...)
+	for _, urlString := range allUrls {
 		url, e := nurl.Parse(urlString)
 		canURLString := CanonicalURL(url.String())
 		if e != nil || !IsSameHost(url, baseURL) {
@@ -154,7 +232,7 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 			}
 		}
 	}
-
+	updatingAgents = false
 	return scraping
 }
 
@@ -170,6 +248,15 @@ func IsSameHost(a *nurl.URL, b *nurl.URL) bool {
 	x := CanonicalURL(a.Hostname())
 	y := CanonicalURL(b.Hostname())
 	return x == y
+}
+
+func NATraverseSubDomains(origin string, subs []string) []string {
+	result := []string{}
+	for _, sub := range subs {
+		scraping := NAScrapeWebsite(origin + sub)
+		result = append(result, scraping.URLs...)
+	}
+	return result
 }
 
 func NAScrapeWebsite(url string) WebsiteScrapings {
@@ -312,6 +399,6 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 }
 
 func NARegisterUpdates() {
-	NAUpdateAllNewsAgent(time.Minute * 30)
+	time.AfterFunc(0, func() { NAUpdateAllNewsAgent(time.Minute * 30) })
 	time.AfterFunc(time.Hour, func() { NARegisterUpdates() })
 }
