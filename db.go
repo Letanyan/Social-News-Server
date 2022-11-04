@@ -23,8 +23,8 @@ func DBUsersSetup(db *sql.DB) {
 		email TEXT NOT NULL,
 		password TEXT NOT NULL,
 		registerDate TIMESTAMP DEFAULT (now() at time zone 'utc'),
-		upvotes BIGINT DEFAULT 0.0,
-		downvotes BIGINT DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
@@ -64,8 +64,8 @@ func DBUsersSetup(db *sql.DB) {
 		kind SMALLINT NOT NULL,
 		pid BIGINT NOT NULL,
 		sid BIGINT NOT NULL,
-		upvotes BIGINT DEFAULT 0.0,
-		downvotes BIGINT DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
 		updatedOn TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (uid, kind, pid, sid)
@@ -106,8 +106,8 @@ func DBPostsSetup(db *sql.DB) {
 		content TEXT,
 		tags BIGINT[],
 		createdAt TIMESTAMP,
-		upvotes BIGINT DEFAULT 0.0,
-		downvotes BIGINT DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
 		location TEXT[],
 		trashed BOOLEAN DEFAULT false,
 		commentCount INTEGER DEFAULT 0,
@@ -140,8 +140,8 @@ func DBCommentsSetup(db *sql.DB) {
 		replyId BIGINT,
 		content TEXT,
 		createdAt TIMESTAMP,
-		upvotes BIGINT DEFAULT 0.0,
-		downvotes BIGINT DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
 		trashed BOOLEAN DEFAULT false,
 		replyCount SMALLINT DEFAULT 0,
 
@@ -175,8 +175,8 @@ func DBVotesSetup(db *sql.DB) {
 		pid BIGINT NOT NULL,
 		sid BIGINT NOT NULL,
 		location TEXT[],
-		upvotes BIGINT DEFAULT 0.0,
-		downvotes BIGINT DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
 		updatedAt DATE DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (kind, pid, sid, location, updatedAt)
@@ -223,8 +223,8 @@ func DBTagsSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
 		name TEXT NOT NULL,
-		upvotes BIGINT DEFAULT 0.0,
-		downvotes BIGINT DEFAULT 0.0,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
 
 		PRIMARY KEY (name)
 	);`
