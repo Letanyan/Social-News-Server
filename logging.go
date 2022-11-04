@@ -29,12 +29,18 @@ func DidFail(e error, message ...interface{}) bool {
 		_, file, line, _ := runtime.Caller(1)
 		_, filename := filepath.Split(file)
 		s := filename + ":" + fmt.Sprint(line) + ":" + fmt.Sprint(message...) + " -- " + e.Error()
+		if fail == nil {
+			return true
+		}
 		fail.Println(s)
 		return true
 	} else {
 		_, file, line, _ := runtime.Caller(1)
 		_, filename := filepath.Split(file)
 		s := filename + ":" + fmt.Sprint(line) + ":" + fmt.Sprint(message...)
+		if info == nil {
+			return false
+		}
 		info.Println(s)
 		return false
 	}

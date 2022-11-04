@@ -14,15 +14,15 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
+var AUTHUserSecrets map[int64][]string
+
 func init() {
-	AUTHUserSecrets = map[int64]string{}
+	AUTHUserSecrets = AUTHLoadFromFile("user_secrets.gob")
 }
 
 // -------------------------------------------------------------------------
 // AUTH User Requests
 // -------------------------------------------------------------------------
-
-var AUTHUserSecrets map[int64]string
 
 func AUTHRegister(user int64) string {
 	tokens := "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
@@ -32,20 +32,49 @@ func AUTHRegister(user int64) string {
 		r := rand.Int31n(int32(len(tokens)))
 		result += string(tokens[r])
 	}
-	AUTHUserSecrets[user] = result
+	if data, hasKey := AUTHUserSecrets[user]; hasKey {
+		data = append(data, result)
+		AUTHUserSecrets[user] = data
+	} else {
+		AUTHUserSecrets[user] = []string{result}
+	}
+	AUTHWriteToFile(AUTHUserSecrets, "user_secrets.gob")
 	return result
 }
 
-func AUTHGetSecret(user int64) string {
+func AUTHGetSecret(user int64) []string {
 	return AUTHUserSecrets[user]
 }
 
 func AUTHMatchSecret(user int64, secret string) bool {
-	return AUTHUserSecrets[user] == secret
+	secrets := AUTHUserSecrets[user]
+	for _, s := range secrets {
+		if s == secret {
+			return true
+		}
+	}
+	return false
 }
 
-func AUTHDeregister(user int64) {
-	delete(AUTHUserSecrets, user)
+func AUTHDeregister(user int64, secret string) {
+	secrets := AUTHGetSecret(user)
+	if len(secrets) == 1 {
+		delete(AUTHUserSecrets, user)
+		AUTHWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+	} else if len(secrets) > 1 {
+		j := -1
+		for i, s := range secrets {
+			if s == secret {
+				j = i
+				break
+			}
+		}
+		if j >= 0 {
+			secrets[j] = secrets[len(secrets)-1]
+			AUTHUserSecrets[user] = secrets[:len(secrets)-1]
+			AUTHWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+		}
+	}
 }
 
 // -------------------------------------------------------------------------

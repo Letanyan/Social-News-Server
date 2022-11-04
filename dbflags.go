@@ -121,7 +121,7 @@ func DBGetFlaggedPosts(db *sql.DB, kind FlagReason, limit int64, offset int64) [
 	JOIN posts p ON f.pid = p.id
 	JOIN users u ON p.userId = u.id
 	JOIN Total t ON f.pid=t.pid AND f.sid=t.sid
-	WHERE f.kind = %d AND sid < 0
+	WHERE f.kind = %d AND f.sid < 0
 	ORDER BY t.c DESC
 	`, SQLFieldsForFlaggedPost(), kind)
 

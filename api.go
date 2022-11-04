@@ -1209,13 +1209,18 @@ func APIPurchaseCredit(c *gin.Context) {
 	}
 }
 
-func APIUpdateUserPermission(c *gin.Context) {
+func APIUpdateUser(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid user id") {
 		return
 	}
+	if !APIMatchSecret(c, uid) {
+		return
+	}
 
 	type Input struct {
+		Name string `json:"name"`
+
 		PublicViews     bool
 		PublicReadLater bool
 		PublicFollowing bool
@@ -1234,6 +1239,8 @@ func APIUpdateUserPermission(c *gin.Context) {
 	DBUpdateUserPublicPermissions(mainDB, uid,
 		in.PublicViews, in.PublicReadLater, in.PublicIgnored, in.PublicFollowing,
 		in.PublicPostVotes, in.PublicCommentVotes, in.PublicTagVotes, in.PublicUserVotes)
+
+	DBUpdateUser(mainDB, uid, in.Name)
 
 	APIReturn(c, true, "")
 }
@@ -1405,6 +1412,25 @@ jAhjLaPD
 
 	// Voila!
 	fmt.Println(unique)
+}
+
+func APISignOut(c *gin.Context) {
+	type Input struct {
+		UserId int64 `json:"userId"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for sign out") {
+		return
+	}
+
+	secret := c.DefaultQuery("secret", "")
+	if !AUTHMatchSecret(in.UserId, secret) {
+		APIReturn(c, true, "")
+	}
+
+	AUTHDeregister(in.UserId, secret)
+
+	APIReturn(c, true, "")
 }
 
 func APIResendVerificationLink(c *gin.Context) {

@@ -72,7 +72,7 @@ func ScanComments(rows *sql.Rows) []Comment {
 	return result
 }
 
-func ScanCommentResults(rows *sql.Rows, hasVotes bool) []CommentResult {
+func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentResult {
 	result := []CommentResult{}
 	for rows.Next() {
 		c := CommentResult{}
@@ -82,13 +82,25 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool) []CommentResult {
 		var up int64
 		var down int64
 		var e error
-		if hasVotes {
-			e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed,
-				&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &cred, &score)
+		var rank float64
+		if hasRank {
+			if hasVotes {
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed,
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &cred, &score, &rank)
+			} else {
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed,
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &cred, &score, &rank)
+			}
 		} else {
-			e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed,
-				&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &cred, &score)
+			if hasVotes {
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed,
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &cred, &score)
+			} else {
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed,
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &cred, &score)
+			}
 		}
+
 		if DidFail(e, "scan comment") {
 			continue
 		}
@@ -268,6 +280,6 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 		return []CommentResult{}
 	}
 
-	result := ScanCommentResults(rows, usingVotesTable)
+	result := ScanCommentResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 	return result
 }

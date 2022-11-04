@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"math/rand"
 	"net/smtp"
+	"text/template"
 	"time"
 )
 
@@ -68,7 +70,7 @@ func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	return u, e
 }
 
-func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []UserProfile {
+func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []UserProfile {
 	result := []UserProfile{}
 	var e error
 	for rows.Next() {
@@ -77,19 +79,37 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool) []UserPr
 		var cred float64
 		var up int64
 		var down int64
-		if hasVotes {
-			if includeScore {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+		var rank float64
+		if hasRank {
+			if hasVotes {
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score, &rank)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &rank)
+				}
 			} else {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score, &rank)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &rank)
+				}
 			}
 		} else {
-			if includeScore {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score)
+			if hasVotes {
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
+				}
 			} else {
-				e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+				if includeScore {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score)
+				} else {
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+				}
 			}
 		}
+
 		if DidFail(e, "get user from email/id") {
 			continue
 		}
@@ -148,6 +168,14 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	return user
 }
 
+func DBUpdateUser(db *sql.DB, id int64, name string) {
+	update := `UPDATE Users SET Name=$1 WHERE id=$2`
+	_, e := db.Exec(update, name, id)
+	if DidFail(e, "update user name") {
+		return
+	}
+}
+
 func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
 	validate := `UPDATE users SET validationKey = 0 WHERE id = $1 AND validationKey = $2 RETURNING id, validationKey`
 	row := db.QueryRow(validate, userId, key)
@@ -163,10 +191,22 @@ func SendValidationKey(userId int64, email string, key int32) {
 	port := "587"
 	from := "letanyan.a@gmail.com"
 	auth := smtp.PlainAuth("", from, "wlyoihckobjsbzlv", host)
-	mess := fmt.Sprintf("To verify your email please click the link https://localhost:8080/api/v1/users/%d/verification/%d", userId, key)
-	message := []byte(mess)
+	t, _ := template.ParseFiles("verify.html")
+	var body bytes.Buffer
+	mimeHeaders := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+	body.Write([]byte(fmt.Sprintf("Subject: New Source Email Verification \n%s\n\n", mimeHeaders)))
+	t.Execute(&body, struct {
+		UserId int64
+		Key    int32
+	}{
+		UserId: userId,
+		Key:    key,
+	})
 
-	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, message)
+	// mess := fmt.Sprintf("To verify your email please click the link https://localhost:8080/api/v1/users/%d/verification/%d", userId, key)
+	// message := []byte(mess)
+
+	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, body.Bytes())
 
 	if DidFail(e, "send mail") {
 		return
@@ -239,7 +279,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 		return []UserProfile{}
 	}
 
-	result := ScanUserProfiles(rows, true, usingVotesTable)
+	result := ScanUserProfiles(rows, true, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 
 	return result
 }

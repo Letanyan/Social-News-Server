@@ -82,7 +82,7 @@ func ScanPosts(rows *sql.Rows) []Post {
 	return result
 }
 
-func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
+func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 	result := []PostResult{}
 	var e error
 
@@ -94,13 +94,25 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool) []PostResult {
 		var userID int64
 		var up int64
 		var down int64
-		if hasVotes {
-			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-				&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+		var rank float64
+		if hasRank {
+			if hasVotes {
+				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score, &rank)
+			} else {
+				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score, &rank)
+			}
 		} else {
-			e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-				&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score)
+			if hasVotes {
+				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+			} else {
+				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score)
+			}
 		}
+
 		if DidFail(e, "scan post") {
 			continue
 		}
@@ -200,6 +212,10 @@ const (
 	soDownvotes
 	soControversial
 	soCreatedAt
+	soUpdatedAt
+	soUpdatedOn
+	soAddedOn
+	soRank
 )
 
 func SortOrderFromString(text string) (SortOrder, error) {
@@ -216,6 +232,14 @@ func SortOrderFromString(text string) (SortOrder, error) {
 		return soControversial, nil
 	case "createdat":
 		return soCreatedAt, nil
+	case "updatedat":
+		return soUpdatedAt, nil
+	case "updatedon":
+		return soUpdatedOn, nil
+	case "addedon":
+		return soAddedOn, nil
+	case "rank":
+		return soRank, nil
 	}
 	return soUpvotes, errors.New("no known order for " + text)
 }
@@ -234,6 +258,14 @@ func SQLSortOrder(so SortOrder) string {
 		return "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
 	case soCreatedAt:
 		return "ORDER BY createdAt DESC\n"
+	case soUpdatedAt:
+		return "ORDER BY updatedAt DESC\n"
+	case soUpdatedOn:
+		return "ORDER BY updatedOn DESC\n"
+	case soAddedOn:
+		return "ORDER BY addedOn DESC\n"
+	case soRank:
+		return "ORDER BY rank\n"
 	}
 	return ""
 }
@@ -283,7 +315,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	if usingVotesTable {
 		joins += "JOIN Votes v ON v.pid = p.id\n"
-		cond = append(cond, "v.kind=3")
+		cond = append(cond, "v.kind=2")
 	}
 
 	getPosts := SQLGetItems("Posts p", voteTable, SQLFieldsForPostResultAlias(),
@@ -298,7 +330,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	}
 	defer rows.Close()
 
-	result = ScanPostResults(rows, usingVotesTable)
+	result = ScanPostResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 	if forUser > 0 && len(result) == 0 { // if no more recommended show 2nd degree recommended
 		result = DBGetSimilarPosts(db, forUser, 0, sortOrder, limit, offset)
 		if len(result) == 0 { // show trending if no recommended
@@ -390,6 +422,6 @@ func DBGetSimilarPosts(db *sql.DB, userId int64, postId int64, sortOrder SortOrd
 	}
 	defer rows.Close()
 
-	result = ScanPostResults(rows, false)
+	result = ScanPostResults(rows, false, false)
 	return result
 }

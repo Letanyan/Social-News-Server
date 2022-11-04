@@ -725,11 +725,11 @@ func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64
 		dateField = "addedOn"
 	}
 	if len(startDate) > 0 && len(endDate) > 0 {
-		query += fmt.Sprintf("AND p.%s BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", dateField, startDate, endDate)
+		query += fmt.Sprintf("AND %s BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", dateField, startDate, endDate)
 	} else if len(startDate) > 0 {
-		query += fmt.Sprintf("AND p.%s > (TIMESTAMP '%s') ", dateField, startDate)
+		query += fmt.Sprintf("AND %s > (TIMESTAMP '%s') ", dateField, startDate)
 	} else if len(endDate) > 0 {
-		query += fmt.Sprintf("AND p.%s < (TIMESTAMP '%s') ", dateField, endDate)
+		query += fmt.Sprintf("AND %s < (TIMESTAMP '%s') ", dateField, endDate)
 	}
 
 	query += SQLSortOrder(sortOrder)
@@ -741,7 +741,7 @@ func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64
 	if DidFail(e, "get user content") {
 		return result
 	}
-	result = ScanPostResults(rows, false)
+	result = ScanPostResults(rows, false, false)
 
 	return result
 }
@@ -801,7 +801,7 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	}
 	defer rows.Close()
 
-	result := ScanCommentResults(rows, false)
+	result := ScanCommentResults(rows, false, false)
 	return result
 }
 
@@ -834,7 +834,7 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 	if DidFail(e, "get user content") {
 		return result
 	}
-	result = ScanUserProfiles(rows, false, false)
+	result = ScanUserProfiles(rows, false, false, false)
 
 	return result
 }
