@@ -191,7 +191,7 @@ func SendValidationKey(userId int64, email string, key int32) {
 	port := "587"
 	from := "letanyan.a@gmail.com"
 	auth := smtp.PlainAuth("", from, "wlyoihckobjsbzlv", host)
-	t, _ := template.ParseFiles("verify.html")
+	t, _ := template.ParseFiles("templates/verify.html")
 	var body bytes.Buffer
 	mimeHeaders := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
 	body.Write([]byte(fmt.Sprintf("Subject: New Source Email Verification \n%s\n\n", mimeHeaders)))
@@ -202,9 +202,6 @@ func SendValidationKey(userId int64, email string, key int32) {
 		UserId: userId,
 		Key:    key,
 	})
-
-	// mess := fmt.Sprintf("To verify your email please click the link https://localhost:8080/api/v1/users/%d/verification/%d", userId, key)
-	// message := []byte(mess)
 
 	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, body.Bytes())
 
@@ -285,7 +282,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 }
 
 func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
-	updatePassword := "UPDATE users SET password = $1 WHERE id = $2 AND password = $3"
+	updatePassword := `UPDATE users SET password = $1 WHERE id = $2 AND password = $3`
 	hOld := DBHashPassword(old)
 	hNew := DBHashPassword(new)
 	_, e := db.Exec(updatePassword, hNew, userId, hOld)
@@ -295,7 +292,7 @@ func DBUpdatePasswordForUser(db *sql.DB, userId int64, old string, new string) {
 }
 
 func DBResetPasswordForUser(db *sql.DB, userId int64, new string) {
-	updatePassword := "UPDATE users SET password = $1 WHERE id = $2"
+	updatePassword := `UPDATE users SET password = $1 WHERE id = $2`
 	hNew := DBHashPassword(new)
 	_, e := db.Exec(updatePassword, hNew, userId)
 	if DidFail(e, "update password") {
@@ -303,7 +300,7 @@ func DBResetPasswordForUser(db *sql.DB, userId int64, new string) {
 	}
 }
 
-func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string, date string) (UserProfile, UserPref) {
+func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string) (UserProfile, UserPref) {
 	updatedField := ""
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
@@ -312,7 +309,7 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		updatedField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	voteQuery := SQLMakeVote(upUser, targetId, -1, location, upvoteAmount*sign(isUpvote), date)
+	voteQuery := SQLMakeVote(upUser, targetId, -1, location, upvoteAmount, isUpvote)
 	updateUser := fmt.Sprintf(`
 	%s
 	UPDATE users p SET 
@@ -324,7 +321,6 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		updatedField, updatedField, upvoteAmount,
 		upvoteAmount, targetId, SQLFieldsForUserProfile())
 
-	updateUser = ReplaceDateValues(updateUser, date)
 	row := db.QueryRow(updateUser)
 	user, e := ScanUserProfile(row)
 	if DidFail(e, "update user score", targetId) {

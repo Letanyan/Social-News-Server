@@ -49,6 +49,7 @@ func main() {
 	}
 
 	router := gin.Default()
+	router.LoadHTMLFiles("./templates/verify_confirmed.html", "./templates/verify_failed.html")
 	router.GET("/", index)
 
 	api := router.Group("/api")
@@ -108,7 +109,7 @@ func main() {
 		v1.POST("/users/:uid/content/ignored", APIAddUserCont(ucpUserIgnored))
 		v1.POST("/users/:uid/content/recommendations", APIRefreshUserContRecommendations)
 
-		v1.POST("/users/:uid/watch", APIWatchUser)
+		v1.POST("/users/:uid/watch/:pid", APIWatchUser)
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)

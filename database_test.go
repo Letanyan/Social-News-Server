@@ -90,8 +90,7 @@ func TestDatabase(t *testing.T) {
 			otherUser := users[rand.Intn(len(users))]
 			user4 := DBGetUser(db, 0, otherUser.Email)
 			amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-			date := utc().AddDate(0, 0, rand.Intn(25)*int(sign(rand.Intn(2) == 0))).Format("2006-01-02")
-			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount, []string{}, date)
+			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount, []string{})
 
 			user5 := DBGetUser(db, user4.ID, "")
 			if amount < 0 && user5.Downvotes < 0 {
@@ -202,8 +201,7 @@ func TestDatabase(t *testing.T) {
 				pidx := rand.Intn(len(posts))
 				loc := posts[pidx].location
 				amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-				date := utc().AddDate(0, 0, rand.Intn(25)*int(sign(rand.Intn(2) == 0))).Format("2006-01-02")
-				post2, userPoster, tags, prefs := DBVotePost(db, other.ID, source.ID, amount, loc, date)
+				post2, userPoster, tags, prefs := DBVotePost(db, other.ID, source.ID, amount, loc)
 
 				if amount < 0 && post2.Downvotes < amount {
 					t.Errorf("Post downvotes not updated")

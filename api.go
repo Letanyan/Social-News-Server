@@ -34,6 +34,14 @@ func APIReturn(c *gin.Context, success bool, payload interface{}) {
 	}
 }
 
+func APIReturnHTML(c *gin.Context, file string, obj any) {
+	c.Header("Access-Control-Allow-Origin", "*")         // Required for CORS support to work
+	c.Header("Access-Control-Allow-Credentials", "true") // Required for cookies, authorization headers with HTTPS
+	c.Header("Access-Control-Allow-Headers", "Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,locale")
+	c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE")
+	c.HTML(http.StatusOK, file, obj)
+}
+
 func APIFailed(c *gin.Context, e error, reason string) bool {
 	if e == nil {
 		return false
@@ -1040,7 +1048,7 @@ func APIVoteUser(c *gin.Context) {
 
 	addr := getAddress(c.ClientIP())
 
-	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, addr, "")
+	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, addr)
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1077,7 +1085,7 @@ func APIVotePost(c *gin.Context) {
 
 	addr := getAddress(c.ClientIP())
 
-	DBVotePost(mainDB, in.UID, pid, in.Amount, addr, "")
+	DBVotePost(mainDB, in.UID, pid, in.Amount, addr)
 	if in.Amount < 0 {
 		in.Amount = -in.Amount
 	}
@@ -1122,7 +1130,7 @@ func APIVoteComment(c *gin.Context) {
 
 	addr := getAddress(c.ClientIP())
 
-	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr, "")
+	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr)
 	if in.Amount < 0 {
 		in.Amount = -in.Amount
 	}
@@ -1254,16 +1262,22 @@ func APIWatchUser(c *gin.Context) {
 		return
 	}
 
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
 	type Input struct {
-		Tags []int64 `json:"tags"`
-		Time float64 `json:"time"`
+		Time int64 `json:"time"`
 	}
 	var input Input
 	if e := c.BindJSON(&input); APIFailed(c, e, "get input for vote post") {
 		return
 	}
 
-	pref := DBWatchUser(mainDB, uid, input.Tags, input.Time)
+	addr := getAddress(c.ClientIP())
+
+	pref := DBWatchUser(mainDB, uid, pid, input.Time, addr)
 
 	APIReturn(c, true, pref)
 }
@@ -1383,16 +1397,16 @@ func APISignInWithApple(c *gin.Context) {
 	serviceID := "com.letanyan.newsourceserviceid"
 	keyID := "K3NQ5VC2LH"
 	// bundleID := "com.letanyan.newsource"
-	secretFile := `-----BEGIN PRIVATE KEY-----
-MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgX8e/+ExMOMTbLzav
-lg8rFYOhBfeGrcAIKL+7Q4FjjSGgCgYIKoZIzj0DAQehRANCAATtI0L8/MPp2b4T
-J6/1jA9dnkP0SodRODScM2opvHJgKYhevNPi/Blu5pd3ble2zGBctKdDbHpW6Xf3
-jAhjLaPD
------END PRIVATE KEY-----`
+	// 	secretFile := `-----BEGIN PRIVATE KEY-----
+	// MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgX8e/+ExMOMTbLzav
+	// lg8rFYOhBfeGrcAIKL+7Q4FjjSGgCgYIKoZIzj0DAQehRANCAATtI0L8/MPp2b4T
+	// J6/1jA9dnkP0SodRODScM2opvHJgKYhevNPi/Blu5pd3ble2zGBctKdDbHpW6Xf3
+	// jAhjLaPD
+	// -----END PRIVATE KEY-----`
 
 	// Generate the client secret used to authenticate with Apple's validation servers
 	// Refer to the example files to see where to get secret, teamID, clientID, keyID
-	secret, _ := apple.GenerateClientSecret(secretFile, teamID, serviceID, keyID)
+	secret, _ := apple.GenerateClientSecret("", teamID, serviceID, keyID)
 
 	// Generate a new validation client
 	client := apple.New()
@@ -1469,8 +1483,13 @@ func APIVerifyUserEmail(c *gin.Context) {
 
 	res := DBValidateUser(mainDB, uid, int32(key))
 	if res {
-		APIReturn(c, true, 1)
+		APIReturnHTML(c, "verify_confirmed.html", gin.H{})
 	} else {
-		APIReturn(c, false, "invalid verification key")
+		user := DBGetUser(mainDB, uid, "")
+		if user.ValidationKey == 0 {
+			APIReturnHTML(c, "verify_confirmed.html", gin.H{})
+		} else {
+			APIReturnHTML(c, "verify_failed.html", gin.H{})
+		}
 	}
 }

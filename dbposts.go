@@ -154,7 +154,7 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 	return post
 }
 
-func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string, date string) (Post, UserProfile, []Tag, []UserPref) {
+func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) (Post, UserProfile, []Tag, []UserPref) {
 	var updateField string
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
@@ -164,7 +164,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		upvoteAmount = -upvoteAmount
 	}
 
-	voteQuery := SQLMakeVote(upPost, postId, -1, location, upvoteAmount*sign(isUpvote), date)
+	voteQuery := SQLMakeVote(upPost, postId, -1, location, upvoteAmount, isUpvote)
 	updateVoteForPost := fmt.Sprintf(`
 	%s
 	UPDATE posts SET
@@ -181,8 +181,8 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		return Post{}, UserProfile{}, []Tag{}, []UserPref{}
 	}
 
-	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location, date)
-	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location, date)
+	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location, true)
+	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location)
 	userPrefForPost := DBCreateUserPref(db, userId, upPost, postId, -1, upvoteAmount*sign(isUpvote))
 
 	prefs := []UserPref{userPref, userPrefForPost}
@@ -340,6 +340,12 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 			result = DBGetPosts(mainDB, 0, []int64{}, []string{}, []string{},
 				0, 0, soScore, limit, offset, "", "",
 				formatTime(lastWeek), formatTime(today), 0, "")
+
+			if len(result) == 0 { // show new post if no trending
+				result = DBGetPosts(mainDB, 0, []int64{}, []string{}, []string{},
+					0, 0, soCreatedAt, limit, offset, "", "",
+					"", "", 0, "")
+			}
 		}
 	}
 

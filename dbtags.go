@@ -93,7 +93,7 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	return result
 }
 
-func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, location []string, date string) ([]Tag, []UserPref) {
+func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, location []string, isPublic bool) ([]Tag, []UserPref) {
 	if len(tags) <= 0 {
 		return []Tag{}, []UserPref{}
 	}
@@ -127,35 +127,38 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 		tagIndices = append(tagIndices, tag.ID)
 	}
 
+	voteKind := upTag
+	if !isPublic {
+		voteKind = upWatchTag
+	}
 	tagIndexRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(%d, 3, %d, -1)", userId, i)
+		return fmt.Sprintf("(%d, %d, %d, -1)", userId, voteKind, i)
 	})
 	tagVoteRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(3, %d, -1, %s{date_value})", i, locArray)
+		return fmt.Sprintf("(%d, %d, -1, %s)", voteKind, i, locArray)
 	})
 	tagIndexArray := SQLFormattedIndexArray(tagIndices)
 	upsertUserTags := fmt.Sprintf(`
-	INSERT INTO votes(kind, pid, sid, location{date}) 
+	INSERT INTO votes(kind, pid, sid, location) 
 	VALUES %s ON CONFLICT (kind, pid, sid, location, updatedAt) DO NOTHING;
 	UPDATE votes SET
 	%s = %s + %d
-	WHERE kind=3 AND pid=ANY(%s) AND location=%s AND updatedAt={date_value_res};
+	WHERE kind=%d AND pid=ANY(%s) AND location=%s AND updatedAt='%s';
 
 	INSERT INTO UserPref (uid, kind, pid, sid)
 	VALUES %s ON CONFLICT (uid, kind, pid, sid) DO NOTHING;
 	UPDATE UserPref SET 
 	%s = %s + %d,
 	updatedOn = (now() at time zone 'utc')
-	WHERE kind=3 AND uid=%d AND pid = ANY(%s)
+	WHERE kind=%d AND uid=%d AND pid = ANY(%s)
 	RETURNING %s, 0.0, 0.0
 	`, tagVoteRows,
 		updatedField, updatedField, upvoteAmount,
-		tagIndexArray, locArray,
+		voteKind, tagIndexArray, locArray, utc().Format("2006-01-02"),
 		tagIndexRows,
 		updatedField, updatedField, upvoteAmount,
-		userId, tagIndexArray, SQLFieldsForUserPref())
+		voteKind, userId, tagIndexArray, SQLFieldsForUserPref())
 
-	upsertUserTags = ReplaceDateValues(upsertUserTags, date)
 	rows, e = db.Query(upsertUserTags)
 	if DidFail(e, "insert and update tags") {
 		return tagResult, []UserPref{}

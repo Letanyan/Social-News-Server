@@ -53,7 +53,7 @@ func DBUsersSetup(db *sql.DB) {
 		kind SMALLINT DEFAULT 0,
 		addedOn TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
-		PRIMARY KEY (uid, pid, sid)
+		PRIMARY KEY (uid, pid, sid, kind)
 	) PARTITION BY HASH(uid);`
 	_, e = db.Exec(createUserContentTable)
 	DidFail(e, "create user content table")
@@ -144,6 +144,7 @@ func DBCommentsSetup(db *sql.DB) {
 		downvotes BIGINT DEFAULT 0,
 		trashed BOOLEAN DEFAULT false,
 		replyCount SMALLINT DEFAULT 0,
+		isReview BOOLEAN DEFAULT false,
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`

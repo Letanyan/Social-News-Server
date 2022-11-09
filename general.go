@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/gob"
-	"fmt"
 	"os"
 	"regexp"
 	"unicode"
@@ -38,8 +37,8 @@ func isNotAlphanumeric(c rune) bool {
 	return !(unicode.IsLetter(c) || unicode.IsNumber(c))
 }
 
-func isNotAlphanumericWhitespace(c rune) bool {
-	return !(unicode.IsLetter(c) || unicode.IsNumber(c) || unicode.IsSpace(c))
+func isNotWebSearchQuery(c rune) bool {
+	return !(unicode.IsLetter(c) || unicode.IsNumber(c) || unicode.IsSpace(c) || c == '-' || c == '"')
 }
 
 func ContainsItem[I comparable](item I, list []I) bool {
@@ -68,11 +67,10 @@ func DBPrepareSearchString(query string) (string, []int64) {
 	tagNames := []string{}
 	tags := []int64{}
 	if DidFail(e, "compile tag regex") {
-		query = replaceUnicode(query, isNotAlphanumericWhitespace)
+		query = replaceUnicode(query, isNotWebSearchQuery)
 		return query, tags
 	}
 	query = tagRe.ReplaceAllStringFunc(query, func(m string) string {
-		fmt.Println(m)
 		if m[1] == '(' {
 			m = m[2:]
 		} else {
@@ -84,7 +82,7 @@ func DBPrepareSearchString(query string) (string, []int64) {
 		tagNames = append(tagNames, m)
 		return ""
 	})
-	query = replaceUnicode(query, isNotAlphanumericWhitespace)
+	query = replaceUnicode(query, isNotWebSearchQuery)
 
 	tagObjs := DBGetTags(mainDB, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
 	for _, t := range tagObjs {

@@ -33,6 +33,9 @@ func AUTHRegister(user int64) string {
 		result += string(tokens[r])
 	}
 	if data, hasKey := AUTHUserSecrets[user]; hasKey {
+		if len(data) > 5 {
+			data = data[1:]
+		}
 		data = append(data, result)
 		AUTHUserSecrets[user] = data
 	} else {

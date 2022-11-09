@@ -267,16 +267,23 @@ func NAScrapeWebsite(url string) WebsiteScrapings {
 		return WebsiteScrapings{}
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req, e := http.NewRequest(http.MethodGet, url, nil)
+	if DidFail(e, "get url ", url) {
+		return WebsiteScrapings{}
+	}
 	// req.Header.Set("User-Agent", "Journo/0.1 (Windows NT 10; Win64; x64)")
-	res, _ := client.Do(req)
+	res, e := client.Do(req)
+	if DidFail(e, "make request ", url) {
+		return WebsiteScrapings{}
+	}
+
 	if res.StatusCode != 200 {
 		return WebsiteScrapings{}
 	}
 
-	bodyNode, err := html.Parse(res.Body)
-	if err != nil {
-		println(err.Error())
+	bodyNode, e := html.Parse(res.Body)
+	if DidFail(e, "parse html") {
+		return WebsiteScrapings{}
 	}
 
 	result := NAReadData(bodyNode)

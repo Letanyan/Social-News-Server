@@ -10,7 +10,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) string {
 
-	scoreField := "p.upvotes * RATIO(p.upvotes, p.downvotes)"
+	scoreField := fmt.Sprintf("%s.upvotes * RATIO(%s.upvotes, %s.downvotes)", voteTable, voteTable, voteTable)
 	withTable := ""
 	if forUser > 0 {
 		withTable = fmt.Sprintf(`
@@ -22,11 +22,11 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		), Total AS (
 			SELECT SUM(upvotes) up, SUM(downvotes) down
 			FROM UserPrefs
-			WHERE kind=3
+			WHERE kind=3 OR kind=4
 		), Scores AS (
-			SELECT pid, (upvotes - downvotes) / (total.up + total.down) AS value
+			SELECT pid, (upvotes - downvotes) / (total.up + total.down) * (1.1 * dateFrac(updatedOn, now() at time zone 'utc', 2592000)) AS value
 			FROM UserPrefs, Total
-			WHERE kind=3
+			WHERE kind=3 OR kind=4
 		), UserConts AS (
 			SELECT *
 			FROM UserCont
@@ -53,7 +53,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		joins += "JOIN Scores s ON s.pid = ANY(p.tags)"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
-		scoreField = "SUM(s.value)"
+		scoreField = "SUM(s.value * 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 2592000))"
 	}
 
 	result := fmt.Sprintf(`%s
@@ -86,7 +86,6 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' > v.updatedAt\n", endDate))
 	}
 	if len(search) > 0 {
-		// FIXME: sanitize search string
 		if table == "Posts p" || table == "Comments p" {
 			search, altTags := DBPrepareSearchString(search)
 			if table == "Posts p" && len(altTags) > 0 {
