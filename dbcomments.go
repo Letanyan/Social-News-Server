@@ -18,6 +18,10 @@ type Comment struct {
 	ReplyCount int64
 	Trashed    bool
 	IsReview   bool
+
+	Score float64
+	Cred  float64
+	Rank  float64
 }
 
 type CommentResult struct {
@@ -32,6 +36,10 @@ type CommentResult struct {
 	ReplyCount int64
 	Trashed    bool
 	IsReview   bool
+
+	Score float64
+	Cred  float64
+	Rank  float64
 }
 
 func SQLFieldsForComment() string {
@@ -63,9 +71,7 @@ func ScanComments(rows *sql.Rows) []Comment {
 	result := []Comment{}
 	for rows.Next() {
 		c := Comment{}
-		var score float64
-		var cred float64
-		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview, &cred, &score)
+		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview, &c.Cred, &c.Score)
 		if DidFail(e, "scan comment") {
 			continue
 		}
@@ -78,28 +84,25 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentRe
 	result := []CommentResult{}
 	for rows.Next() {
 		c := CommentResult{}
-		var score float64
-		var cred float64
 		var userId int64
 		var up int64
 		var down int64
 		var e error
-		var rank float64
 		if hasRank {
 			if hasVotes {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &cred, &score, &rank)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &c.Cred, &c.Score, &c.Rank)
 			} else {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &cred, &score, &rank)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &c.Cred, &c.Score, &c.Rank)
 			}
 		} else {
 			if hasVotes {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &cred, &score)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &c.Cred, &c.Score)
 			} else {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &cred, &score)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &c.Cred, &c.Score)
 			}
 		}
 

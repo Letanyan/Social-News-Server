@@ -21,6 +21,10 @@ type Post struct {
 	Downvotes    int64
 	CommentCount int32
 	Trashed      bool
+
+	Score float64
+	Cred  float64
+	Rank  float64
 }
 
 type PostResult struct {
@@ -34,6 +38,10 @@ type PostResult struct {
 	Downvotes    int64
 	CommentCount int32
 	Trashed      bool
+
+	Score float64
+	Cred  float64
+	Rank  float64
 }
 
 func SQLFieldsForPost() string {
@@ -70,9 +78,7 @@ func ScanPosts(rows *sql.Rows) []Post {
 
 	for rows.Next() {
 		p := Post{}
-		var score float64
-		var cred float64
-		e = rows.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.Trashed, &cred, &score)
+		e = rows.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.Trashed, &p.Cred, &p.Score)
 		if DidFail(e, "scan post") {
 			continue
 		}
@@ -89,27 +95,24 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
-		var score float64
-		var cred float64
 		var userID int64
 		var up int64
 		var down int64
-		var rank float64
 		if hasRank {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score, &rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &p.Cred, &p.Score, &p.Rank)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score, &rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &p.Cred, &p.Score, &p.Rank)
 			}
 		} else {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &p.Cred, &p.Score)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &cred, &score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &p.Cred, &p.Score)
 			}
 		}
 

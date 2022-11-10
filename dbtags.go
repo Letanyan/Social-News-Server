@@ -10,6 +10,10 @@ type Tag struct {
 	Name      string
 	Upvotes   int64
 	Downvotes int64
+
+	Score float64
+	Cred  float64
+	Rank  float64
 }
 
 func SQLFieldsForTag() string {
@@ -24,45 +28,42 @@ func ScanTags(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []
 	result := []Tag{}
 	var e error
 	for rows.Next() {
-		var cred float64
-		var score float64
 		var up int64
 		var down int64
-		var rank float64
-		tag := Tag{}
+		t := Tag{}
 		if hasRank {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score, &rank)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &up, &down, &t.Cred, &t.Score, &t.Rank)
 				} else {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &rank)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &up, &down, &t.Rank)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score, &rank)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &t.Cred, &t.Score, &t.Rank)
 				} else {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &rank)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &t.Rank)
 				}
 			}
 		} else {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down, &cred, &score)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &up, &down, &t.Cred, &t.Score)
 				} else {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &up, &down)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &up, &down)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes, &cred, &score)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes, &t.Cred, &t.Score)
 				} else {
-					e = rows.Scan(&tag.ID, &tag.Name, &tag.Upvotes, &tag.Downvotes)
+					e = rows.Scan(&t.ID, &t.Name, &t.Upvotes, &t.Downvotes)
 				}
 			}
 		}
 		if DidFail(e, "read row") {
 			continue
 		}
-		result = append(result, tag)
+		result = append(result, t)
 	}
 	return result
 }

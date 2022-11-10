@@ -39,6 +39,10 @@ type UserProfile struct {
 	RegisterDate time.Time
 	Upvotes      int64
 	Downvotes    int64
+
+	Score float64
+	Cred  float64
+	Rank  float64
 }
 
 func SQLFieldsForUser() string {
@@ -75,35 +79,32 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank 
 	var e error
 	for rows.Next() {
 		u := UserProfile{}
-		var score float64
-		var cred float64
 		var up int64
 		var down int64
-		var rank float64
 		if hasRank {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score, &rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &u.Rank)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score, &rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Rank)
 				}
 			}
 		} else {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &u.Cred, &u.Score)
 				} else {
 					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &cred, &score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Cred, &u.Score)
 				} else {
 					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
 				}
