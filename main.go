@@ -27,9 +27,10 @@ var (
 )
 
 var (
-	mainDB         *sql.DB
-	agents         []NewsAgent
-	updatingAgents bool
+	mainDB *sql.DB
+	agents []NewsAgent
+	// updatingAgents sync.Mutex
+	agentsMutex KeyedMutex
 )
 
 func main() {
@@ -49,17 +50,23 @@ func main() {
 	}
 
 	router := gin.Default()
+	router.LoadHTMLFiles("./templates/verify_confirmed.html", "./templates/verify_failed.html")
 	router.GET("/", index)
 
 	api := router.Group("/api")
 	v1 := api.Group("/v1")
 	{
-		// Sign in
-		v1.POST("/auth/callbacks/sign-in", APISignIn)
-		v1.POST("/auth/callbacks/sign-in-with-apple", APISignInWithApple)
-		v1.POST("/auth/callbacks/sign-out", APISignOut)
+		// AUTH
+		v1.POST("/auth/sign-in", APISignIn)
+		v1.POST("/auth/callbacks/sign-in-with-apple", APIRedirectAppleSignIn)
+		v1.POST("/auth/sign-in-with-apple", APISignInWithApple)
+		v1.POST("/auth/sign-in-with-google", APISignInWithGoogle)
+		v1.POST("/auth/sign-out", APISignOut)
 		v1.POST("/auth/verification/users/:uid", APIResendVerificationLink)
 		v1.GET("/users/:uid/verification/:key", APIVerifyUserEmail)
+		v1.POST("/auth/google-iap", APIVerifyGoogleIAP)
+		v1.POST("/auth/apple-iap", APIVerifyAppleIAP)
+		v1.GET("/available", APIAvailable)
 		// Create
 		v1.POST("/users", APICreateUser)
 		v1.POST("/posts", APICreatePost)
@@ -73,6 +80,7 @@ func main() {
 		v1.POST("/trash/users/:uid/content/posts/viewed/:pid", APIDeleteUserContPlaylist(ucpViewed))
 		v1.POST("/trash/users/:uid/content/user-follows/:pid", APIDeleteUserContPlaylist(ucpUserFollow))
 		v1.POST("/trash/users/:uid/content/ignored/:pid", APIDeleteUserContPlaylist(ucpUserIgnored))
+		v1.POST("/trash/users/:uid/content/tag-follows/:pid", APIDeleteUserContPlaylist(ucpTagFollow))
 
 		// Get
 		v1.GET("/users/:uid", APIGetUser)
@@ -86,6 +94,7 @@ func main() {
 		v1.GET("/users/:uid/content/comments", APIGetUserContComments)
 		v1.GET("/users/:uid/content/user-follows", APIGetUserContUsers(ucpUserFollow))
 		v1.GET("/users/:uid/content/ignored", APIGetUserContUsers(ucpUserIgnored))
+		v1.GET("/users/:uid/content/tag-follows", APIGetUserContTags(ucpTagFollow))
 		v1.GET("/users/:uid/recommend", APIGetSimilarPosts)
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
@@ -106,9 +115,10 @@ func main() {
 		v1.POST("/users/:uid/content/posts/viewed", APIAddUserCont(ucpViewed))
 		v1.POST("/users/:uid/content/user-follows", APIAddUserCont(ucpUserFollow))
 		v1.POST("/users/:uid/content/ignored", APIAddUserCont(ucpUserIgnored))
+		v1.POST("/users/:uid/content/tag-follows", APIAddUserCont(ucpTagFollow))
 		v1.POST("/users/:uid/content/recommendations", APIRefreshUserContRecommendations)
 
-		v1.POST("/users/:uid/watch", APIWatchUser)
+		v1.POST("/users/:uid/watch/:pid", APIWatchUser)
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)
@@ -143,9 +153,9 @@ func main() {
 	// SendValidationKey(10, "letanyan@icloud.com", 6347)
 
 	agents = NAReadAllNewsAgents()
-	updatingAgents = false
+	agentsMutex = KeyedMutex{}
+	// NARegisterUpdates()
 
-	NARegisterUpdates()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

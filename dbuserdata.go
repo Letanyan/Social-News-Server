@@ -14,6 +14,7 @@ const (
 	upComment
 	upPost
 	upTag
+	upWatchTag
 )
 
 type UserPref struct {
@@ -81,33 +82,18 @@ func DBCreateUserPref(db *sql.DB, uid int64, kind UserPrefKind, pid int64, sid i
 	return pref
 }
 
-func DBWatchUser(db *sql.DB, uid int64, tags []int64, viewTime float64) []UserPref {
-	tagArray := SQLFormattedIndexArray(tags)
-	tagItems := SQLFormattedIndexList(tags, func(i int64) string {
-		return fmt.Sprintf("(%d, 4, %d, -1)", uid, i)
-	})
-	query := fmt.Sprintf(`
-	INSERT INTO UserPref(uid, kind, pid, sid)
-	VALUES %s
-	ON CONFLICT(uid, kind, pid, sid)
-	DO NOTHING;
-	UPDATE UserPref SET
-	upvotes = upvotes * %f
-	WHERE kind=3 AND uid=%d AND pid=ANY(%s)
-	RETURNING %s
-	`, tagItems, viewTime, uid, tagArray, SQLFieldsForUserPref())
-
-	rows, e := db.Query(query)
-	if DidFail(e, "create user pref", query) {
-		return []UserPref{}
-	}
-	result := ScanUserPrefRows(rows)
-
+func DBWatchUser(db *sql.DB, uid int64, postId int64, viewTime int64, location []string) []UserPref {
+	post := DBGetPost(db, postId)
+	_, result := DBVoteTags(db, uid, post.Tags, viewTime, location, false)
 	return result
 }
 
 func SQLFieldsForUserPref() string {
 	return "kind, pid, sid, upvotes, downvotes"
+}
+
+func SQLFieldsForUserPrefResolved() string {
+	return "up.kind, up.pid, up.sid, up.upvotes, up.downvotes"
 }
 
 func SQLFieldsForUserPrefUser() string {
@@ -234,10 +220,10 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 // ignore kind if it equals 0. ignore pid if it equals 0. ignore sid if it equals 0
 func DBGetUserPref(db *sql.DB, isOwner bool, userId int64, sortOrder SortOrder, kind UserPrefKind, pid int64, sid int64, upvotes int64, downvotes int64, limit int64, offset int64) []UserPref {
 	query := fmt.Sprintf(`
-	SELECT %s, RATIO(upvotes, downvotes) AS cred, upvotes * RATIO(upvotes, downvotes) AS score 
+	SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
-	JOIN Users u ON u.ID == up.uid
-	WHERE up.uid=%d `, SQLFieldsForUserPref(), userId)
+	JOIN Users u ON u.ID = up.uid
+	WHERE up.uid=%d `, SQLFieldsForUserPrefResolved(), userId)
 
 	cond := ""
 	if kind > 0 {
@@ -612,6 +598,7 @@ const (
 	ucpUserFollow
 	ucpUserIgnored
 	ucpUserRecommended
+	ucpTagFollow
 )
 
 func DBCreateUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64, commentId int64) UserCont {
@@ -835,6 +822,38 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 		return result
 	}
 	result = ScanUserProfiles(rows, false, false, false)
+
+	return result
+}
+
+func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind, startDate string, endDate string) []Tag {
+	permission := ""
+	if !isOwner {
+		switch kind {
+		case ucpTagFollow:
+			permission = "AND p.publicTagFollow "
+		}
+	}
+
+	query := fmt.Sprintf(`SELECT %s 
+	FROM UserCont up
+	JOIN Tags p ON up.pid = p.id
+	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d %s
+	`, SQLFieldsForTag(), userId, kind, permission)
+	if len(startDate) > 0 && len(endDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn < (TIMESTAMP '%s') ", endDate)
+	}
+
+	rows, e := db.Query(query)
+	result := []Tag{}
+	if DidFail(e, "get user content") {
+		return result
+	}
+	result = ScanTags(rows, false, false, false)
 
 	return result
 }

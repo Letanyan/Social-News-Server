@@ -1,11 +1,11 @@
 package main
 
 type Address struct {
-	ContinentCode string
-	CountryCode   string
-	RegionName    string
-	City          string
-	Zip           string
+	ContinentCode string `json:"continentCode"`
+	CountryCode   string `json:"countryCode"`
+	Region        string `json:"region"`
+	City          string `json:"city"`
+	Zip           string `json:"zip"`
 }
 
 func getAddress(ip string) []string {
@@ -26,5 +26,5 @@ func getAddress(ip string) []string {
 	// if DidFail(e, "parse ip-api json result to Address") {
 	// 	return []string{}
 	// }
-	// return []string{addr.CountryCode, addr.RegionName, addr.City}
+	// return []string{addr.countryCode, addr.region}
 }

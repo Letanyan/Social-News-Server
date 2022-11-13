@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	nurl "net/url"
@@ -185,21 +187,29 @@ func NAUpdateNewsAgentWithID(id int64) WebsiteScrapings {
 
 func NAUpdateAllNewsAgent(before time.Duration) []WebsiteScrapings {
 	result := []WebsiteScrapings{}
-	for _, a := range agents {
+	wg := sync.WaitGroup{}
+	m := sync.Mutex{}
+	for i := range agents {
+		a := agents[i]
 		if a.LastUpdate.Before(utc().Add(before)) {
-			result = append(result, NAUpdateNewsAgent(a))
+			wg.Add(1)
+			agents[i].LastUpdate = utc()
+			go func() {
+				scrape := NAUpdateNewsAgent(a)
+				m.Lock()
+				result = append(result, scrape)
+				defer m.Unlock()
+				wg.Done()
+			}()
 		}
 	}
+	wg.Wait()
+	NAWriteAllNewsAgents(agents)
 	return result
 }
 
 func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
-	if updatingAgents {
-		return WebsiteScrapings{}
-	}
-	updatingAgents = true
 	if agent.ID == 0 {
-		updatingAgents = false
 		return WebsiteScrapings{}
 	}
 	scraping := NAScrapeWebsite(agent.Origin)
@@ -209,30 +219,51 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
-		updatingAgents = false
 		return WebsiteScrapings{}
 	}
 	hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
-	visited := HashSetFromFile(hashFile)
-	defer HashSetWriteToFile(visited, hashFile)
-	allUrls := NATraverseSubDomains(agent.Origin, agent.Subs)
-	allUrls = append(allUrls, scraping.URLs...)
-	for _, urlString := range allUrls {
-		url, e := nurl.Parse(urlString)
-		canURLString := CanonicalURL(url.String())
-		if e != nil || !IsSameHost(url, baseURL) {
-			continue
-		}
-		canURLString = strings.TrimPrefix(canURLString, baseURL.Hostname())
-		if !visited[canURLString] {
-			visited[canURLString] = true
-			subScraping := NAScrapeWebsite(urlString)
-			if subScraping.Type == "article" {
-				NACreatePost(agent.ID, urlString, subScraping)
+	if _, e = os.Stat(hashFile); errors.Is(e, os.ErrNotExist) {
+		visited := map[string]bool{}
+		HashSetWriteToFile(visited, fmt.Sprintf("./agents/%d.gob", agent.ID))
+	}
+
+	createPosts := func(allUrls []string, origin string) {
+		unlock := agentsMutex.Lock(origin)
+		defer unlock()
+		visited := HashSetFromFile(hashFile)
+		defer HashSetWriteToFile(visited, hashFile)
+		for _, urlString := range allUrls {
+			url, e := nurl.Parse(strings.TrimSpace(urlString))
+			if DidFail(e, "parse url", urlString) {
+				continue
+			}
+			if !IsSameHost(url, baseURL) {
+				continue
+			}
+			canURLString := CanonicalURL(url.String())
+			canURLString = strings.TrimPrefix(canURLString, baseURL.Hostname())
+			if !visited[canURLString] {
+				visited[canURLString] = true
+				subScraping := NAScrapeWebsite(urlString)
+				if subScraping.Type == "article" {
+					NACreatePost(agent.ID, urlString, subScraping)
+				}
 			}
 		}
 	}
-	updatingAgents = false
+
+	go createPosts(scraping.URLs, agent.Origin)
+	for i := range agent.Subs {
+		sub := agent.Subs[i]
+		fullUrl := agent.Origin + sub
+		subScrape := NAScrapeWebsite(fullUrl)
+		var offset = time.Second * 10 * time.Duration(i+1)
+		anon := func() {
+			createPosts(subScrape.URLs, agent.Origin)
+		}
+		time.AfterFunc(offset, anon)
+	}
+
 	return scraping
 }
 
@@ -267,16 +298,23 @@ func NAScrapeWebsite(url string) WebsiteScrapings {
 		return WebsiteScrapings{}
 	}
 
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req, e := http.NewRequest(http.MethodGet, url, nil)
+	if DidFail(e, "get url ", url) {
+		return WebsiteScrapings{}
+	}
 	// req.Header.Set("User-Agent", "Journo/0.1 (Windows NT 10; Win64; x64)")
-	res, _ := client.Do(req)
+	res, e := client.Do(req)
+	if DidFail(e, "make request ", url) {
+		return WebsiteScrapings{}
+	}
+
 	if res.StatusCode != 200 {
 		return WebsiteScrapings{}
 	}
 
-	bodyNode, err := html.Parse(res.Body)
-	if err != nil {
-		println(err.Error())
+	bodyNode, e := html.Parse(res.Body)
+	if DidFail(e, "parse html") {
+		return WebsiteScrapings{}
 	}
 
 	result := NAReadData(bodyNode)
@@ -297,7 +335,6 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	if node == nil {
 		return WebsiteScrapings{}
 	}
-	var titleNode *html.Node
 	var metaTitleNode *html.Node
 	links := []string{}
 	tags := []string{}
@@ -311,15 +348,13 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	getHTMLNodes(node, false, func(n *html.Node) bool {
 		if n.Type == html.ElementNode {
 			switch n.Data {
-			case "title":
-				titleNode = n
 			case "meta":
 				properties := getValForAttr(n, "property")
 				names := getValForAttr(n, "name")
 				if names["og:title"] || properties["og:title"] {
 					metaTitleNode = n
 				} else if names["article:tag"] || properties["article:tag"] {
-					tags = append(tags, tagFormat(getFirstValForAttr(n, "content")))
+					tags = append(tags, tagFormat(getFirstValForAttr(n, "content"))...)
 				} else if names["og:image"] || properties["og:image"] {
 					image = getFirstValForAttr(n, "content")
 				} else if names["og:description"] || properties["og:description"] {
@@ -327,7 +362,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				} else if names["article:author"] || properties["article:author"] {
 					authors = append(authors, getFirstValForAttr(n, "content"))
 				} else if names["article:section"] || properties["article:section"] {
-					tags = append(tags, tagFormat(getFirstValForAttr(n, "content")))
+					tags = append(tags, tagFormat(getFirstValForAttr(n, "content"))...)
 				} else if names["og:type"] || properties["og:type"] {
 					contentType = getFirstValForAttr(n, "content")
 				} else if names["article:modified_time"] || properties["article:modified_time"] {
@@ -342,26 +377,13 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 		return false
 	})
 
-	titleText := ""
 	metaText := ""
-
-	if titleNode != nil {
-		titleText = titleNode.FirstChild.Data
-	}
 	if metaTitleNode != nil {
 		for k := range getValForAttr(metaTitleNode, "content") {
 			metaText = k
 		}
 	}
-
-	filterTitleText := replaceUnicode(titleText, isNotAlphanumeric)
-	filterMetaText := replaceUnicode(metaText, isNotAlphanumeric)
-
-	if filterMetaText != "" && filterMetaText != filterTitleText && strings.HasPrefix(filterTitleText, filterMetaText) {
-		titleText = metaText
-	}
-
-	title := strings.TrimSpace(titleText)
+	title := strings.TrimSpace(metaText)
 
 	date := utc()
 	if len(modTime) > 0 {
