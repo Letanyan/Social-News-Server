@@ -154,7 +154,7 @@ func main() {
 
 	agents = NAReadAllNewsAgents()
 	agentsMutex = KeyedMutex{}
-	// NARegisterUpdates()
+	NARegisterUpdates()
 
 	port := os.Getenv("PORT")
 	if port == "" {

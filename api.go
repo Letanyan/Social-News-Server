@@ -1461,6 +1461,7 @@ func APISignInWithApple(c *gin.Context) {
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
+		user.Password = ""
 		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
 }
@@ -1496,6 +1497,7 @@ func APISignInWithGoogle(c *gin.Context) {
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
+		user.Password = ""
 		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
 }
