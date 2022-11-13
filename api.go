@@ -1412,11 +1412,11 @@ func APISignIn(c *gin.Context) {
 
 func APIRedirectAppleSignIn(c *gin.Context) {
 	type Input struct {
-		Code    string `json:"code"`
-		IdToken string `json:"id_token"`
+		Code    string `json:"code" form:"code"`
+		IdToken string `json:"id_token" form:"id_token"`
 	}
 	var in Input
-	if e := c.BindJSON(&in); APIFailed(c, e, "get input for redirect") {
+	if e := c.Bind(&in); APIFailed(c, e, "get input for redirect") {
 		return
 	}
 
