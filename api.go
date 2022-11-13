@@ -1424,6 +1424,7 @@ func APIRedirectAppleSignIn(c *gin.Context) {
 	b := fmt.Sprintf("id_token=%s", url.QueryEscape(in.IdToken))
 	args := fmt.Sprintf("%s&%s", a, b)
 
+	appleTokens.Store(in.Code, in.IdToken)
 	redirect := fmt.Sprintf("intent://callback?%s#Intent;package=com.letanyan.newsource;scheme=signinwithapple;end", args)
 
 	c.Redirect(307, redirect)
@@ -1434,12 +1435,13 @@ func APISignInWithApple(c *gin.Context) {
 		Code string `json:"code"`
 	}
 	var in Input
-	if e := c.BindJSON(&in); APIFailed(c, e, "get google sign in token") {
+	if e := c.BindJSON(&in); APIFailed(c, e, "get apple sign in token") {
 		return
 	}
 
-	claims, e := ValidateAppleJWT(in.Code)
-	if APIFailed(c, e, "validate apple sign in") {
+	claims := ValidateAppleJWT(in.Code)
+	if len(claims.Email) <= 0 {
+		APIReturn(c, false, "validate apple sign in")
 		return
 	}
 

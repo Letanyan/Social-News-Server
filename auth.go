@@ -8,9 +8,9 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
-	"github.com/Timothylock/go-signin-with-apple/apple"
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-json"
 	"github.com/golang-jwt/jwt/v4"
@@ -20,10 +20,13 @@ import (
 )
 
 var AUTHUserSecrets map[int64][]string
+var googleKeys map[string]string
+var appleTokens sync.Map
 
 func init() {
 	AUTHUserSecrets = AUTHLoadFromFile("user_secrets.gob")
 	googleKeys = map[string]string{}
+	appleTokens = sync.Map{}
 }
 
 // -------------------------------------------------------------------------
@@ -192,8 +195,6 @@ type GoogleClaims struct {
 	jwt.RegisteredClaims
 }
 
-var googleKeys map[string]string
-
 func getGooglePublicKey(keyId string) (string, error) {
 	if key, found := googleKeys[keyId]; found {
 		return key, nil
@@ -274,41 +275,14 @@ func ValidateGoogleJWT(tokenString string) (GoogleClaims, error) {
 	return *claims, nil
 }
 
-func ValidateAppleJWT(code string) (GoogleClaims, error) {
-	teamID := "86QZ48F54E"
-	serviceID := "com.letanyan.newsourceserviceid"
-	keyID := "K3NQ5VC2LH"
-	bundleID := "com.letanyan.newsource"
-	secretFile := `-----BEGIN PRIVATE KEY-----
-MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgX8e/+ExMOMTbLzav
-lg8rFYOhBfeGrcAIKL+7Q4FjjSGgCgYIKoZIzj0DAQehRANCAATtI0L8/MPp2b4T
-J6/1jA9dnkP0SodRODScM2opvHJgKYhevNPi/Blu5pd3ble2zGBctKdDbHpW6Xf3
-jAhjLaPD
------END PRIVATE KEY-----`
-
-	// -----BEGIN PRIVATE KEY-----|MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgX8e/+ExMOMTbLzav|lg8rFYOhBfeGrcAIKL+7Q4FjjSGgCgYIKoZIzj0DAQehRANCAATtI0L8/MPp2b4T|J6/1jA9dnkP0SodRODScM2opvHJgKYhevNPi/Blu5pd3ble2zGBctKdDbHpW6Xf3|jAhjLaPD|-----END PRIVATE KEY-----
-
-	// Generate the client secret used to authenticate with Apple's validation servers
-	// Refer to the example files to see where to get secret, teamID, clientID, keyID
-	secret, _ := apple.GenerateClientSecret(secretFile, teamID, serviceID, keyID)
-
-	// Generate a new validation client
-	client := apple.New()
-
-	vReq := apple.AppValidationTokenRequest{
-		ClientID:     bundleID,
-		ClientSecret: secret,
-		Code:         code,
+func ValidateAppleJWT(code string) GoogleClaims {
+	token, loaded := appleTokens.LoadAndDelete(code)
+	if !loaded {
+		return GoogleClaims{}
 	}
-
-	var resp apple.ValidationResponse
-
-	// Do the verification
-	client.VerifyAppToken(context.Background(), vReq, &resp)
-
 	claimsStruct := GoogleClaims{}
 	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
-	_, _, e := parser.ParseUnverified(resp.IDToken, &claimsStruct)
+	parser.ParseUnverified(token.(string), &claimsStruct)
 
-	return claimsStruct, e
+	return claimsStruct
 }
