@@ -4,6 +4,8 @@ import (
 	"encoding/gob"
 	"os"
 	"regexp"
+	"strings"
+	"sync"
 	"unicode"
 )
 
@@ -27,14 +29,19 @@ func filterMapUnicode(original string, shouldRemove func(rune) bool, mapping fun
 	return result
 }
 
-func tagFormat(original string) string {
-	punct := func(r rune) bool { return unicode.IsPunct(r) }
+func tagFormat(original string) []string {
+	punct := func(r rune) bool { return unicode.IsPunct(r) && r != ',' }
 	lower := func(r rune) rune { return unicode.ToLower(r) }
-	return filterMapUnicode(original, punct, lower)
-}
-
-func isNotAlphanumeric(c rune) bool {
-	return !(unicode.IsLetter(c) || unicode.IsNumber(c))
+	formatted := filterMapUnicode(original, punct, lower)
+	splits := strings.Split(formatted, ",")
+	result := []string{}
+	for _, s := range splits {
+		s = strings.TrimSpace(s)
+		if len(s) > 0 {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 func isNotWebSearchQuery(c rune) bool {
@@ -62,15 +69,15 @@ func validEmailMatch(value string) bool {
 	return validMatch(value, `\b[\w.!#$%&’*+\/=?^`+"`"+`{|}~-]+@[\w-]+(?:\.[\w-]+)*\b`)
 }
 
-func DBPrepareSearchString(query string) (string, []int64) {
+func DBPrepareTaggedString(text string, removeOnlyHash bool) (string, []string) {
 	tagRe, e := regexp.Compile(`#\(?([\w\d\s]+)\)?`)
 	tagNames := []string{}
-	tags := []int64{}
+	tags := []string{}
 	if DidFail(e, "compile tag regex") {
-		query = replaceUnicode(query, isNotWebSearchQuery)
-		return query, tags
+		text = replaceUnicode(text, isNotWebSearchQuery)
+		return text, tags
 	}
-	query = tagRe.ReplaceAllStringFunc(query, func(m string) string {
+	text = tagRe.ReplaceAllStringFunc(text, func(m string) string {
 		if m[1] == '(' {
 			m = m[2:]
 		} else {
@@ -80,16 +87,26 @@ func DBPrepareSearchString(query string) (string, []int64) {
 			m = m[:len(m)-1]
 		}
 		tagNames = append(tagNames, m)
-		return ""
+		if removeOnlyHash {
+			return m
+		} else {
+			return ""
+		}
 	})
-	query = replaceUnicode(query, isNotWebSearchQuery)
 
-	tagObjs := DBGetTags(mainDB, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
-	for _, t := range tagObjs {
+	return text, tagNames
+}
+
+func DBPrepareSearchString(query string) (string, []int64) {
+	text, tagNames := DBPrepareTaggedString(query, false)
+	text = replaceUnicode(text, isNotWebSearchQuery)
+	tagObjects := DBGetTags(mainDB, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
+	tags := []int64{}
+	for _, t := range tagObjects {
 		tags = append(tags, t.ID)
 	}
 
-	return query, tags
+	return text, tags
 }
 
 func AUTHLoadFromFile(fileName string) map[int64][]string {
@@ -124,4 +141,16 @@ func AUTHWriteToFile(data map[int64][]string, fileName string) {
 func Zero[T any]() T {
 	var result T
 	return result
+}
+
+type KeyedMutex struct {
+	mutexes sync.Map // Zero value is empty and ready for use
+}
+
+func (m *KeyedMutex) Lock(key string) func() {
+	value, _ := m.mutexes.LoadOrStore(key, &sync.Mutex{})
+	mtx := value.(*sync.Mutex)
+	mtx.Lock()
+
+	return func() { mtx.Unlock() }
 }

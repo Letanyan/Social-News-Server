@@ -20,12 +20,14 @@ type User struct {
 	Upvotes       int64
 	Downvotes     int64
 	Credits       int32
+	Investment    int32
 	ValidationKey int32
 
 	PublicViews     bool
 	PublicReadLater bool
 	PublicFollowing bool
 	PublicIgnored   bool
+	PublicTagFollow bool
 
 	PublicPostVotes    bool
 	PublicCommentVotes bool
@@ -39,6 +41,7 @@ type UserProfile struct {
 	RegisterDate time.Time
 	Upvotes      int64
 	Downvotes    int64
+	Investment   int64
 
 	Score float64
 	Cred  float64
@@ -46,31 +49,31 @@ type UserProfile struct {
 }
 
 func SQLFieldsForUser() string {
-	return "id, name, email, password, registerDate, upvotes, downvotes, credits, validationKey, " +
-		"publicViews, publicReadLater, publicFollowing, publicIgnored, " +
+	return "id, name, email, password, registerDate, upvotes, downvotes, credits, investment, validationKey, " +
+		"publicViews, publicReadLater, publicFollowing, publicIgnored, publicTagFollow, " +
 		"publicPostVotes, publicCommentVotes, publicUserVotes, publicTagVotes"
 }
 
 func SQLFieldsForUserProfile() string {
-	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes"
+	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes, p.investment"
 }
 
 func SQLFieldsForUserProfileAlias() string {
-	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down"
+	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, p.investment"
 }
 
 func ScanUser(row *sql.Row) (User, error) {
 	u := User{}
 	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes,
-		&u.Downvotes, &u.Credits, &u.ValidationKey,
-		&u.PublicViews, &u.PublicReadLater, &u.PublicFollowing, &u.PublicIgnored,
+		&u.Downvotes, &u.Credits, &u.Investment, &u.ValidationKey,
+		&u.PublicViews, &u.PublicReadLater, &u.PublicFollowing, &u.PublicIgnored, &u.PublicTagFollow,
 		&u.PublicPostVotes, &u.PublicCommentVotes, &u.PublicTagVotes, &u.PublicTagVotes)
 	return u, e
 }
 
 func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	u := UserProfile{}
-	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment)
 	return u, e
 }
 
@@ -84,29 +87,29 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank 
 		if hasRank {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &u.Cred, &u.Score, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Rank)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Cred, &u.Score, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Rank)
 				}
 			}
 		} else {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &u.Cred, &u.Score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Cred, &u.Score)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Cred, &u.Score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Cred, &u.Score)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment)
 				}
 			}
 		}
@@ -232,6 +235,7 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 }
 
 // ignore email if userId > 0
+// FIXME: ensure only one and only one of userId or email
 func DBGetUser(db *sql.DB, userId int64, email string) User {
 	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
@@ -342,10 +346,12 @@ func DBCanUpdateCredit(db *sql.DB, userId int64, amount int64) bool {
 }
 
 func DBSubtractUserCredit(db *sql.DB, userId int64, amount int64) int64 {
-	changeAmount := fmt.Sprintf(`UPDATE Users 
-	SET credits = credits - %d 
+	changeAmount := fmt.Sprintf(`
+	UPDATE Users 
+	SET credits = credits - %d,
+	investment = investment + %d
 	WHERE id = $1 AND credits >= %d
-	RETURNING credits`, amount, amount)
+	RETURNING credits`, amount, amount, amount)
 	row := db.QueryRow(changeAmount, userId)
 	var result int64
 	e := row.Scan(&result)
@@ -372,7 +378,7 @@ func DBAddUserCredit(db *sql.DB, userId int64, amount int64) int64 {
 }
 
 func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi bool, pf bool,
-	ppv bool, pcv bool, ptv bool, puv bool) {
+	ppv bool, pcv bool, ptv bool, puv bool, ptf bool) {
 
 	update := fmt.Sprintf(`UPDATE Users 
 	SET 
@@ -383,11 +389,12 @@ func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi 
 	PublicPostVotes=$5,    
 	PublicCommentVotes=$6, 
 	PublicUserVotes=$7,    
-	PublicTagVotes=$8  
+	PublicTagVotes=$8,
+	PublicTagFollow=$9
 	WHERE id=%d
 	`, uid)
 
-	_, e := db.Exec(update, pv, prl, pf, pi, ppv, pcv, puv, ptv)
+	_, e := db.Exec(update, pv, prl, pf, pi, ppv, pcv, puv, ptv, ptf)
 	if DidFail(e, "update user permissions") {
 		return
 	}

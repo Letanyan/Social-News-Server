@@ -11,6 +11,9 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	startDate string, endDate string, forUser int64, search string) string {
 
 	scoreField := fmt.Sprintf("%s.upvotes * RATIO(%s.upvotes, %s.downvotes)", voteTable, voteTable, voteTable)
+	if table == "Users p" && !usingVotes {
+		scoreField = "(p.upvotes + p.investment) * RATIO(p.upvotes + p.investment, p.downvotes)"
+	}
 	withTable := ""
 	if forUser > 0 {
 		withTable = fmt.Sprintf(`
@@ -19,18 +22,42 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			SELECT * 
 			FROM UserPref
 			WHERE uid=%d
-		), Total AS (
-			SELECT SUM(upvotes) up, SUM(downvotes) down
-			FROM UserPrefs
-			WHERE kind=3 OR kind=4
-		), Scores AS (
-			SELECT pid, (upvotes - downvotes) / (total.up + total.down) * (1.1 * dateFrac(updatedOn, now() at time zone 'utc', 2592000)) AS value
-			FROM UserPrefs, Total
-			WHERE kind=3 OR kind=4
 		), UserConts AS (
 			SELECT *
 			FROM UserCont
 			WHERE uid=%d
+		), 
+		
+		TotalPartial AS (
+			(
+				SELECT SUM(upvotes) up, SUM(downvotes) down
+				FROM UserPrefs
+				WHERE kind=3 OR kind=4 -- liked tags or watched tags
+			)
+			UNION
+			(
+				SELECT SUM(t.upvotes) up, SUM(t.downvotes) down
+				FROM UserConts uc
+				JOIN Tags t ON t.id=uc.pid
+				WHERE uc.kind=6 -- favourite tag
+			)
+		), Total AS (
+			SELECT SUM(up) up, SUM(down) down
+			FROM TotalPartial
+		), Scores AS (
+			(
+				SELECT pid id, (upvotes - downvotes) / (total.up + total.down) * (1.1 - dateFrac(updatedOn, now() at time zone 'utc', 60*60*24*30)) AS value
+				FROM UserPrefs, Total
+				WHERE kind=3 OR kind=4 -- liked tags or watched tags
+			)
+			UNION
+			(
+				SELECT t.id id, (t.upvotes - t.downvotes) / (total.up + total.down) * 0.5 AS value
+				FROM UserConts uc
+				JOIN Tags t ON t.id=uc.pid
+				LEFT JOIN Total ON True
+				WHERE uc.kind=6 -- favourite tag
+			)
 		), Ignored AS (
 			SELECT pid
 			FROM UserConts
@@ -50,10 +77,10 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		)
 		`, forUser, forUser)
 
-		joins += "JOIN Scores s ON s.pid = ANY(p.tags)"
+		joins += "JOIN Scores s ON s.id = ANY(p.tags)"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
-		scoreField = "SUM(s.value * 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 2592000))"
+		scoreField = "SUM(s.value * (1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*12)))"
 	}
 
 	result := fmt.Sprintf(`%s

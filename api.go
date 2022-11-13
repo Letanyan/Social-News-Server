@@ -1,17 +1,15 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/Timothylock/go-signin-with-apple/apple"
 )
 
 func APIReturn(c *gin.Context, success bool, payload interface{}) {
@@ -114,10 +112,8 @@ func APICreateUser(c *gin.Context) {
 
 func APICreatePost(c *gin.Context) {
 	type Input struct {
-		UserID   int64    `json:"userId"`
-		Content  string   `json:"content"`
-		Tags     []string `json:"tags"`
-		Location []string `json:"location"`
+		UserID  int64  `json:"userId"`
+		Content string `json:"content"`
 	}
 	var in Input
 
@@ -130,11 +126,10 @@ func APICreatePost(c *gin.Context) {
 		return
 	}
 
-	if len(in.Location) == 0 {
-		in.Location = getAddress(c.ClientIP())
-	}
+	loc := getAddress(c.ClientIP())
 	date := time.Time{}
-	post := DBCreatePost(mainDB, in.UserID, in.Content, date, in.Tags, in.Location)
+	text, tags := DBPrepareTaggedString(in.Content, true)
+	post := DBCreatePost(mainDB, in.UserID, text, date, tags, loc)
 	if post.ID != 0 {
 		APIReturn(c, true, post)
 	} else {
@@ -273,7 +268,10 @@ func APIGetUser(c *gin.Context) {
 	if user.ID == 0 {
 		APIReturn(c, false, "no user found with id"+fmt.Sprint(uid))
 	} else {
-		APIReturn(c, true, user)
+		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
+		APIReturn(c, true, gin.H{"user": user, "token": "notSecret", "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
 }
 
@@ -732,6 +730,21 @@ func APIGetUserContUsers(ucp UserContKind) func(*gin.Context) {
 
 		users := DBGetUserContUsers(mainDB, isOwner, uid, ucp, startDate, endDate)
 		APIReturn(c, true, users)
+	}
+}
+
+func APIGetUserContTags(ucp UserContKind) func(*gin.Context) {
+	return func(c *gin.Context) {
+		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+		if APIFailed(c, e, "invalid user id") {
+			return
+		}
+		isOwner := ContextMatchSecret(c, uid)
+		startDate := c.DefaultQuery("start", "")
+		endDate := c.DefaultQuery("end", "")
+
+		tags := DBGetUserContTag(mainDB, isOwner, uid, ucp, startDate, endDate)
+		APIReturn(c, true, tags)
 	}
 }
 
@@ -1233,6 +1246,7 @@ func APIUpdateUser(c *gin.Context) {
 		PublicReadLater bool
 		PublicFollowing bool
 		PublicIgnored   bool
+		PublicTagFollow bool
 
 		PublicPostVotes    bool
 		PublicCommentVotes bool
@@ -1246,7 +1260,8 @@ func APIUpdateUser(c *gin.Context) {
 
 	DBUpdateUserPublicPermissions(mainDB, uid,
 		in.PublicViews, in.PublicReadLater, in.PublicIgnored, in.PublicFollowing,
-		in.PublicPostVotes, in.PublicCommentVotes, in.PublicTagVotes, in.PublicUserVotes)
+		in.PublicPostVotes, in.PublicCommentVotes, in.PublicTagVotes, in.PublicUserVotes,
+		in.PublicTagFollow)
 
 	DBUpdateUser(mainDB, uid, in.Name)
 
@@ -1386,46 +1401,101 @@ func APISignIn(c *gin.Context) {
 	user := DBSignIn(mainDB, in.Email, in.Password)
 	if user.ID != 0 {
 		secret := AUTHRegister(user.ID)
-		APIReturn(c, true, gin.H{"user": user, "token": secret})
+		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
 	} else {
 		APIReturn(c, false, "password or email incorrect")
 	}
 }
 
-func APISignInWithApple(c *gin.Context) {
-	teamID := "86QZ48F54E"
-	serviceID := "com.letanyan.newsourceserviceid"
-	keyID := "K3NQ5VC2LH"
-	// bundleID := "com.letanyan.newsource"
-	// 	secretFile := `-----BEGIN PRIVATE KEY-----
-	// MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgX8e/+ExMOMTbLzav
-	// lg8rFYOhBfeGrcAIKL+7Q4FjjSGgCgYIKoZIzj0DAQehRANCAATtI0L8/MPp2b4T
-	// J6/1jA9dnkP0SodRODScM2opvHJgKYhevNPi/Blu5pd3ble2zGBctKdDbHpW6Xf3
-	// jAhjLaPD
-	// -----END PRIVATE KEY-----`
-
-	// Generate the client secret used to authenticate with Apple's validation servers
-	// Refer to the example files to see where to get secret, teamID, clientID, keyID
-	secret, _ := apple.GenerateClientSecret("", teamID, serviceID, keyID)
-
-	// Generate a new validation client
-	client := apple.New()
-
-	vReq := apple.AppValidationTokenRequest{
-		ClientID:     serviceID,
-		ClientSecret: secret,
-		Code:         "the_token_to_validate",
+func APIRedirectAppleSignIn(c *gin.Context) {
+	type Input struct {
+		Code    string `json:"code"`
+		IdToken string `json:"id_token"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for redirect") {
+		return
 	}
 
-	var resp apple.ValidationResponse
+	a := fmt.Sprintf("code=%s", url.QueryEscape(in.Code))
+	b := fmt.Sprintf("id_token=%s", url.QueryEscape(in.IdToken))
+	args := fmt.Sprintf("%s&%s", a, b)
 
-	// Do the verification
-	client.VerifyAppToken(context.Background(), vReq, &resp)
+	redirect := fmt.Sprintf("intent://callback?%s#Intent;package=com.letanyan.newsource;scheme=signinwithapple;end", args)
 
-	unique, _ := apple.GetUniqueID(resp.IDToken)
+	c.Redirect(307, redirect)
+}
 
-	// Voila!
-	fmt.Println(unique)
+func APISignInWithApple(c *gin.Context) {
+	type Input struct {
+		Code string `json:"code"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get google sign in token") {
+		return
+	}
+
+	claims, e := ValidateAppleJWT(in.Code)
+	if APIFailed(c, e, "validate apple sign in") {
+		return
+	}
+
+	user := DBGetUser(mainDB, 0, claims.Email)
+	if user.ID == 0 {
+		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
+		if newUser.ID != 0 {
+			secret := AUTHRegister(newUser.ID)
+			APIReturn(c, true, gin.H{"user": newUser, "token": secret})
+		} else {
+			APIReturn(c, false, "could not create user")
+		}
+	} else {
+		secret := AUTHRegister(user.ID)
+		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
+		DBValidateUser(mainDB, user.ID, user.ValidationKey)
+		user.ValidationKey = 0
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
+	}
+}
+
+func APISignInWithGoogle(c *gin.Context) {
+	type Input struct {
+		Token  string `json:"token"`
+		Access string `json:"access"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get google sign in token") {
+		return
+	}
+
+	claims, e := ValidateGoogleJWT(in.Token)
+	if APIFailed(c, e, "validate google JWT") {
+		return
+	}
+
+	user := DBGetUser(mainDB, 0, claims.Email)
+	if user.ID == 0 {
+		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
+		if newUser.ID != 0 {
+			secret := AUTHRegister(newUser.ID)
+			APIReturn(c, true, gin.H{"user": newUser, "token": secret})
+		} else {
+			APIReturn(c, false, "could not create user")
+		}
+	} else {
+		secret := AUTHRegister(user.ID)
+		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
+		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
+		DBValidateUser(mainDB, user.ID, user.ValidationKey)
+		user.ValidationKey = 0
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
+	}
 }
 
 func APISignOut(c *gin.Context) {
@@ -1492,4 +1562,60 @@ func APIVerifyUserEmail(c *gin.Context) {
 			APIReturnHTML(c, "verify_failed.html", gin.H{})
 		}
 	}
+}
+
+func APIVerifyGoogleIAP(c *gin.Context) {
+	type Input struct {
+		Data      string `json:"data"`
+		ProductId string `json:"productId"`
+		UserId    int64  `json:"userId"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for google in app purchase") {
+		return
+	}
+	if !APIMatchSecret(c, in.UserId) {
+		APIReturn(c, false, -1)
+		return
+	}
+
+	isAuthentic := AUTHGoogleIAP(in.Data, in.ProductId)
+	amount := mapProductIdToCredit(in.ProductId)
+	if amount == -1 {
+		APIReturn(c, false, -1)
+		return
+	}
+	result := DBAddUserCredit(mainDB, in.UserId, amount)
+
+	APIReturn(c, isAuthentic, result)
+}
+
+func APIVerifyAppleIAP(c *gin.Context) {
+	type Input struct {
+		Data      string `json:"data"`
+		ProductId string `json:"productId"`
+		UserId    int64  `json:"userId"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for apple in app purchase") {
+		return
+	}
+	if !APIMatchSecret(c, in.UserId) {
+		APIReturn(c, false, -1)
+		return
+	}
+
+	isAuthentic := AUTHAppleIAP(in.Data)
+	amount := mapProductIdToCredit(in.ProductId)
+	if amount == -1 {
+		APIReturn(c, false, -1)
+		return
+	}
+	result := DBAddUserCredit(mainDB, in.UserId, amount)
+
+	APIReturn(c, isAuthentic, result)
+}
+
+func APIAvailable(c *gin.Context) {
+	APIReturn(c, true, "")
 }

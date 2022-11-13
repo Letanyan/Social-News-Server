@@ -598,6 +598,7 @@ const (
 	ucpUserFollow
 	ucpUserIgnored
 	ucpUserRecommended
+	ucpTagFollow
 )
 
 func DBCreateUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64, commentId int64) UserCont {
@@ -821,6 +822,38 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 		return result
 	}
 	result = ScanUserProfiles(rows, false, false, false)
+
+	return result
+}
+
+func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind, startDate string, endDate string) []Tag {
+	permission := ""
+	if !isOwner {
+		switch kind {
+		case ucpTagFollow:
+			permission = "AND p.publicTagFollow "
+		}
+	}
+
+	query := fmt.Sprintf(`SELECT %s 
+	FROM UserCont up
+	JOIN Tags p ON up.pid = p.id
+	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d %s
+	`, SQLFieldsForTag(), userId, kind, permission)
+	if len(startDate) > 0 && len(endDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
+	} else if len(startDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn > (TIMESTAMP '%s') ", startDate)
+	} else if len(endDate) > 0 {
+		query += fmt.Sprintf("AND up.addedOn < (TIMESTAMP '%s') ", endDate)
+	}
+
+	rows, e := db.Query(query)
+	result := []Tag{}
+	if DidFail(e, "get user content") {
+		return result
+	}
+	result = ScanTags(rows, false, false, false)
 
 	return result
 }

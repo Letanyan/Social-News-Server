@@ -14,6 +14,7 @@ func DBSetup(db *sql.DB) {
 	DBTagsSetup(db)
 	DBFlagsSetup(db)
 	DBFunctionSetup(db)
+	DBMigrations(db)
 }
 
 func DBUsersSetup(db *sql.DB) {
@@ -261,6 +262,20 @@ func DBFlagsSetup(db *sql.DB) {
 	for i := 0; i < mod; i += 1 {
 		createFlagsTable(mod, i)
 	}
+}
+
+func DBMigrations(db *sql.DB) {
+	commands := `
+	ALTER TABLE Users 
+	ADD COLUMN IF NOT EXISTS PublicTagFollow BOOLEAN 
+	DEFAULT true;
+
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS Investment BIGINT
+	DEFAULT 0;
+	`
+	_, e := db.Exec(commands)
+	DidFail(e, "migrations")
 }
 
 func DBFunctionSetup(db *sql.DB) {

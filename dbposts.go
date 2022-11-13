@@ -67,7 +67,7 @@ func ScanPostResult(row *sql.Row) (PostResult, error) {
 	u := UserProfile{}
 	var userID int64
 	e := row.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-		&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes)
+		&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
 	p.Author = u
 	return p, e
 }
@@ -101,18 +101,18 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 		if hasRank {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &p.Cred, &p.Score, &p.Rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &p.Cred, &p.Score, &p.Rank)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &p.Cred, &p.Score, &p.Rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &p.Cred, &p.Score, &p.Rank)
 			}
 		} else {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &up, &down, &p.Cred, &p.Score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &p.Cred, &p.Score)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Upvotes, &p.Cred, &p.Score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &p.Cred, &p.Score)
 			}
 		}
 
@@ -126,7 +126,7 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 	return result
 }
 
-func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time, tags []string, location []string) Post {
+func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time, tags []string, location []string) PostResult {
 	t := utc()
 	nowTime := formatTime(t)
 	if !createdAt.IsZero() {
@@ -146,15 +146,17 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 
 	post, e := ScanPost(row)
 	if DidFail(e, "create post") {
-		return Post{}
+		return PostResult{}
 	}
 
 	cont := DBCreateUserCont(mainDB, ucpCreated, post.UserID, post.ID, -1)
 	if cont.pid == 0 {
-		return Post{}
+		return PostResult{}
 	}
 
-	return post
+	result := DBGetPost(db, post.ID)
+
+	return result
 }
 
 func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) (Post, UserProfile, []Tag, []UserPref) {
