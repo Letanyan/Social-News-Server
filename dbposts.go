@@ -306,7 +306,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	} else if len(end) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt < (TIMESTAMP '%s')", end))
 	}
-	if userId != 0 {
+	if userId > 0 {
 		cond = append(cond, fmt.Sprintf("p.userId = %d", userId))
 	}
 	if len(tags) > 0 {

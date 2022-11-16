@@ -129,7 +129,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	}
 
 	updateReplyCount := ""
-	if replyId != 0 {
+	if replyId > 0 {
 		updateReplyCount = fmt.Sprintf(`
 		UPDATE Comments 
 		SET replyCount = replyCount + 1 
@@ -171,7 +171,7 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 		return
 	}
 
-	if replyId != 0 {
+	if replyId > 0 {
 		updateReplyCount := fmt.Sprintf(`
 		UPDATE Comments
 		SET replyCount = replyCount - 1
@@ -247,10 +247,10 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 
 	joins := "JOIN users u ON p.userId = u.id\n"
 	cond := []string{"p.trashed=false"}
-	if postId != 0 {
+	if postId > 0 {
 		cond = append(cond, fmt.Sprintf("postId = %d\n", postId))
 	}
-	if userId != 0 {
+	if userId > 0 {
 		cond = append(cond, fmt.Sprintf("p.userId = %d\n", userId))
 	}
 	if replyId >= 0 {

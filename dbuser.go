@@ -216,11 +216,13 @@ func SendValidationKey(userId int64, email string, key int32) {
 
 func DBSignIn(db *sql.DB, email string, password string) User {
 	user := DBGetUser(db, 0, email)
-	if DBEqualHashAndPassword(user.Password, password) {
+	if user.ID == 0 {
+		return User{ID: -2}
+	} else if DBEqualHashAndPassword(user.Password, password) {
 		user.Password = ""
 		return user
 	} else {
-		return User{}
+		return User{ID: -3}
 	}
 }
 
@@ -399,3 +401,20 @@ func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi 
 		return
 	}
 }
+
+/*
+
+var obj {
+	arg	name type: Identifier
+	arg body type: Expression
+
+	ctx(0).insert
+}
+
+obj Person {
+	var location type: Vector(2) (0, 0)
+	var name type: String
+	var age type: Int
+}
+
+*/

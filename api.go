@@ -101,7 +101,7 @@ func APICreateUser(c *gin.Context) {
 	}
 
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
-	if user.ID != 0 {
+	if user.ID > 0 {
 		SendValidationKey(user.ID, user.Email, user.ValidationKey)
 		secret := AUTHRegister(user.ID)
 		APIReturn(c, true, gin.H{"user": user, "token": secret})
@@ -130,7 +130,7 @@ func APICreatePost(c *gin.Context) {
 	date := time.Time{}
 	text, tags := DBPrepareTaggedString(in.Content, true)
 	post := DBCreatePost(mainDB, in.UserID, text, date, tags, loc)
-	if post.ID != 0 {
+	if post.ID > 0 {
 		APIReturn(c, true, post)
 	} else {
 		APIReturn(c, false, "could not create post")
@@ -161,7 +161,7 @@ func APICreateComment(c *gin.Context) {
 	}
 
 	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
-	if comment.ID != 0 {
+	if comment.ID > 0 {
 		APIReturn(c, true, comment)
 	} else {
 		APIReturn(c, false, "could not create post")
@@ -758,7 +758,7 @@ func APIGetPost(c *gin.Context) {
 	}
 
 	post := DBGetPost(mainDB, pid)
-	if post.ID != 0 {
+	if post.ID > 0 {
 		APIReturn(c, true, post)
 	} else {
 		APIReturn(c, false, "no post found with id "+fmt.Sprint(pid))
@@ -1399,14 +1399,20 @@ func APISignIn(c *gin.Context) {
 	}
 
 	user := DBSignIn(mainDB, in.Email, in.Password)
-	if user.ID != 0 {
+	if user.ID > 0 {
 		secret := AUTHRegister(user.ID)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, "", "")
 		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
 	} else {
-		APIReturn(c, false, "password or email incorrect")
+		if user.ID == -2 {
+			APIReturn(c, false, "missing")
+		} else if user.ID == -3 {
+			APIReturn(c, false, "password")
+		} else {
+			APIReturn(c, false, "unknown")
+		}
 	}
 }
 
@@ -1448,7 +1454,7 @@ func APISignInWithApple(c *gin.Context) {
 	user := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
-		if newUser.ID != 0 {
+		if newUser.ID > 0 {
 			secret := AUTHRegister(newUser.ID)
 			APIReturn(c, true, gin.H{"user": newUser, "token": secret})
 		} else {
@@ -1484,9 +1490,9 @@ func APISignInWithGoogle(c *gin.Context) {
 	user := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
-		if newUser.ID != 0 {
+		if newUser.ID > 0 {
 			secret := AUTHRegister(newUser.ID)
-			APIReturn(c, true, gin.H{"user": newUser, "token": secret})
+			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
