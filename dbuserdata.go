@@ -792,7 +792,7 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	return result
 }
 
-func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKind, startDate string, endDate string) []UserProfile {
+func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKind, limit int64, offset int64, startDate string, endDate string) []UserProfile {
 	permission := ""
 	if !isOwner {
 		switch kind {
@@ -815,6 +815,9 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 	} else if len(endDate) > 0 {
 		query += fmt.Sprintf("AND up.addedOn < (TIMESTAMP '%s') ", endDate)
 	}
+	if limit > 0 {
+		query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+	}
 
 	rows, e := db.Query(query)
 	result := []UserProfile{}
@@ -826,7 +829,7 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 	return result
 }
 
-func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind, startDate string, endDate string) []Tag {
+func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind, limit int64, offset int64, startDate string, endDate string) []Tag {
 	permission := ""
 	if !isOwner {
 		switch kind {
@@ -847,6 +850,7 @@ func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind,
 	} else if len(endDate) > 0 {
 		query += fmt.Sprintf("AND up.addedOn < (TIMESTAMP '%s') ", endDate)
 	}
+	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(query)
 	result := []Tag{}

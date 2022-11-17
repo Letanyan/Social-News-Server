@@ -1,3 +1,4 @@
 
 logs.txt
-logs/
+logs/*.txt
+__debug_bin
