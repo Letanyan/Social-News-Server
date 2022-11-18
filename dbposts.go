@@ -252,25 +252,25 @@ func SortOrderFromString(text string) (SortOrder, error) {
 func SQLSortOrder(so SortOrder) string {
 	switch so {
 	case soScore:
-		return "ORDER BY score DESC\n"
+		return "ORDER BY score DESC, p.id DESC\n"
 	case soCred:
-		return "ORDER BY cred DESC\n"
+		return "ORDER BY cred DESC, p.id DESC\n"
 	case soUpvotes:
-		return "ORDER BY item_up DESC\n"
+		return "ORDER BY item_up DESC, p.id DESC\n"
 	case soDownvotes:
-		return "ORDER BY item_down DESC\n"
+		return "ORDER BY item_down DESC, p.id DESC\n"
 	case soControversial:
-		return "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
+		return "ORDER BY COALESCE(1 / NULLIF(ABS(RATIO(p.upvotes, p.downvotes) - 0.5), 0), 9e90) DESC, p.id DESC\n"
 	case soCreatedAt:
-		return "ORDER BY createdAt DESC\n"
+		return "ORDER BY createdAt DESC, p.id DESC\n"
 	case soUpdatedAt:
-		return "ORDER BY updatedAt DESC\n"
+		return "ORDER BY updatedAt DESC, p.id DESC\n"
 	case soUpdatedOn:
-		return "ORDER BY updatedOn DESC\n"
+		return "ORDER BY updatedOn DESC, p.id DESC\n"
 	case soAddedOn:
-		return "ORDER BY addedOn DESC\n"
+		return "ORDER BY addedOn DESC, p.id DESC\n"
 	case soRank:
-		return "ORDER BY rank\n"
+		return "ORDER BY rank, p.id DESC\n"
 	}
 	return ""
 }

@@ -1,1 +1,69 @@
-[{"ID":48,"Name":"Mirror","Origin":"https://mirror.co.uk/","LastUpdate":"2022-11-16T23:48:56.448078617Z","Subs":["sport/","sport/football/","news/","news/politics/","money/","tv/","sport/boxing/","sport/cricket/","travel/","gaming/"]},{"ID":50,"Name":"Reuters","Origin":"https://reuters.com/","LastUpdate":"2022-11-16T23:48:56.448261053Z","Subs":["world/","business/","breakingviews/","technology/"]}]
+[
+    {
+        "ID": 48,
+        "Name": "Mirror",
+        "Origin": "https://mirror.co.uk/",
+        "LastUpdate": "2022-11-18T17:14:44.244235292Z",
+        "Subs": [
+            "sport/",
+            "sport/football/",
+            "news/",
+            "news/politics/",
+            "money/",
+            "tv/",
+            "sport/boxing/",
+            "sport/cricket/",
+            "travel/",
+            "gaming/"
+        ]
+    },
+    {
+        "ID": 50,
+        "Name": "Reuters",
+        "Origin": "https://reuters.com/",
+        "LastUpdate": "2022-11-18T17:14:44.244237842Z",
+        "Subs": [
+            "world/",
+            "business/",
+            "breakingviews/",
+            "technology/"
+        ]
+    },
+    {
+        "ID": 53,
+        "Name": "PBS",
+        "Origin": "https://pbs.org/",
+        "LastUpdate": "2022-11-18T17:14:44.244238782Z",
+        "Subs": [
+            "newshour/"
+        ]
+    },
+    {
+        "ID": 57,
+        "Name": "BBC News",
+        "Origin": "https://bbc.co.uk/",
+        "LastUpdate": "2022-11-18T17:10:44.244238782Z",
+        "Subs": [
+            "sport/",
+            "sport/football/",
+            "sport/football/world-cup/",
+            "sport/cricket/",
+            "sport/formula1/",
+            "sport/rugby-union/",
+            "sport/tennis/",
+            "sport/golf/",
+            "sport/athletics/",
+            "sport/cycling/",
+            "sport/winter-sports/",
+            "news/world/",
+            "news/uk/",
+            "news/business/",
+            "news/technology/",
+            "news/science_and_environment/",
+            "news/stories/",
+            "news/entertainment_and_arts/",
+            "news/health/",
+            "news/world_radio_and_tv/"
+        ]
+    }
+]

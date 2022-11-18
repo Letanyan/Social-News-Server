@@ -32,6 +32,8 @@ type WebsiteScrapings struct {
 	Authors     []string
 	Image       string
 	Type        string
+	Locale      string
+	Language    string
 	Date        time.Time
 }
 
@@ -159,6 +161,23 @@ func NAReadAllNewsAgents() []NewsAgent {
 		return []NewsAgent{}
 	}
 
+	createdNew := false
+	for i := range result {
+		agent := result[i]
+		oldUser := DBGetUser(mainDB, agent.ID, "")
+		if oldUser.ID == 0 || oldUser.Email != "" {
+			createdNew = true
+			user := DBCreateUser(mainDB, agent.Name, "", "")
+			DBValidateUser(mainDB, user.ID, user.ValidationKey)
+			result[i].ID = user.ID
+			visited := map[string]bool{}
+			HashSetWriteToFile(visited, fmt.Sprintf("./agents/%d.gob", user.ID))
+		}
+	}
+	if createdNew && len(result) > 0 {
+		NAWriteAllNewsAgents(result)
+	}
+
 	return result
 }
 
@@ -257,7 +276,7 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 		sub := agent.Subs[i]
 		fullUrl := agent.Origin + sub
 		subScrape := NAScrapeWebsite(fullUrl)
-		var offset = time.Second * 10 * time.Duration(i+1)
+		var offset = time.Second * time.Duration(i+1) * 10
 		anon := func() {
 			createPosts(subScrape.URLs, agent.Origin)
 		}
@@ -344,6 +363,8 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	contentType := ""
 	modTime := ""
 	pubTime := ""
+	locale := ""
+	language := ""
 
 	getHTMLNodes(node, false, func(n *html.Node) bool {
 		if n.Type == html.ElementNode {
@@ -369,6 +390,12 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 					modTime = getFirstValForAttr(n, "content")
 				} else if names["article:published_time"] || properties["article:published_time"] {
 					pubTime = getFirstValForAttr(n, "content")
+				} else if names["og:locale"] || properties["og:locale"] {
+					locale = getFirstValForAttr(n, "content")
+				} else if names["og:language"] || properties["og:language"] {
+					language = getFirstValForAttr(n, "content")
+				} else if names["og:section"] || properties["og:section"] {
+					tags = append(tags, tagFormat(getFirstValForAttr(n, "content"))...)
 				}
 			case "a":
 				links = append(links, getFirstValForAttr(n, "href"))
@@ -392,7 +419,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 		date = parseUnknownTime(pubTime)
 	}
 
-	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, date}
+	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, locale, language, date}
 }
 
 func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
@@ -417,7 +444,34 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 		createPostsPartitionTable(mainDB, scrape.Date.Year())
 	}
 
-	DBCreatePost(mainDB, userId, body, scrape.Date, scrape.Tags, []string{})
+	tags := scrape.Tags
+	comps := strings.Split(url, "/")
+	common := map[string]bool{
+		"sport": true, "boxing": true, "football": true,
+		"news": true, "politics": true, "money": true,
+		"tv": true, "cricket": true, "travel": true,
+		"gaming": true, "world": true, "business": true,
+		"technology": true, "science": true, "lifestyle": true,
+		"film": true, "movies": true, "family": true, "sex": true,
+		"dieting": true, "weird": true, "crime": true, "health": true,
+		"tech": true, "ufc": true, "rugby": true, "f1": true,
+		"racing": true, "golf": true, "tennis": true, "athletics": true,
+		"darts": true, "snooker": true, "baseball": true,
+		"basketball": true, "celebrity": true,
+		"weird-news": true, "africa": true, "americas": true,
+		"china": true, "asia": true, "asia-pacific": true,
+		"europe": true, "india": true, "middle-east": true,
+		"united-kingdom": true, "uk": true, "us": true,
+		"energy": true, "environment": true, "finance": true,
+	}
+	for _, comp := range comps {
+		t := strings.ToLower(comp)
+		if _, found := common[t]; found {
+			tags = append(tags, t)
+		}
+	}
+
+	DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
 }
 
 func NARegisterUpdates() {

@@ -1417,7 +1417,7 @@ func APISignIn(c *gin.Context) {
 	}
 
 	user := DBSignIn(mainDB, in.Email, in.Password)
-	if user.ID > 0 {
+	if user.ID > 0 || user.ID == -1 {
 		secret := AUTHRegister(user.ID)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")

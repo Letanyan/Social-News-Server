@@ -29,6 +29,7 @@ var (
 var (
 	mainDB *sql.DB
 	agents []NewsAgent
+	// agentHashSets []map[string]bool
 	// updatingAgents sync.Mutex
 	agentsMutex KeyedMutex
 )
@@ -150,11 +151,9 @@ func main() {
 
 	DBSetup(mainDB)
 
-	// SendValidationKey(10, "letanyan@icloud.com", 6347)
-
 	agents = NAReadAllNewsAgents()
 	agentsMutex = KeyedMutex{}
-	NARegisterUpdates()
+	// NARegisterUpdates()
 
 	port := os.Getenv("PORT")
 	if port == "" {

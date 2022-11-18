@@ -241,7 +241,7 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 func DBGetUser(db *sql.DB, userId int64, email string) User {
 	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
-	if userId > 0 {
+	if userId > 0 || userId == -1 {
 		arg = fmt.Sprint(userId)
 		getUser += "id = $1"
 	} else if len(email) > 0 {

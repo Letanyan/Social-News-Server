@@ -120,18 +120,18 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 			}
 			if len(search) > 0 {
-				cond = append(cond, fmt.Sprintf("p.content @@ websearch_to_tsquery('%s')", search))
+				cond = append(cond, fmt.Sprintf("p.content @@ to_tsquery('%s')", search))
 			}
 			if sortOrder == soRank {
-				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.content), websearch_to_tsquery('%s')) AS rank", search))
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.content), to_tsquery('%s')) AS rank", search))
 			} else {
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}
 		} else if table == "Users p" || table == "Tags p" {
 			search, _ := DBPrepareSearchString(search)
-			cond = append(cond, fmt.Sprintf("p.name @@ websearch_to_tsquery('%s')", search))
+			cond = append(cond, fmt.Sprintf("p.name @@ to_tsquery('%s')", search))
 			if sortOrder == soRank {
-				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.name), websearch_to_tsquery('%s')) AS rank", search))
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.name), to_tsquery('%s')) AS rank", search))
 			} else {
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}
