@@ -29,6 +29,7 @@ func DBUsersSetup(db *sql.DB) {
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
+		blocked TIMESTAMP DEFAULT '1970-01-01'::timestamp,
 
 		publicViews BOOLEAN DEFAULT true,
 		publicReadLater BOOLEAN DEFAULT true,
@@ -273,6 +274,10 @@ func DBMigrations(db *sql.DB) {
 	ALTER TABLE Users
 	ADD COLUMN IF NOT EXISTS Investment BIGINT
 	DEFAULT 0;
+
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS Blocked TIMESTAMP
+	DEFAULT '1970-01-01'::timestamp;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")

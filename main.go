@@ -27,9 +27,9 @@ var (
 )
 
 var (
-	mainDB *sql.DB
-	agents []NewsAgent
-	// agentHashSets []map[string]bool
+	mainDB        *sql.DB
+	agents        []NewsAgent
+	agentHashSets map[int64]map[string]bool
 	// updatingAgents sync.Mutex
 	agentsMutex KeyedMutex
 )
@@ -153,7 +153,7 @@ func main() {
 
 	agents = NAReadAllNewsAgents()
 	agentsMutex = KeyedMutex{}
-	// NARegisterUpdates()
+	NARegisterUpdates()
 
 	port := os.Getenv("PORT")
 	if port == "" {

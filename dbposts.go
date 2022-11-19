@@ -49,11 +49,11 @@ func SQLFieldsForPost() string {
 }
 
 func SQLFieldsForPostResult() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func SQLFieldsForPostResultAlias() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func ScanPost(row *sql.Row) (Post, error) {
@@ -66,8 +66,10 @@ func ScanPostResult(row *sql.Row) (PostResult, error) {
 	p := PostResult{}
 	u := UserProfile{}
 	var userID int64
+	var email string
 	e := row.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-		&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+		&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email)
+	u.IsAgent = len(email) == 0
 	p.Author = u
 	return p, e
 }
@@ -98,27 +100,29 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 		var userID int64
 		var up int64
 		var down int64
+		var email string
 		if hasRank {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &p.Cred, &p.Score, &p.Rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &up, &down, &p.Cred, &p.Score, &p.Rank)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &p.Cred, &p.Score, &p.Rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &p.Cred, &p.Score, &p.Rank)
 			}
 		} else {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &p.Cred, &p.Score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &up, &down, &p.Cred, &p.Score)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &p.Cred, &p.Score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &p.Cred, &p.Score)
 			}
 		}
 
 		if DidFail(e, "scan post") {
 			continue
 		}
+		u.IsAgent = len(email) == 0
 		p.Author = u
 		result = append(result, p)
 	}

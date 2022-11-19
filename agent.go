@@ -161,18 +161,28 @@ func NAReadAllNewsAgents() []NewsAgent {
 		return []NewsAgent{}
 	}
 
+	agentHashSets = map[int64]map[string]bool{}
 	createdNew := false
 	for i := range result {
 		agent := result[i]
 		oldUser := DBGetUser(mainDB, agent.ID, "")
+		visited := map[string]bool{}
 		if oldUser.ID == 0 || oldUser.Email != "" {
 			createdNew = true
 			user := DBCreateUser(mainDB, agent.Name, "", "")
 			DBValidateUser(mainDB, user.ID, user.ValidationKey)
 			result[i].ID = user.ID
-			visited := map[string]bool{}
-			HashSetWriteToFile(visited, fmt.Sprintf("./agents/%d.gob", user.ID))
+			hashFile := fmt.Sprintf("./agents/%d.gob", user.ID)
+			HashSetWriteToFile(visited, hashFile)
+		} else {
+			hashFile := fmt.Sprintf("./agents/%d.gob", result[i].ID)
+			if _, e = os.Stat(hashFile); errors.Is(e, os.ErrNotExist) {
+				HashSetWriteToFile(visited, hashFile)
+			} else {
+				visited = HashSetFromFile(hashFile)
+			}
 		}
+		agentHashSets[result[i].ID] = visited
 	}
 	if createdNew && len(result) > 0 {
 		NAWriteAllNewsAgents(result)
@@ -214,6 +224,7 @@ func NAUpdateAllNewsAgent(before time.Duration) []WebsiteScrapings {
 			wg.Add(1)
 			agents[i].LastUpdate = utc()
 			go func() {
+				fmt.Printf("[AGENTS] Fetching %s\n", a.Origin)
 				scrape := NAUpdateNewsAgent(a)
 				m.Lock()
 				result = append(result, scrape)
@@ -224,6 +235,7 @@ func NAUpdateAllNewsAgent(before time.Duration) []WebsiteScrapings {
 	}
 	wg.Wait()
 	NAWriteAllNewsAgents(agents)
+	fmt.Printf("[AGENTS] Done Fetching Articles\n")
 	return result
 }
 
@@ -240,16 +252,12 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 	if DidFail(e, "invalid origin url") {
 		return WebsiteScrapings{}
 	}
-	hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
-	if _, e = os.Stat(hashFile); errors.Is(e, os.ErrNotExist) {
-		visited := map[string]bool{}
-		HashSetWriteToFile(visited, fmt.Sprintf("./agents/%d.gob", agent.ID))
-	}
 
-	createPosts := func(allUrls []string, origin string) {
+	createPosts := func(allUrls []string, id int64, origin string) {
 		unlock := agentsMutex.Lock(origin)
 		defer unlock()
-		visited := HashSetFromFile(hashFile)
+		visited := agentHashSets[id]
+		hashFile := fmt.Sprintf("./agents/%d.gob", id)
 		defer HashSetWriteToFile(visited, hashFile)
 		for _, urlString := range allUrls {
 			url, e := nurl.Parse(strings.TrimSpace(urlString))
@@ -271,14 +279,14 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 		}
 	}
 
-	go createPosts(scraping.URLs, agent.Origin)
+	go createPosts(scraping.URLs, agent.ID, agent.Origin)
 	for i := range agent.Subs {
 		sub := agent.Subs[i]
 		fullUrl := agent.Origin + sub
 		subScrape := NAScrapeWebsite(fullUrl)
-		var offset = time.Second * time.Duration(i+1) * 10
+		var offset = time.Second * time.Duration(i+1) * 2
 		anon := func() {
-			createPosts(subScrape.URLs, agent.Origin)
+			createPosts(subScrape.URLs, agent.ID, agent.Origin)
 		}
 		time.AfterFunc(offset, anon)
 	}
@@ -475,6 +483,7 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 }
 
 func NARegisterUpdates() {
+	fmt.Printf("[AGENTS] Fetching Articles\n")
 	time.AfterFunc(0, func() { NAUpdateAllNewsAgent(time.Minute * 30) })
 	time.AfterFunc(time.Hour, func() { NARegisterUpdates() })
 }

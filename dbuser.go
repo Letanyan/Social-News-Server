@@ -42,6 +42,7 @@ type UserProfile struct {
 	Upvotes      int64
 	Downvotes    int64
 	Investment   int64
+	IsAgent      bool
 
 	Score float64
 	Cred  float64
@@ -55,11 +56,11 @@ func SQLFieldsForUser() string {
 }
 
 func SQLFieldsForUserProfile() string {
-	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes, p.investment"
+	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes, p.investment, p.email"
 }
 
 func SQLFieldsForUserProfileAlias() string {
-	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, p.investment"
+	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, p.investment, p.email"
 }
 
 func ScanUser(row *sql.Row) (User, error) {
@@ -73,7 +74,9 @@ func ScanUser(row *sql.Row) (User, error) {
 
 func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	u := UserProfile{}
-	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment)
+	var email string
+	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email)
+	u.IsAgent = len(email) == 0
 	return u, e
 }
 
@@ -84,35 +87,37 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank 
 		u := UserProfile{}
 		var up int64
 		var down int64
+		var email string
 		if hasRank {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Cred, &u.Score, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down, &u.Rank)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Cred, &u.Score, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &u.Rank)
 				}
 			}
 		} else {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Cred, &u.Score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down, &u.Cred, &u.Score)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Cred, &u.Score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &u.Cred, &u.Score)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email)
 				}
 			}
 		}
+		u.IsAgent = len(email) == 0
 
 		if DidFail(e, "get user from email/id") {
 			continue
@@ -234,6 +239,16 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 	deleteUserContTable := `UPDATE UserCont SET trashed=true WHERE uid=$1`
 	_, e = db.Exec(deleteUserContTable, userId)
 	DidFail(e, "delete user content table")
+}
+
+func DBBlockUser(db *sql.DB, userId int64, duration int) {
+	query := fmt.Sprintf(`
+	UPDATE Users 
+	SET Blocked=(now() at time zone 'utc') + INTERVAL '%d day'
+	WHERE id=%d
+	`, duration, userId)
+	_, e := db.Exec(query)
+	DidFail(e, "block user ", userId, " for duration ", duration)
 }
 
 // ignore email if userId > 0

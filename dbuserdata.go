@@ -97,15 +97,15 @@ func SQLFieldsForUserPrefResolved() string {
 }
 
 func SQLFieldsForUserPrefUser() string {
-	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, p.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefComment() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefTag() string {
@@ -143,10 +143,12 @@ func ScanUserPrefUsers(rows *sql.Rows) []UserPrefUser {
 		u := UserProfile{}
 		var up int64
 		var down int64
-		e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &cred, &score)
+		var email string
+		e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref users") {
 			continue
 		}
+		u.IsAgent = len(email) == 0
 		result = append(result, UserPrefUser{u, up, down})
 	}
 	return result
@@ -163,12 +165,14 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 		var up int64
 		var down int64
 		var userId int64
+		var email string
 		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt,
 			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate,
-			&u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+			&u.Upvotes, &u.Downvotes, &email, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
 			continue
 		}
+		u.IsAgent = len(email) == 0
 		p.Author = u
 		result = append(result, UserPrefPost{p, up, down})
 	}
@@ -186,12 +190,14 @@ func ScanUserPrefComments(rows *sql.Rows) []UserPrefComment {
 		var up int64
 		var down int64
 		var userId int64
+		var email string
 		e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt,
 			&c.ReplyCount, &c.Upvotes, &c.Downvotes, &c.Trashed, &u.ID, &u.Name, &u.RegisterDate,
-			&u.Upvotes, &u.Upvotes, &up, &down, &cred, &score)
+			&u.Upvotes, &u.Downvotes, &email, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
 			continue
 		}
+		u.IsAgent = len(email) == 0
 		c.Author = u
 		result = append(result, UserPrefComment{c, up, down})
 	}
