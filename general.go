@@ -97,9 +97,145 @@ func DBPrepareTaggedString(text string, removeOnlyHash bool) (string, []string) 
 	return text, tagNames
 }
 
+func DBParseSearchString(query string) string {
+	tokens := []string{}
+	current := ""
+	type State int8
+	const (
+		kWord State = iota
+		kQuote
+		kSpace
+	)
+	state := kSpace
+
+	for _, c := range query {
+		isAlphaNum := unicode.IsLetter(c) || unicode.IsNumber(c)
+		switch state {
+		case kSpace:
+			if isAlphaNum {
+				current += string(c)
+				state = kWord
+			} else if c == '"' {
+				state = kQuote
+			} else if c == '-' || c == '!' {
+				tokens = append(tokens, "!")
+			} else if c == '(' || c == ')' {
+				tokens = append(tokens, string(c))
+			}
+
+		case kWord:
+			if isAlphaNum || c == '-' {
+				current += string(c)
+			} else {
+				tokens = append(tokens, current)
+				current = ""
+				if c == '"' {
+					state = kQuote
+				} else {
+					state = kSpace
+				}
+				if c == '(' || c == ')' {
+					tokens = append(tokens, string(c))
+				}
+			}
+
+		case kQuote:
+			if isAlphaNum || unicode.IsSpace(c) || c == '-' {
+				current += string(c)
+			} else if c == '"' {
+				tokens = append(tokens, current+"\"")
+				current = ""
+				state = kSpace
+			}
+		}
+	}
+	if len(current) > 0 {
+		tokens = append(tokens, current)
+	}
+
+	result := ""
+	for _, token := range tokens {
+		lastIsJoiner := false
+		if len(result) > 0 {
+			last := result[len(result)-1]
+			lastIsJoiner = last == '(' || last == '&' || last == '|'
+		}
+		if strings.ToLower(token) == "and" || token == "&" {
+			if !lastIsJoiner {
+				result += " &"
+			}
+		} else if strings.ToLower(token) == "or" || token == "|" {
+			if !lastIsJoiner {
+				result += " |"
+			}
+		} else if token == "(" || token == ")" || token == "!" {
+			result += " " + token
+		} else if token[len(token)-1] == '"' {
+			follow := ""
+			last := 'A'
+			for _, c := range token {
+				isAlphaNum := unicode.IsLetter(c) || unicode.IsNumber(c)
+				if unicode.IsSpace(last) && isAlphaNum {
+					follow += " <-> "
+				}
+				if isAlphaNum {
+					follow += string(c)
+				}
+				last = c
+			}
+			if !lastIsJoiner {
+				result += " |"
+			}
+			result += " (" + follow + ")"
+		} else {
+			if !lastIsJoiner {
+				result += " |"
+			}
+			result += " " + token + ":*"
+		}
+	}
+
+	cleanStart := 0
+	openings := 0
+	closings := 0
+	for i, c := range result {
+		isAlphaNum := unicode.IsLetter(c) || unicode.IsNumber(c) || c == '('
+		if isAlphaNum && cleanStart == 0 {
+			cleanStart = i
+		}
+		if c == '(' {
+			openings += 1
+		} else if c == ')' {
+			closings += 1
+		}
+	}
+	cleanEnd := len(result)
+	runes := []rune(result)
+	for i := len(result) - 1; i >= 0; i -= 1 {
+		c := runes[i]
+		isAlphaNum := unicode.IsLetter(c) || unicode.IsNumber(c) || c == '*' || c == ')'
+		if isAlphaNum {
+			cleanEnd = i + 1
+			break
+		}
+	}
+
+	cleaned := result[cleanStart:cleanEnd]
+	for openings < closings {
+		cleaned = "(" + cleaned
+		openings += 1
+	}
+	for closings < openings {
+		cleaned = cleaned + ")"
+		closings += 1
+	}
+
+	return cleaned
+}
+
 func DBPrepareSearchString(query string) (string, []int64) {
 	text, tagNames := DBPrepareTaggedString(query, false)
-	text = replaceUnicode(text, isNotWebSearchQuery)
+	text = DBParseSearchString(text)
 	tagObjects := DBGetTags(mainDB, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
 	tags := []int64{}
 	for _, t := range tagObjects {

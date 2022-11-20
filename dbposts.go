@@ -49,11 +49,11 @@ func SQLFieldsForPost() string {
 }
 
 func SQLFieldsForPostResult() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes, p.downvotes, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func SQLFieldsForPostResultAlias() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.commentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func ScanPost(row *sql.Row) (Post, error) {
@@ -66,8 +66,10 @@ func ScanPostResult(row *sql.Row) (PostResult, error) {
 	p := PostResult{}
 	u := UserProfile{}
 	var userID int64
+	var email string
 	e := row.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-		&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes)
+		&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email)
+	u.IsAgent = len(email) == 0
 	p.Author = u
 	return p, e
 }
@@ -98,27 +100,29 @@ func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 		var userID int64
 		var up int64
 		var down int64
+		var email string
 		if hasRank {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &p.Cred, &p.Score, &p.Rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &up, &down, &p.Cred, &p.Score, &p.Rank)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &p.Cred, &p.Score, &p.Rank)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &p.Cred, &p.Score, &p.Rank)
 			}
 		} else {
 			if hasVotes {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &up, &down, &p.Cred, &p.Score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &up, &down, &p.Cred, &p.Score)
 			} else {
 				e = rows.Scan(&p.ID, &userID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes,
-					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &p.Cred, &p.Score)
+					&p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &email, &p.Cred, &p.Score)
 			}
 		}
 
 		if DidFail(e, "scan post") {
 			continue
 		}
+		u.IsAgent = len(email) == 0
 		p.Author = u
 		result = append(result, p)
 	}
@@ -252,25 +256,25 @@ func SortOrderFromString(text string) (SortOrder, error) {
 func SQLSortOrder(so SortOrder) string {
 	switch so {
 	case soScore:
-		return "ORDER BY score DESC\n"
+		return "ORDER BY score DESC, p.id DESC\n"
 	case soCred:
-		return "ORDER BY cred DESC\n"
+		return "ORDER BY cred DESC, p.id DESC\n"
 	case soUpvotes:
-		return "ORDER BY item_up DESC\n"
+		return "ORDER BY item_up DESC, p.id DESC\n"
 	case soDownvotes:
-		return "ORDER BY item_down DESC\n"
+		return "ORDER BY item_down DESC, p.id DESC\n"
 	case soControversial:
-		return "ORDER BY COALESCE(1 / NULLIF(ABS(cred - 0.5), 0), 9e90) DESC\n"
+		return "ORDER BY COALESCE(1 / NULLIF(ABS(RATIO(p.upvotes, p.downvotes) - 0.5), 0), 9e90) DESC, p.id DESC\n"
 	case soCreatedAt:
-		return "ORDER BY createdAt DESC\n"
+		return "ORDER BY createdAt DESC, p.id DESC\n"
 	case soUpdatedAt:
-		return "ORDER BY updatedAt DESC\n"
+		return "ORDER BY updatedAt DESC, p.id DESC\n"
 	case soUpdatedOn:
-		return "ORDER BY updatedOn DESC\n"
+		return "ORDER BY updatedOn DESC, p.id DESC\n"
 	case soAddedOn:
-		return "ORDER BY addedOn DESC\n"
+		return "ORDER BY addedOn DESC, p.id DESC\n"
 	case soRank:
-		return "ORDER BY rank\n"
+		return "ORDER BY rank, p.id DESC\n"
 	}
 	return ""
 }
@@ -306,7 +310,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	} else if len(end) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt < (TIMESTAMP '%s')", end))
 	}
-	if userId != 0 {
+	if userId > 0 {
 		cond = append(cond, fmt.Sprintf("p.userId = %d", userId))
 	}
 	if len(tags) > 0 {

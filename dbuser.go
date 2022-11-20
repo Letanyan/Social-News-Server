@@ -42,6 +42,7 @@ type UserProfile struct {
 	Upvotes      int64
 	Downvotes    int64
 	Investment   int64
+	IsAgent      bool
 
 	Score float64
 	Cred  float64
@@ -55,11 +56,11 @@ func SQLFieldsForUser() string {
 }
 
 func SQLFieldsForUserProfile() string {
-	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes, p.investment"
+	return "p.id, p.name, p.registerDate, p.upvotes, p.downvotes, p.investment, p.email"
 }
 
 func SQLFieldsForUserProfileAlias() string {
-	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, p.investment"
+	return "p.id, p.name, p.registerDate, p.upvotes AS item_up, p.downvotes AS item_down, p.investment, p.email"
 }
 
 func ScanUser(row *sql.Row) (User, error) {
@@ -73,7 +74,9 @@ func ScanUser(row *sql.Row) (User, error) {
 
 func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	u := UserProfile{}
-	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment)
+	var email string
+	e := row.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email)
+	u.IsAgent = len(email) == 0
 	return u, e
 }
 
@@ -84,35 +87,37 @@ func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank 
 		u := UserProfile{}
 		var up int64
 		var down int64
+		var email string
 		if hasRank {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Cred, &u.Score, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down, &u.Rank)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Cred, &u.Score, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &u.Cred, &u.Score, &u.Rank)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Rank)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &u.Rank)
 				}
 			}
 		} else {
 			if hasVotes {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down, &u.Cred, &u.Score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down, &u.Cred, &u.Score)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &up, &down)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &up, &down)
 				}
 			} else {
 				if includeScore {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &u.Cred, &u.Score)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email, &u.Cred, &u.Score)
 				} else {
-					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment)
+					e = rows.Scan(&u.ID, &u.Name, &u.RegisterDate, &u.Upvotes, &u.Downvotes, &u.Investment, &email)
 				}
 			}
 		}
+		u.IsAgent = len(email) == 0
 
 		if DidFail(e, "get user from email/id") {
 			continue
@@ -216,11 +221,13 @@ func SendValidationKey(userId int64, email string, key int32) {
 
 func DBSignIn(db *sql.DB, email string, password string) User {
 	user := DBGetUser(db, 0, email)
-	if DBEqualHashAndPassword(user.Password, password) {
+	if user.ID == 0 {
+		return User{ID: -2}
+	} else if DBEqualHashAndPassword(user.Password, password) {
 		user.Password = ""
 		return user
 	} else {
-		return User{}
+		return User{ID: -3}
 	}
 }
 
@@ -234,12 +241,22 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 	DidFail(e, "delete user content table")
 }
 
+func DBBlockUser(db *sql.DB, userId int64, duration int) {
+	query := fmt.Sprintf(`
+	UPDATE Users 
+	SET Blocked=(now() at time zone 'utc') + INTERVAL '%d day'
+	WHERE id=%d
+	`, duration, userId)
+	_, e := db.Exec(query)
+	DidFail(e, "block user ", userId, " for duration ", duration)
+}
+
 // ignore email if userId > 0
 // FIXME: ensure only one and only one of userId or email
 func DBGetUser(db *sql.DB, userId int64, email string) User {
 	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
-	if userId > 0 {
+	if userId > 0 || userId == -1 {
 		arg = fmt.Sprint(userId)
 		getUser += "id = $1"
 	} else if len(email) > 0 {
@@ -399,3 +416,20 @@ func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi 
 		return
 	}
 }
+
+/*
+
+var obj {
+	arg	name type: Identifier
+	arg body type: Expression
+
+	ctx(0).insert
+}
+
+obj Person {
+	var location type: Vector(2) (0, 0)
+	var name type: String
+	var age type: Int
+}
+
+*/

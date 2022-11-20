@@ -29,6 +29,7 @@ func DBUsersSetup(db *sql.DB) {
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
+		blocked TIMESTAMP DEFAULT '1970-01-01'::timestamp,
 
 		publicViews BOOLEAN DEFAULT true,
 		publicReadLater BOOLEAN DEFAULT true,
@@ -273,6 +274,10 @@ func DBMigrations(db *sql.DB) {
 	ALTER TABLE Users
 	ADD COLUMN IF NOT EXISTS Investment BIGINT
 	DEFAULT 0;
+
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS Blocked TIMESTAMP
+	DEFAULT '1970-01-01'::timestamp;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
@@ -333,6 +338,34 @@ func DBFunctionSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createInverse)
 	DidFail(e, "create inverse function")
+
+	createScoreValue := `
+	CREATE OR REPLACE FUNCTION scoreValueAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
+	DECLARE nagg DOUBLE PRECISION[]; 
+	BEGIN
+		nagg[1] = cagg[1] + tagValue;
+		nagg[2] = cagg[2] + userValue;
+		nagg[3] = cagg[3] + 1;
+		RETURN nagg; 
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg DOUBLE PRECISION[])
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN cagg[1] + (cagg[2] / cagg[3]); 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE scoreValue (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION) (
+		sfunc = scoreValueAgg,
+		stype = DOUBLE PRECISION[],
+		finalfunc = scoreValueFinal,
+		initcond = '{0, 0, 0}'
+	); 
+	`
+	_, e = db.Exec(createScoreValue)
+	DidFail(e, "create scoreValue aggregate function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

@@ -27,8 +27,9 @@ var (
 )
 
 var (
-	mainDB *sql.DB
-	agents []NewsAgent
+	mainDB        *sql.DB
+	agents        []NewsAgent
+	agentHashSets map[int64]map[string]bool
 	// updatingAgents sync.Mutex
 	agentsMutex KeyedMutex
 )
@@ -149,8 +150,6 @@ func main() {
 	// DBClearAllTables(db)
 
 	DBSetup(mainDB)
-
-	// SendValidationKey(10, "letanyan@icloud.com", 6347)
 
 	agents = NAReadAllNewsAgents()
 	agentsMutex = KeyedMutex{}

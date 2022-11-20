@@ -47,11 +47,11 @@ func SQLFieldsForComment() string {
 }
 
 func SQLFieldsForCommentResult() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, p.trashed, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, p.trashed, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func SQLFieldsForCommentResultAlias() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes AS item_up, p.downvotes AS item_down, p.replyCount, p.trashed, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes AS item_up, p.downvotes AS item_down, p.replyCount, p.trashed, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func ScanComment(row *sql.Row) (Comment, error) {
@@ -63,7 +63,9 @@ func ScanComment(row *sql.Row) (Comment, error) {
 func ScanCommentResult(row *sql.Row) (CommentResult, error) {
 	c := CommentResult{}
 	var userId int64
-	e := row.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview, &c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes)
+	var email string
+	e := row.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview, &c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email)
+	c.Author.IsAgent = len(email) == 0
 	return c, e
 }
 
@@ -88,23 +90,25 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentRe
 		var up int64
 		var down int64
 		var e error
+		var email string
 		if hasRank {
 			if hasVotes {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &c.Cred, &c.Score, &c.Rank)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &up, &down, &c.Cred, &c.Score, &c.Rank)
 			} else {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &c.Cred, &c.Score, &c.Rank)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &c.Cred, &c.Score, &c.Rank)
 			}
 		} else {
 			if hasVotes {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &up, &down, &c.Cred, &c.Score)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &up, &down, &c.Cred, &c.Score)
 			} else {
 				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
-					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &c.Cred, &c.Score)
+					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &c.Cred, &c.Score)
 			}
 		}
+		c.Author.IsAgent = len(email) == 0
 
 		if DidFail(e, "scan comment") {
 			continue
@@ -129,7 +133,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	}
 
 	updateReplyCount := ""
-	if replyId != 0 {
+	if replyId > 0 {
 		updateReplyCount = fmt.Sprintf(`
 		UPDATE Comments 
 		SET replyCount = replyCount + 1 
@@ -171,7 +175,7 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 		return
 	}
 
-	if replyId != 0 {
+	if replyId > 0 {
 		updateReplyCount := fmt.Sprintf(`
 		UPDATE Comments
 		SET replyCount = replyCount - 1
@@ -247,10 +251,10 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 
 	joins := "JOIN users u ON p.userId = u.id\n"
 	cond := []string{"p.trashed=false"}
-	if postId != 0 {
+	if postId > 0 {
 		cond = append(cond, fmt.Sprintf("postId = %d\n", postId))
 	}
-	if userId != 0 {
+	if userId > 0 {
 		cond = append(cond, fmt.Sprintf("p.userId = %d\n", userId))
 	}
 	if replyId >= 0 {

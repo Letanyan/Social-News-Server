@@ -25,7 +25,7 @@ func APICreateAgent(c *gin.Context) {
 
 	user := DBCreateUser(mainDB, input.Name, "", "")
 	DBValidateUser(mainDB, user.ID, user.ValidationKey)
-	if user.ID != 0 {
+	if user.ID > 0 {
 		agent, e := NACreateNewsAgent(user.ID, input.Name, input.Origin)
 		if e == nil {
 			APIReturn(c, true, agent)

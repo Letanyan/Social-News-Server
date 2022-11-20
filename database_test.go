@@ -135,15 +135,15 @@ func TestDatabase(t *testing.T) {
 		{"Whats your go-to radio station to listen or stream", 5, []string{"Music", "Stream", "radio"}, []string{"Africa", "South Africa", "Free State", "Drakensberg"}},
 	}
 
-	matchPost := func(a Post, b PostResult) {
+	matchPost := func(a PostResult, b PostResult) {
 		if a.ID != b.ID {
 			t.Errorf("Mismatch id %d != %d", a.ID, b.ID)
 		}
 		if a.Content != b.Content {
 			t.Errorf("Mismatch content %s != %s", a.Content, b.Content)
 		}
-		if a.UserID != b.Author.ID {
-			t.Errorf("Mismatch userId %d != %d", a.UserID, b.Author.ID)
+		if a.Author.ID != b.Author.ID {
+			t.Errorf("Mismatch userId %d != %d", a.Author.ID, b.Author.ID)
 		}
 		// if a.tags != b.tags {
 		// 	t.Errorf("Mismatch content %v != %v", a.content, b.content)
