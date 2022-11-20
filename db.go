@@ -338,6 +338,34 @@ func DBFunctionSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createInverse)
 	DidFail(e, "create inverse function")
+
+	createScoreValue := `
+	CREATE OR REPLACE FUNCTION scoreValueAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
+	DECLARE nagg DOUBLE PRECISION[]; 
+	BEGIN
+		nagg[1] = cagg[1] + tagValue;
+		nagg[2] = cagg[2] + userValue;
+		nagg[3] = cagg[3] + 1;
+		RETURN nagg; 
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg DOUBLE PRECISION[])
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN cagg[1] + (cagg[2] / cagg[3]); 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE scoreValue (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION) (
+		sfunc = scoreValueAgg,
+		stype = DOUBLE PRECISION[],
+		finalfunc = scoreValueFinal,
+		initcond = '{0, 0, 0}'
+	); 
+	`
+	_, e = db.Exec(createScoreValue)
+	DidFail(e, "create scoreValue aggregate function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

@@ -26,39 +26,49 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 			SELECT *
 			FROM UserCont
 			WHERE uid=%d
-		), 
+		),
+
+		TagTotal AS (
+			SELECT SUM(upvotes) up, SUM(downvotes) down
+			FROM UserPrefs
+			WHERE kind=3 OR kind=4 -- liked tags or watched tags
+		), TagScores AS (
+			WITH TEx AS (
+				SELECT pid id, (upvotes - downvotes) / (t.up + t.down) * (1.1 - dateFrac(updatedOn, now() at time zone 'utc', 60*60*24*30)) AS value
+				FROM UserPrefs, TagTotal t
+				WHERE kind=3 OR kind=4 -- liked tags or watched tags
+			), TImp AS (
+				SELECT t.id id, 0.1 AS value
+				FROM UserConts uc
+				JOIN Tags t ON t.id=uc.pid
+				WHERE uc.kind=6 -- favourite tag
+			)
+			SELECT a.id id, (COALESCE(a.value, 0) + COALESCE(b.value, 0)) AS value
+			FROM TEx a
+			FULL JOIN TImp b ON a.id=b.id
+		),
 		
-		TotalPartial AS (
-			(
-				SELECT SUM(upvotes) up, SUM(downvotes) down
-				FROM UserPrefs
-				WHERE kind=3 OR kind=4 -- liked tags or watched tags
-			)
-			UNION
-			(
-				SELECT SUM(t.upvotes) up, SUM(t.downvotes) down
+		
+		UserTotal AS (
+			SELECT SUM(upvotes) up, SUM(downvotes) down
+			FROM UserPrefs
+			WHERE kind=0 -- liked users
+		), UserScores AS (
+			WITH USEx AS (
+				SELECT pid id, (upvotes - downvotes) / (t.up + t.down) * (1.1 - dateFrac(updatedOn, now() at time zone 'utc', 60*60*24*30)) AS value
+				FROM UserPrefs, UserTotal t
+				WHERE kind=0 -- liked users
+			), USImp AS (
+				SELECT uc.pid id, 0.05 AS value
 				FROM UserConts uc
-				JOIN Tags t ON t.id=uc.pid
-				WHERE uc.kind=6 -- favourite tag
-			)
-		), Total AS (
-			SELECT SUM(up) up, SUM(down) down
-			FROM TotalPartial
-		), Scores AS (
-			(
-				SELECT pid id, (upvotes - downvotes) / (total.up + total.down) * (1.1 - dateFrac(updatedOn, now() at time zone 'utc', 60*60*24*30)) AS value
-				FROM UserPrefs, Total
-				WHERE kind=3 OR kind=4 -- liked tags or watched tags
-			)
-			UNION
-			(
-				SELECT t.id id, (t.upvotes - t.downvotes) / (total.up + total.down) * 0.5 AS value
-				FROM UserConts uc
-				JOIN Tags t ON t.id=uc.pid
-				LEFT JOIN Total ON True
-				WHERE uc.kind=6 -- favourite tag
-			)
-		), Ignored AS (
+				WHERE uc.kind=3 -- following user
+			) 
+			SELECT a.id id, (COALESCE(a.value, 0) + COALESCE(b.value, 0)) AS value
+			FROM USEx a
+			FULL JOIN USImp b ON a.id=b.id
+		),
+		
+		Ignored AS (
 			SELECT pid
 			FROM UserConts
 			WHERE kind=4
@@ -77,10 +87,11 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		)
 		`, forUser, forUser)
 
-		joins += "JOIN Scores s ON s.id = ANY(p.tags)"
+		joins += "JOIN TagScores ts ON ts.id = ANY(p.tags)\n"
+		joins += "JOIN UserScores us ON us.id = p.userId\n"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
-		scoreField = "SUM(s.value * (1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*12)))"
+		scoreField = "scoreValue(ts.value, us.value) * (1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*12))"
 	}
 
 	result := fmt.Sprintf(`%s
