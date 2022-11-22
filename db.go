@@ -278,6 +278,28 @@ func DBMigrations(db *sql.DB) {
 	ALTER TABLE Users
 	ADD COLUMN IF NOT EXISTS Blocked TIMESTAMP
 	DEFAULT '1970-01-01'::timestamp;
+
+	ALTER TABLE Posts 
+	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
+    GENERATED ALWAYS AS (to_tsvector('english',Content)) STORED;
+	CREATE INDEX IF NOT EXISTS posts_idx_content_vector
+	ON Posts 
+	USING gin(ContentVector);
+
+	ALTER TABLE Comments 
+	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
+    GENERATED ALWAYS AS (to_tsvector('english',Content)) STORED;
+	CREATE INDEX IF NOT EXISTS comments_idx_content_vector
+	ON Comments 
+	USING gin(ContentVector);
+
+	ALTER Table Posts
+	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
+	DEFAULT false;
+
+	ALTER Table Comments
+	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
+	DEFAULT false;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")

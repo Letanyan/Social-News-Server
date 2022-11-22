@@ -81,8 +81,8 @@ func (bloom *BloomFilter) Write(fileName string) {
 	}
 }
 
-func HashSetFromFile(fileName string) map[string]bool {
-	result := map[string]bool{}
+func HashSetFromFile[V any](fileName string) map[string]V {
+	result := map[string]V{}
 	file, e := os.Open(fileName)
 	if DidFail(e, "open file ", fileName) {
 		return result
@@ -97,7 +97,7 @@ func HashSetFromFile(fileName string) map[string]bool {
 	return result
 }
 
-func HashSetWriteToFile(hashSet map[string]bool, fileName string) {
+func HashSetWriteToFile[V any](hashSet map[string]V, fileName string) {
 	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
 	if DidFail(e, "open file ", fileName) {
 		return

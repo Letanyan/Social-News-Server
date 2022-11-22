@@ -161,12 +161,12 @@ func NAReadAllNewsAgents() []NewsAgent {
 		return []NewsAgent{}
 	}
 
-	agentHashSets = map[int64]map[string]bool{}
+	agentHashSets = map[int64]map[string]int64{}
 	createdNew := false
 	for i := range result {
 		agent := result[i]
 		oldUser := DBGetUser(mainDB, agent.ID, "")
-		visited := map[string]bool{}
+		visited := map[string]int64{}
 		if oldUser.ID == 0 || oldUser.Email != "" {
 			createdNew = true
 			user := DBCreateUser(mainDB, agent.Name, "", "")
@@ -179,7 +179,7 @@ func NAReadAllNewsAgents() []NewsAgent {
 			if _, e = os.Stat(hashFile); errors.Is(e, os.ErrNotExist) {
 				HashSetWriteToFile(visited, hashFile)
 			} else {
-				visited = HashSetFromFile(hashFile)
+				visited = HashSetFromFile[int64](hashFile)
 			}
 		}
 		agentHashSets[result[i].ID] = visited
@@ -189,6 +189,50 @@ func NAReadAllNewsAgents() []NewsAgent {
 	}
 
 	return result
+}
+
+func ConvertAllAgentsFromBoolToUnix() {
+	content, e := ioutil.ReadFile("./agents/agents.json")
+	if DidFail(e, "read agents.json file") {
+		return
+	}
+
+	var result []NewsAgent
+	e = json.Unmarshal(content, &result)
+	if DidFail(e, "unmarshal news agents") {
+		return
+	}
+
+	for i := range result {
+		agent := result[i]
+		hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
+		visited := HashSetFromFile[bool](hashFile)
+		converted := map[string]int64{}
+		for k := range visited {
+			converted[k] = time.Now().UTC().Unix()
+		}
+		HashSetWriteToFile(converted, hashFile)
+	}
+}
+
+func NATrimOldUrlsFromNewAgentHashSets() {
+	fmt.Printf("[AGENTS] Start Cleaning Article URLs\n")
+	for agent := range agentHashSets {
+		didRemove := false
+		for path, date := range agentHashSets[agent] {
+			time := time.Unix(date, 0)
+			if time.Before(time.UTC().AddDate(0, -6, 0)) {
+				delete(agentHashSets[agent], path)
+				didRemove = true
+			}
+		}
+		if didRemove {
+			fmt.Printf("[AGENTS] Writing Cleaned Agent Hash Set %d\n", agent)
+			hashFile := fmt.Sprintf("./agents/%d.gob", agent)
+			HashSetWriteToFile(agentHashSets[agent], hashFile)
+		}
+	}
+	fmt.Printf("[AGENTS] Finish Cleaning Article URLs\n")
 }
 
 func NAWriteAllNewsAgents(agents []NewsAgent) {
@@ -222,12 +266,12 @@ func NAUpdateAllNewsAgent(before time.Duration) []WebsiteScrapings {
 		a := agents[i]
 		if a.LastUpdate.Before(utc().Add(before)) {
 			wg.Add(1)
-			agents[i].LastUpdate = utc()
 			go func() {
 				fmt.Printf("[AGENTS] Fetching %s\n", a.Origin)
 				scrape := NAUpdateNewsAgent(a)
 				m.Lock()
 				result = append(result, scrape)
+				agents[i].LastUpdate = utc()
 				defer m.Unlock()
 				wg.Done()
 			}()
@@ -269,8 +313,8 @@ func NAUpdateNewsAgent(agent NewsAgent) WebsiteScrapings {
 			}
 			canURLString := CanonicalURL(url.String())
 			canURLString = strings.TrimPrefix(canURLString, baseURL.Hostname())
-			if !visited[canURLString] {
-				visited[canURLString] = true
+			if _, hasKey := visited[canURLString]; !hasKey {
+				visited[canURLString] = time.Now().UTC().Unix()
 				subScraping := NAScrapeWebsite(urlString)
 				if subScraping.Type == "article" {
 					NACreatePost(agent.ID, urlString, subScraping)
@@ -365,6 +409,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	var metaTitleNode *html.Node
 	links := []string{}
 	tags := []string{}
+	englishWordTagCount := 0
 	image := ""
 	description := ""
 	authors := []string{}
@@ -373,6 +418,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	pubTime := ""
 	locale := ""
 	language := ""
+	bodyText := ""
 
 	getHTMLNodes(node, false, func(n *html.Node) bool {
 		if n.Type == html.ElementNode {
@@ -383,7 +429,9 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				if names["og:title"] || properties["og:title"] {
 					metaTitleNode = n
 				} else if names["article:tag"] || properties["article:tag"] {
-					tags = append(tags, tagFormat(getFirstValForAttr(n, "content"))...)
+					tagList := tagFormat(getFirstValForAttr(n, "content"))
+					tags = append(tags, tagList...)
+					englishWordTagCount += countEnglishTagWords(tagList)
 				} else if names["og:image"] || properties["og:image"] {
 					image = getFirstValForAttr(n, "content")
 				} else if names["og:description"] || properties["og:description"] {
@@ -391,7 +439,8 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				} else if names["article:author"] || properties["article:author"] {
 					authors = append(authors, getFirstValForAttr(n, "content"))
 				} else if names["article:section"] || properties["article:section"] {
-					tags = append(tags, tagFormat(getFirstValForAttr(n, "content"))...)
+					tagList := tagFormat(getFirstValForAttr(n, "content"))
+					tags = append(tags, tagList...)
 				} else if names["og:type"] || properties["og:type"] {
 					contentType = getFirstValForAttr(n, "content")
 				} else if names["article:modified_time"] || properties["article:modified_time"] {
@@ -403,10 +452,15 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				} else if names["og:language"] || properties["og:language"] {
 					language = getFirstValForAttr(n, "content")
 				} else if names["og:section"] || properties["og:section"] {
-					tags = append(tags, tagFormat(getFirstValForAttr(n, "content"))...)
+					tagList := tagFormat(getFirstValForAttr(n, "content"))
+					tags = append(tags, tagList...)
 				}
 			case "a":
 				links = append(links, getFirstValForAttr(n, "href"))
+			case "body":
+				if englishWordTagCount < 3 {
+					bodyText = plainTextFromNode(n)
+				}
 			}
 		}
 		return false
@@ -425,6 +479,11 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 		date = parseUnknownTime(modTime)
 	} else if len(pubTime) > 0 {
 		date = parseUnknownTime(pubTime)
+	}
+
+	if len(bodyText) > 0 {
+		foundTags := findKeywords(title+" "+description, bodyText)
+		tags = append(tags, foundTags...)
 	}
 
 	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, locale, language, date}
@@ -478,12 +537,18 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 			tags = append(tags, t)
 		}
 	}
+	tags = makeUnique(tags)
 
 	DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
 }
 
-func NARegisterUpdates() {
+func NARegisterHourlyUpdates() {
 	fmt.Printf("[AGENTS] Fetching Articles\n")
 	time.AfterFunc(0, func() { NAUpdateAllNewsAgent(time.Minute * 30) })
-	time.AfterFunc(time.Hour, func() { NARegisterUpdates() })
+	time.AfterFunc(time.Hour, func() { NARegisterHourlyUpdates() })
+}
+
+func NARegisterWeeklyCleanUp() {
+	time.AfterFunc(0, func() { NATrimOldUrlsFromNewAgentHashSets() })
+	time.AfterFunc(time.Hour*24*7, func() { NARegisterWeeklyCleanUp() })
 }

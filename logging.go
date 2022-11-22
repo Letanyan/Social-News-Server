@@ -41,7 +41,9 @@ func DidFail(e error, message ...interface{}) bool {
 		if info == nil {
 			return false
 		}
-		info.Println(s)
+		if isDebug {
+			info.Println(s)
+		}
 		return false
 	}
 }

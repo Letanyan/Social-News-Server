@@ -290,3 +290,15 @@ func (m *KeyedMutex) Lock(key string) func() {
 
 	return func() { mtx.Unlock() }
 }
+
+func makeUnique(words []string) []string {
+	occurred := map[string]bool{}
+	result := []string{}
+	for e := range words {
+		if !occurred[words[e]] {
+			occurred[words[e]] = true
+			result = append(result, words[e])
+		}
+	}
+	return result
+}
