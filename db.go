@@ -11,6 +11,7 @@ func DBSetup(db *sql.DB) {
 	DBPostsSetup(db)
 	DBCommentsSetup(db)
 	DBVotesSetup(db)
+	DBLocationSetup(db)
 	DBTagsSetup(db)
 	DBFlagsSetup(db)
 	DBFunctionSetup(db)
@@ -222,6 +223,17 @@ func DBCreateVotesPartitionTable(db *sql.DB, year int) {
 	createVotesKindTable(int(upTag))
 }
 
+func DBLocationSetup(db *sql.DB) {
+	createLocation := `CREATE TABLE IF NOT EXISTS Location (
+		id SERIAL,
+		name TEXT,
+
+		PRIMARY KEY (id, name)
+	);`
+	_, e := db.Exec(createLocation)
+	DidFail(e, "create location table")
+}
+
 func DBTagsSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
@@ -300,6 +312,21 @@ func DBMigrations(db *sql.DB) {
 	ALTER Table Comments
 	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
 	DEFAULT false;
+
+	CREATE SEQUENCE IF NOT EXISTS location_id_seq;
+	ALTER TABLE Location ALTER COLUMN id SET NOT NULL;
+	ALTER TABLE Location ALTER COLUMN id SET DEFAULT nextval('location_id_seq');
+	ALTER SEQUENCE location_id_seq OWNED BY Location.id;
+
+	ALTER TABLE Votes
+	ALTER COLUMN Location 
+	TYPE INTEGER[] USING Location::int[];
+
+	ALTER TABLE Posts
+	ALTER COLUMN Location
+	TYPE INTEGER[] USING Location::int[];
+
+	CREATE UNIQUE INDEX IF NOT EXISTS location_name_idx ON Location(name);
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")

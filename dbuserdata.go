@@ -84,7 +84,9 @@ func DBCreateUserPref(db *sql.DB, uid int64, kind UserPrefKind, pid int64, sid i
 
 func DBWatchUser(db *sql.DB, uid int64, postId int64, viewTime int64, location []string) []UserPref {
 	post := DBGetPost(db, postId)
-	_, result := DBVoteTags(db, uid, post.Tags, viewTime, location, false)
+	locIndex := DBCreateLocation(db, location)
+	locArray := SQLFormattedIndexArray(locIndex)
+	_, result := DBVoteTags(db, uid, post.Tags, viewTime, locArray, false)
 	return result
 }
 

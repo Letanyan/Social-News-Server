@@ -208,7 +208,8 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 		updateField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	voteQuery := SQLMakeVote(upComment, postId, commentId, location, upvoteAmount, isUpvote)
+	locIndex := DBCreateLocation(db, location)
+	voteQuery := SQLMakeVote(upComment, postId, commentId, locIndex, upvoteAmount, isUpvote)
 	updateVoteForPost := fmt.Sprintf(`
 		%s
 		UPDATE Comments SET 
@@ -281,8 +282,12 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 		cond = append(cond, "kind=2")
 	}
 
+	locArray := ""
+	if len(popularIn) > 0 {
+		locArray = DBGetLocationIndex(db, popularIn)
+	}
 	getComments := SQLGetItems("Comments p", voteTable, SQLFieldsForCommentResultAlias(),
-		SQLFieldsForCommentResult(), joins, popularIn, cond, usingVotesTable,
+		SQLFieldsForCommentResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, start, end, forUser, search)
 

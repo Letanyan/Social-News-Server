@@ -188,7 +188,9 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		upvoteAmount = -upvoteAmount
 	}
 
-	voteQuery := SQLMakeVote(upPost, postId, -1, location, upvoteAmount, isUpvote)
+	locIndex := DBCreateLocation(db, location)
+	locArray := SQLFormattedIndexArray(locIndex)
+	voteQuery := SQLMakeVote(upPost, postId, -1, locIndex, upvoteAmount, isUpvote)
 	updateVoteForPost := fmt.Sprintf(`
 	%s
 	UPDATE posts SET
@@ -205,7 +207,7 @@ func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, loca
 		return Post{}, UserProfile{}, []Tag{}, []UserPref{}
 	}
 
-	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), location, true)
+	tagResult, tagPrefs := DBVoteTags(db, userId, post.Tags, upvoteAmount*sign(isUpvote), locArray, true)
 	user, userPref := DBVoteForUser(db, userId, post.UserID, upvoteAmount*sign(isUpvote), location)
 	userPrefForPost := DBCreateUserPref(db, userId, upPost, postId, -1, upvoteAmount*sign(isUpvote))
 
@@ -342,7 +344,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 		cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 	}
 	if len(origin) > 0 {
-		queryLoc := SQLFormattedArray(origin)
+		queryLoc := DBGetLocationIndex(db, origin)
 		cond = append(cond, fmt.Sprintf("p.location @> %s", queryLoc))
 	}
 	if usingVotesTable {
@@ -350,8 +352,12 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 		cond = append(cond, "v.kind=2")
 	}
 
+	locArray := ""
+	if len(popularIn) > 0 {
+		locArray = DBGetLocationIndex(db, popularIn)
+	}
 	getPosts := SQLGetItems("Posts p", voteTable, SQLFieldsForPostResultAlias(),
-		SQLFieldsForPostResult(), joins, popularIn, cond, usingVotesTable,
+		SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, startDate, endDate, forUser, search)
 

@@ -6,7 +6,7 @@ import (
 )
 
 func SQLGetItems(table string, voteTable string, aliasFields string, returnedFields string, joins string,
-	popularIn []string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
+	popularIn string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) string {
 
@@ -119,9 +119,9 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	} else if downvotes < 0 {
 		cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
 	}
-	if len(popularIn) > 0 {
-		locArray := SQLFormattedArray(popularIn)
-		cond = append(cond, fmt.Sprintf("v.location @> %s", locArray))
+	// we use 2 because the empty array '{}' is 2 characters
+	if len(popularIn) > 2 {
+		cond = append(cond, fmt.Sprintf("v.location @> %s", popularIn))
 	}
 	if len(startDate) > 0 && len(endDate) > 0 {
 		cond = append(cond, fmt.Sprintf("v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')\n", startDate, endDate))
