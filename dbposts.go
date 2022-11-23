@@ -268,16 +268,24 @@ func SortOrderFromString(text string) (SortOrder, error) {
 	return soUpvotes, errors.New("no known order for " + text)
 }
 
-func SQLSortOrder(so SortOrder) string {
+func SQLSortOrder(so SortOrder, usingVotes bool) string {
 	switch so {
 	case soScore:
 		return "ORDER BY score DESC, p.id DESC\n"
 	case soCred:
 		return "ORDER BY cred DESC, p.upvotes DESC, p.downvotes, p.id DESC\n"
 	case soUpvotes:
-		return "ORDER BY item_up DESC, p.id DESC\n"
+		if usingVotes {
+			return "ORDER BY sec_up DESC, p.id DESC\n"
+		} else {
+			return "ORDER BY item_up DESC, p.id DESC\n"
+		}
 	case soDownvotes:
-		return "ORDER BY item_down DESC, p.id DESC\n"
+		if usingVotes {
+			return "ORDER BY sec_down DESC, p.id DESC\n"
+		} else {
+			return "ORDER BY item_down DESC, p.id DESC\n"
+		}
 	case soControversial:
 		return "ORDER BY COALESCE(1 / NULLIF(ABS(RATIO(p.upvotes, p.downvotes) - 0.5), 0), 9e90) DESC, p.id DESC\n"
 	case soCreatedAt:
@@ -312,7 +320,8 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
 	start string, end string, startDate string, endDate string, forUser int64, search string) []PostResult {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 
@@ -336,7 +345,6 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 		queryLoc := SQLFormattedArray(origin)
 		cond = append(cond, fmt.Sprintf("p.location @> %s", queryLoc))
 	}
-	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	if usingVotesTable {
 		joins += "JOIN Votes v ON v.pid = p.id\n"
 		cond = append(cond, "v.kind=2")
@@ -442,7 +450,7 @@ func DBGetSimilarPosts(db *sql.DB, userId int64, postId int64, sortOrder SortOrd
 	GROUP BY %s
 	`, userId, sourceTable, userPrefsTable, singlePost, SQLFieldsForPostResultAlias(), SQLFieldsForPostResult())
 
-	getPosts += SQLSortOrder(sortOrder)
+	getPosts += SQLSortOrder(sortOrder, false)
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getPosts)

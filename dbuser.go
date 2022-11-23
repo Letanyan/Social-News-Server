@@ -276,13 +276,12 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) []UserProfile {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 	joins := ""
 	cond := []string{}
-
-	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 
 	if usingVotesTable {
 		joins = "JOIN Votes v ON v.pid = p.id\n"

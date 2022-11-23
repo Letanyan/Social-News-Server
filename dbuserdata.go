@@ -266,7 +266,7 @@ func DBGetUserPref(db *sql.DB, isOwner bool, userId int64, sortOrder SortOrder, 
 	}
 
 	query += cond + "\n"
-	query += SQLSortOrder(sortOrder)
+	query += SQLSortOrder(sortOrder, false)
 
 	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 	rows, e := db.Query(query)
@@ -328,7 +328,7 @@ func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		}
 	}
 
-	getUsers += SQLSortOrder(sortOrder)
+	getUsers += SQLSortOrder(sortOrder, false)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getUsers)
@@ -403,7 +403,7 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getPosts += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 
-	getPosts += SQLSortOrder(sortOrder)
+	getPosts += SQLSortOrder(sortOrder, false)
 
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -472,7 +472,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 		}
 	}
 
-	getComments += SQLSortOrder(sortOrder)
+	getComments += SQLSortOrder(sortOrder, false)
 
 	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -542,7 +542,7 @@ func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int6
 		}
 	}
 
-	getTags += SQLSortOrder(sortOrder)
+	getTags += SQLSortOrder(sortOrder, false)
 	getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getTags)
@@ -725,7 +725,7 @@ func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64
 		query += fmt.Sprintf("AND %s < (TIMESTAMP '%s') ", dateField, endDate)
 	}
 
-	query += SQLSortOrder(sortOrder)
+	query += SQLSortOrder(sortOrder, false)
 
 	query += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -784,7 +784,7 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 		getComments += "AND p.isReview=false "
 	}
 
-	getComments += SQLSortOrder(sortOrder)
+	getComments += SQLSortOrder(sortOrder, false)
 
 	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 

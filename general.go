@@ -302,3 +302,13 @@ func makeUnique(words []string) []string {
 	}
 	return result
 }
+
+func reverse[T any](slice []T) {
+	inputLen := len(slice)
+	inputMid := inputLen / 2
+
+	for i := 0; i < inputMid; i++ {
+		j := inputLen - i - 1
+		slice[i], slice[j] = slice[j], slice[i]
+	}
+}

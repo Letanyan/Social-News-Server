@@ -538,6 +538,7 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 		}
 	}
 	tags = makeUnique(tags)
+	reverse(tags)
 
 	DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
 }

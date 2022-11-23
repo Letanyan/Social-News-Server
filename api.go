@@ -1125,8 +1125,9 @@ func APIVoteUser(c *gin.Context) {
 	}
 
 	type Input struct {
-		UID    int64 `json:"uid"`
-		Amount int64 `json:"amount"`
+		UID      int64    `json:"uid"`
+		Amount   int64    `json:"amount"`
+		Location []string `json:"location"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
@@ -1143,9 +1144,7 @@ func APIVoteUser(c *gin.Context) {
 		return
 	}
 
-	addr := getAddress(c.ClientIP())
-
-	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, addr)
+	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, in.Location)
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1162,8 +1161,9 @@ func APIVotePost(c *gin.Context) {
 	}
 
 	type Input struct {
-		UID    int64 `json:"uid"`
-		Amount int64 `json:"amount"`
+		UID      int64    `json:"uid"`
+		Amount   int64    `json:"amount"`
+		Location []string `json:"location"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
@@ -1180,9 +1180,7 @@ func APIVotePost(c *gin.Context) {
 		return
 	}
 
-	addr := getAddress(c.ClientIP())
-
-	DBVotePost(mainDB, in.UID, pid, in.Amount, addr)
+	DBVotePost(mainDB, in.UID, pid, in.Amount, in.Location)
 	if in.Amount < 0 {
 		in.Amount = -in.Amount
 	}
@@ -1207,8 +1205,9 @@ func APIVoteComment(c *gin.Context) {
 	}
 
 	type Input struct {
-		UID    int64 `json:"uid"`
-		Amount int64 `json:"amount"`
+		UID      int64    `json:"uid"`
+		Amount   int64    `json:"amount"`
+		Location []string `json:"location"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
@@ -1225,9 +1224,7 @@ func APIVoteComment(c *gin.Context) {
 		return
 	}
 
-	addr := getAddress(c.ClientIP())
-
-	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr)
+	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, in.Location)
 	if in.Amount < 0 {
 		in.Amount = -in.Amount
 	}

@@ -333,6 +333,15 @@ func DBFunctionSetup(db *sql.DB) {
 	_, e = db.Exec(createRatio)
 	DidFail(e, "create ratio function")
 
+	createWeightRatio := `
+	CREATE OR REPLACE FUNCTION weightRatio(z DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN z * RATIO(x, y);
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createWeightRatio)
+	DidFail(e, "create weight ratio function")
+
 	createScoredRatio := `
 	CREATE OR REPLACE FUNCTION scoredRatio(x DOUBLE PRECISION, y DOUBLE PRECISION, beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
 	BEGIN
@@ -384,10 +393,83 @@ func DBFunctionSetup(db *sql.DB) {
 		stype = DOUBLE PRECISION[],
 		finalfunc = scoreValueFinal,
 		initcond = '{0, 0, 0}'
-	); 
-	`
+	);`
 	_, e = db.Exec(createScoreValue)
 	DidFail(e, "create scoreValue aggregate function")
+
+	createSumWeightedRatioScoreValue := `
+	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
+	DECLARE nagg DOUBLE PRECISION[]; 
+	BEGIN
+		nagg[1] = cagg[1] + tagValue;
+		nagg[2] = cagg[2] + userValue;
+		nagg[3] = cagg[3] + 1;
+		nagg[4] = factor;
+		RETURN nagg; 
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[])
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN (cagg[1] + (cagg[2] / cagg[3])) * cagg[4]; 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE scoreValueFactor (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION) (
+		sfunc = scoreValueFactorAgg,
+		stype = DOUBLE PRECISION[],
+		finalfunc = scoreValueFactorFinal,
+		initcond = '{0, 0, 0, 0}'
+	);`
+	_, e = db.Exec(createSumWeightedRatioScoreValue)
+	DidFail(e, "create sum weighted ratio score value aggregate function")
+
+	createAggRatioValue := `
+	CREATE OR REPLACE FUNCTION sumRatioAgg (accumulator DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator + COALESCE(x / NULLIF(x + y, 0), 0.0);
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION sumRatioFinal (accumulator DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator; 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE sumRatio (x DOUBLE PRECISION, y DOUBLE PRECISION) (
+		sfunc = sumRatioAgg,
+		stype = DOUBLE PRECISION,
+		finalfunc = sumRatioFinal,
+		initcond = 0
+	);`
+	_, e = db.Exec(createAggRatioValue)
+	DidFail(e, "create aggregate ratio function")
+
+	createAggWeightRatio := `
+	CREATE OR REPLACE FUNCTION sumWeightedRatioAgg (accumulator DOUBLE PRECISION, z DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator + z * COALESCE(x / NULLIF(x + y, 0), 0.0);
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION sumWeightedRatioFinal (accumulator DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator; 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE sumWeightedRatio (z DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION) (
+		sfunc = sumWeightedRatioAgg,
+		stype = DOUBLE PRECISION,
+		finalfunc = sumWeightedRatioFinal,
+		initcond = 0
+	);`
+	_, e = db.Exec(createAggWeightRatio)
+	DidFail(e, "create aggregate weight function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

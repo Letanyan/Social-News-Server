@@ -83,7 +83,8 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	VALUES %s ON CONFLICT (name) DO NOTHING;
 	SELECT %s
 	FROM Tags p
-	WHERE ARRAY[Name] <@ %s;
+	WHERE ARRAY[Name] <@ %s
+	ORDER BY p.id;
 	`, tagRows, SQLFieldsForTag(), tagArray)
 	rows, e := db.Query(upsertTags)
 	if DidFail(e, "create tags") {
@@ -192,11 +193,11 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) []Tag {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 
-	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	cond := []string{}
 	joins := ""
 	if id > 0 {

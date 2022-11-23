@@ -247,7 +247,8 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 	sortOrder SortOrder, limit int64, offset int64,
 	startCreated string, endCreated string, forUser int64, search string) []CommentResult {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(start) > 0 || len(end) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 
@@ -275,7 +276,6 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 		cond = append(cond, "p.isReview=false")
 	}
 
-	usingVotesTable := len(popularIn) > 0 || len(start) > 0 || len(end) > 0
 	if usingVotesTable {
 		joins += "JOIN Votes v ON v.pid = p.postId AND v.sid = p.id\n"
 		cond = append(cond, "kind=2")
