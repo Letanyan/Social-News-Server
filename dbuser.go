@@ -276,21 +276,24 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) []UserProfile {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 	joins := ""
 	cond := []string{}
-
-	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 
 	if usingVotesTable {
 		joins = "JOIN Votes v ON v.pid = p.id\n"
 		cond = append(cond, "v.kind=0")
 	}
 
+	locArray := ""
+	if len(popularIn) > 0 {
+		locArray = DBGetLocationIndex(db, popularIn)
+	}
 	getUsers := SQLGetItems("Users p", voteTable, SQLFieldsForUserProfileAlias(),
-		SQLFieldsForUserProfile(), joins, popularIn, cond, usingVotesTable,
+		SQLFieldsForUserProfile(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate, forUser, search)
 
 	rows, e := db.Query(getUsers)
@@ -331,7 +334,8 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 		updatedField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	voteQuery := SQLMakeVote(upUser, targetId, -1, location, upvoteAmount, isUpvote)
+	locIndex := DBCreateLocation(db, location)
+	voteQuery := SQLMakeVote(upUser, targetId, -1, locIndex, upvoteAmount, isUpvote)
 	updateUser := fmt.Sprintf(`
 	%s
 	UPDATE users p SET 

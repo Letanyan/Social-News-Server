@@ -29,9 +29,9 @@ var (
 var (
 	mainDB        *sql.DB
 	agents        []NewsAgent
-	agentHashSets map[int64]map[string]bool
-	// updatingAgents sync.Mutex
-	agentsMutex KeyedMutex
+	agentHashSets map[int64]map[string]int64
+	agentsMutex   KeyedMutex
+	englishWords  map[string]bool
 )
 
 func main() {
@@ -72,6 +72,8 @@ func main() {
 		v1.POST("/users", APICreateUser)
 		v1.POST("/posts", APICreatePost)
 		v1.POST("/posts/:pid/comments", APICreateComment)
+		v1.POST("/update/posts/:pid", APIUpdatePost)
+		v1.POST("/update/posts/:pid/comments/:cid", APIUpdateComment)
 		// Delete
 		v1.POST("/trash/users/:uid", APIDeleteUser)
 		v1.POST("/trash/posts/:pid", APIDeletePost)
@@ -153,7 +155,8 @@ func main() {
 
 	agents = NAReadAllNewsAgents()
 	agentsMutex = KeyedMutex{}
-	NARegisterUpdates()
+	NARegisterHourlyUpdates()
+	NARegisterWeeklyCleanUp()
 
 	port := os.Getenv("PORT")
 	if port == "" {

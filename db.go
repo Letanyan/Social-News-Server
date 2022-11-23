@@ -11,6 +11,7 @@ func DBSetup(db *sql.DB) {
 	DBPostsSetup(db)
 	DBCommentsSetup(db)
 	DBVotesSetup(db)
+	DBLocationSetup(db)
 	DBTagsSetup(db)
 	DBFlagsSetup(db)
 	DBFunctionSetup(db)
@@ -222,6 +223,17 @@ func DBCreateVotesPartitionTable(db *sql.DB, year int) {
 	createVotesKindTable(int(upTag))
 }
 
+func DBLocationSetup(db *sql.DB) {
+	createLocation := `CREATE TABLE IF NOT EXISTS Location (
+		id SERIAL,
+		name TEXT,
+
+		PRIMARY KEY (id, name)
+	);`
+	_, e := db.Exec(createLocation)
+	DidFail(e, "create location table")
+}
+
 func DBTagsSetup(db *sql.DB) {
 	createTags := `CREATE TABLE IF NOT EXISTS tags (
 		id BIGSERIAL,
@@ -278,6 +290,43 @@ func DBMigrations(db *sql.DB) {
 	ALTER TABLE Users
 	ADD COLUMN IF NOT EXISTS Blocked TIMESTAMP
 	DEFAULT '1970-01-01'::timestamp;
+
+	ALTER TABLE Posts 
+	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
+    GENERATED ALWAYS AS (to_tsvector('english',Content)) STORED;
+	CREATE INDEX IF NOT EXISTS posts_idx_content_vector
+	ON Posts 
+	USING gin(ContentVector);
+
+	ALTER TABLE Comments 
+	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
+    GENERATED ALWAYS AS (to_tsvector('english',Content)) STORED;
+	CREATE INDEX IF NOT EXISTS comments_idx_content_vector
+	ON Comments 
+	USING gin(ContentVector);
+
+	ALTER Table Posts
+	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
+	DEFAULT false;
+
+	ALTER Table Comments
+	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
+	DEFAULT false;
+
+	CREATE SEQUENCE IF NOT EXISTS location_id_seq;
+	ALTER TABLE Location ALTER COLUMN id SET NOT NULL;
+	ALTER TABLE Location ALTER COLUMN id SET DEFAULT nextval('location_id_seq');
+	ALTER SEQUENCE location_id_seq OWNED BY Location.id;
+
+	ALTER TABLE Votes
+	ALTER COLUMN Location 
+	TYPE INTEGER[] USING Location::int[];
+
+	ALTER TABLE Posts
+	ALTER COLUMN Location
+	TYPE INTEGER[] USING Location::int[];
+
+	CREATE UNIQUE INDEX IF NOT EXISTS location_name_idx ON Location(name);
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
@@ -310,6 +359,15 @@ func DBFunctionSetup(db *sql.DB) {
 	$$ LANGUAGE plpgsql`
 	_, e = db.Exec(createRatio)
 	DidFail(e, "create ratio function")
+
+	createWeightRatio := `
+	CREATE OR REPLACE FUNCTION weightRatio(z DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	BEGIN
+		RETURN z * RATIO(x, y);
+	END;
+	$$ LANGUAGE plpgsql`
+	_, e = db.Exec(createWeightRatio)
+	DidFail(e, "create weight ratio function")
 
 	createScoredRatio := `
 	CREATE OR REPLACE FUNCTION scoredRatio(x DOUBLE PRECISION, y DOUBLE PRECISION, beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
@@ -362,10 +420,83 @@ func DBFunctionSetup(db *sql.DB) {
 		stype = DOUBLE PRECISION[],
 		finalfunc = scoreValueFinal,
 		initcond = '{0, 0, 0}'
-	); 
-	`
+	);`
 	_, e = db.Exec(createScoreValue)
 	DidFail(e, "create scoreValue aggregate function")
+
+	createSumWeightedRatioScoreValue := `
+	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
+	DECLARE nagg DOUBLE PRECISION[]; 
+	BEGIN
+		nagg[1] = cagg[1] + tagValue;
+		nagg[2] = cagg[2] + userValue;
+		nagg[3] = cagg[3] + 1;
+		nagg[4] = factor;
+		RETURN nagg; 
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[])
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN (cagg[1] + (cagg[2] / cagg[3])) * cagg[4]; 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE scoreValueFactor (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION) (
+		sfunc = scoreValueFactorAgg,
+		stype = DOUBLE PRECISION[],
+		finalfunc = scoreValueFactorFinal,
+		initcond = '{0, 0, 0, 0}'
+	);`
+	_, e = db.Exec(createSumWeightedRatioScoreValue)
+	DidFail(e, "create sum weighted ratio score value aggregate function")
+
+	createAggRatioValue := `
+	CREATE OR REPLACE FUNCTION sumRatioAgg (accumulator DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator + COALESCE(x / NULLIF(x + y, 0), 0.0);
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION sumRatioFinal (accumulator DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator; 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE sumRatio (x DOUBLE PRECISION, y DOUBLE PRECISION) (
+		sfunc = sumRatioAgg,
+		stype = DOUBLE PRECISION,
+		finalfunc = sumRatioFinal,
+		initcond = 0
+	);`
+	_, e = db.Exec(createAggRatioValue)
+	DidFail(e, "create aggregate ratio function")
+
+	createAggWeightRatio := `
+	CREATE OR REPLACE FUNCTION sumWeightedRatioAgg (accumulator DOUBLE PRECISION, z DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator + z * COALESCE(x / NULLIF(x + y, 0), 0.0);
+	END; $$; 
+
+	CREATE OR REPLACE FUNCTION sumWeightedRatioFinal (accumulator DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN accumulator; 
+	END; $$;
+
+	-- define user aggregate
+	CREATE OR REPLACE AGGREGATE sumWeightedRatio (z DOUBLE PRECISION, x DOUBLE PRECISION, y DOUBLE PRECISION) (
+		sfunc = sumWeightedRatioAgg,
+		stype = DOUBLE PRECISION,
+		finalfunc = sumWeightedRatioFinal,
+		initcond = 0
+	);`
+	_, e = db.Exec(createAggWeightRatio)
+	DidFail(e, "create aggregate weight function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

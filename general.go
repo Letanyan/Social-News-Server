@@ -290,3 +290,25 @@ func (m *KeyedMutex) Lock(key string) func() {
 
 	return func() { mtx.Unlock() }
 }
+
+func makeUnique(words []string) []string {
+	occurred := map[string]bool{}
+	result := []string{}
+	for e := range words {
+		if !occurred[words[e]] {
+			occurred[words[e]] = true
+			result = append(result, words[e])
+		}
+	}
+	return result
+}
+
+func reverse[T any](slice []T) {
+	inputLen := len(slice)
+	inputMid := inputLen / 2
+
+	for i := 0; i < inputMid; i++ {
+		j := inputLen - i - 1
+		slice[i], slice[j] = slice[j], slice[i]
+	}
+}

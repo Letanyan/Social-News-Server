@@ -122,6 +122,10 @@ func APICreatePost(c *gin.Context) {
 		return
 	}
 
+	if len(in.Content) > 10000 {
+		APIReturn(c, false, "message content too long")
+	}
+
 	if !APIMatchSecret(c, in.UserID) {
 		return
 	}
@@ -151,13 +155,20 @@ func APICreateComment(c *gin.Context) {
 		return
 	}
 
+	if in.IsReview && len(in.Content) > 10000 {
+		APIReturn(c, false, "message content too long")
+	}
+	if !in.IsReview && len(in.Content) > 1000 {
+		APIReturn(c, false, "message content too long")
+	}
+
 	if !APIMatchSecret(c, in.UserID) {
 		return
 	}
 
 	postId, e := strconv.ParseInt(c.Param("pid"), 10, 64)
-	if DidFail(e, "invalid pid") {
-		APIFailed(c, e, "invalid post id")
+	if APIFailed(c, e, "invalid post id") {
+		return
 	}
 
 	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
@@ -166,6 +177,61 @@ func APICreateComment(c *gin.Context) {
 	} else {
 		APIReturn(c, false, "could not create post")
 	}
+}
+
+func APIUpdatePost(c *gin.Context) {
+	type Input struct {
+		UserID  int64  `json:"userId"`
+		Content string `json:"content"`
+	}
+	var in Input
+
+	if e := c.BindJSON(&in); DidFail(e, "get input for update post") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	if !APIMatchSecret(c, in.UserID) {
+		return
+	}
+
+	postId, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	post := DBUpdatePost(mainDB, postId, in.Content)
+	APIReturn(c, true, post)
+}
+
+func APIUpdateComment(c *gin.Context) {
+	type Input struct {
+		UserID  int64  `json:"userId"`
+		Content string `json:"content"`
+	}
+	var in Input
+
+	if e := c.BindJSON(&in); DidFail(e, "get input for update comment") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	if !APIMatchSecret(c, in.UserID) {
+		return
+	}
+
+	postId, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	commentId, e := strconv.ParseInt(c.Param("cid"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	comment := DBUpdateComment(mainDB, postId, commentId, in.Content)
+	APIReturn(c, true, comment)
 }
 
 // ------------------------------------------------------------------------
@@ -269,7 +335,7 @@ func APIGetUser(c *gin.Context) {
 		APIReturn(c, false, "no user found with id"+fmt.Sprint(uid))
 	} else {
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
-		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
 		APIReturn(c, true, gin.H{"user": user, "token": "notSecret", "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
@@ -1059,8 +1125,9 @@ func APIVoteUser(c *gin.Context) {
 	}
 
 	type Input struct {
-		UID    int64 `json:"uid"`
-		Amount int64 `json:"amount"`
+		UID      int64    `json:"uid"`
+		Amount   int64    `json:"amount"`
+		Location []string `json:"location"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
@@ -1077,9 +1144,7 @@ func APIVoteUser(c *gin.Context) {
 		return
 	}
 
-	addr := getAddress(c.ClientIP())
-
-	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, addr)
+	DBVoteForUser(mainDB, in.UID, targetId, in.Amount, in.Location)
 	remaining := DBSubtractUserCredit(mainDB, in.UID, in.Amount)
 
 	if remaining >= 0 {
@@ -1096,8 +1161,9 @@ func APIVotePost(c *gin.Context) {
 	}
 
 	type Input struct {
-		UID    int64 `json:"uid"`
-		Amount int64 `json:"amount"`
+		UID      int64    `json:"uid"`
+		Amount   int64    `json:"amount"`
+		Location []string `json:"location"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
@@ -1114,9 +1180,7 @@ func APIVotePost(c *gin.Context) {
 		return
 	}
 
-	addr := getAddress(c.ClientIP())
-
-	DBVotePost(mainDB, in.UID, pid, in.Amount, addr)
+	DBVotePost(mainDB, in.UID, pid, in.Amount, in.Location)
 	if in.Amount < 0 {
 		in.Amount = -in.Amount
 	}
@@ -1141,8 +1205,9 @@ func APIVoteComment(c *gin.Context) {
 	}
 
 	type Input struct {
-		UID    int64 `json:"uid"`
-		Amount int64 `json:"amount"`
+		UID      int64    `json:"uid"`
+		Amount   int64    `json:"amount"`
+		Location []string `json:"location"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for vote post") {
@@ -1159,9 +1224,7 @@ func APIVoteComment(c *gin.Context) {
 		return
 	}
 
-	addr := getAddress(c.ClientIP())
-
-	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, addr)
+	DBVoteComment(mainDB, in.UID, pid, cid, in.Amount, in.Location)
 	if in.Amount < 0 {
 		in.Amount = -in.Amount
 	}
@@ -1420,7 +1483,7 @@ func APISignIn(c *gin.Context) {
 	if user.ID > 0 || user.ID == -1 {
 		secret := AUTHRegister(user.ID)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
-		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
 		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
 	} else {
@@ -1481,7 +1544,7 @@ func APISignInWithApple(c *gin.Context) {
 	} else {
 		secret := AUTHRegister(user.ID)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
-		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
@@ -1517,7 +1580,7 @@ func APISignInWithGoogle(c *gin.Context) {
 	} else {
 		secret := AUTHRegister(user.ID)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
-		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
+		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0

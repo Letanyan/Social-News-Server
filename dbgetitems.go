@@ -6,13 +6,20 @@ import (
 )
 
 func SQLGetItems(table string, voteTable string, aliasFields string, returnedFields string, joins string,
-	popularIn []string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
+	popularIn string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) string {
 
-	scoreField := fmt.Sprintf("%s.upvotes * RATIO(%s.upvotes, %s.downvotes)", voteTable, voteTable, voteTable)
+	ratioFunc := "Ratio"
+	weightedRatioFunc := "WeightRatio"
+	if usingVotes || forUser > 0 {
+		ratioFunc = "SumRatio"
+		weightedRatioFunc = "SumWeightedRatio"
+	}
+
+	scoreField := fmt.Sprintf("%s(%s.upvotes, %s.upvotes, %s.downvotes)", weightedRatioFunc, voteTable, voteTable, voteTable)
 	if table == "Users p" && !usingVotes {
-		scoreField = "(p.upvotes + p.investment) * RATIO(p.upvotes + p.investment, p.downvotes)"
+		scoreField = "WeightRatio(p.upvotes + p.investment, p.upvotes + p.investment, p.downvotes)"
 	}
 	withTable := ""
 	if forUser > 0 {
@@ -71,18 +78,18 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		Ignored AS (
 			SELECT pid
 			FROM UserConts
-			WHERE kind=4
+			WHERE kind=3 -- ignored user
 		), Viewed AS (
 			(
 				SELECT pid
 				FROM UserConts
-				WHERE kind=5
+				WHERE kind=5 OR kind=1 -- already recommended or viewed
 			) 
 			UNION 
 			(
 				SELECT pid
 				FROM UserPrefs
-				WHERE kind=2
+				WHERE kind=2 -- voted for posts
 			)
 		)
 		`, forUser, forUser)
@@ -91,14 +98,14 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		joins += "JOIN UserScores us ON us.id = p.userId\n"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
-		scoreField = "scoreValue(ts.value, us.value) * (1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*12))"
+		scoreField = "scoreValueFactor(ts.value, us.value, 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*12))"
 	}
 
 	result := fmt.Sprintf(`%s
-	SELECT %s{agg}, RATIO(p.upvotes, p.downvotes) AS cred, {score} AS score{rank}
+	SELECT %s{agg}, %s(%s.upvotes, %s.downvotes) AS cred, {score} AS score{rank}
 	FROM %s
 	%s
-	`, withTable, aliasFields, table, joins)
+	`, withTable, aliasFields, ratioFunc, voteTable, voteTable, table, joins)
 
 	result = strings.ReplaceAll(result, "{score}", scoreField)
 
@@ -112,9 +119,9 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	} else if downvotes < 0 {
 		cond = append(cond, fmt.Sprintf("%s.downvotes < %d", voteTable, -downvotes))
 	}
-	if len(popularIn) > 0 {
-		locArray := SQLFormattedArray(popularIn)
-		cond = append(cond, fmt.Sprintf("v.location @> %s", locArray))
+	// we use 2 because the empty array '{}' is 2 characters
+	if len(popularIn) > 2 {
+		cond = append(cond, fmt.Sprintf("v.location @> %s", popularIn))
 	}
 	if len(startDate) > 0 && len(endDate) > 0 {
 		cond = append(cond, fmt.Sprintf("v.updatedAt BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s')\n", startDate, endDate))
@@ -131,10 +138,10 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 			}
 			if len(search) > 0 {
-				cond = append(cond, fmt.Sprintf("p.content @@ to_tsquery('%s')", search))
+				cond = append(cond, fmt.Sprintf("p.contentVector @@ to_tsquery('%s')", search))
 			}
 			if sortOrder == soRank {
-				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.content), to_tsquery('%s')) AS rank", search))
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(p.contentVector, to_tsquery('%s')) AS rank", search))
 			} else {
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}
@@ -155,10 +162,8 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		result += "WHERE " + JoinStrings(cond, " AND ") + "\n"
 	}
 
-	if usingVotes {
-		result += fmt.Sprintf("GROUP BY %s, cred, score\n", returnedFields)
-	} else if forUser > 0 {
-		result += fmt.Sprintf("GROUP BY %s, cred\n", returnedFields)
+	if usingVotes || forUser > 0 {
+		result += fmt.Sprintf("GROUP BY %s\n", returnedFields)
 	}
 
 	if usingVotes {
@@ -167,7 +172,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 		result = strings.ReplaceAll(result, "{agg}", "")
 	}
 
-	result += SQLSortOrder(sortOrder)
+	result += SQLSortOrder(sortOrder, usingVotes)
 	result += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	return result

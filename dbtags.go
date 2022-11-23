@@ -72,35 +72,54 @@ func DBCreateTags(db *sql.DB, tags []string) []Tag {
 	if len(tags) <= 0 {
 		return []Tag{}
 	}
-	// nowTime := formatNow()
-	tagRows := SQLFormattedRows(tags, func(s string) string {
+
+	dbTags := DBGetTagsFromNames(db, tags)
+	newTags := []string{}
+	for _, tag := range tags {
+		contains := false
+		for _, dbTag := range dbTags {
+			if dbTag.Name == tag {
+				contains = true
+				break
+			}
+		}
+		if !contains {
+			newTags = append(newTags, tag)
+		}
+	}
+
+	tagRows := SQLFormattedRows(newTags, func(s string) string {
 		return ""
 	})
-	tagArray := SQLFormattedArray(tags)
+	tagArray := SQLFormattedArray(newTags)
 
-	upsertTags := fmt.Sprintf(`
-	INSERT INTO tags (name)
-	VALUES %s ON CONFLICT (name) DO NOTHING;
-	SELECT %s
-	FROM Tags p
-	WHERE ARRAY[Name] <@ %s;
-	`, tagRows, SQLFieldsForTag(), tagArray)
-	rows, e := db.Query(upsertTags)
-	if DidFail(e, "create tags") {
-		return []Tag{}
+	var result []Tag
+	if len(newTags) > 0 {
+		upsertTags := fmt.Sprintf(`
+		INSERT INTO tags (name)
+		VALUES %s ON CONFLICT (name) DO NOTHING;
+		SELECT %s
+		FROM Tags p
+		WHERE ARRAY[Name] <@ %s
+		ORDER BY p.id;
+		`, tagRows, SQLFieldsForTag(), tagArray)
+		rows, e := db.Query(upsertTags)
+		if DidFail(e, "create tags") {
+			return []Tag{}
+		}
+		result = ScanTags(rows, false, false, false)
 	}
-	result := ScanTags(rows, false, false, false)
+	dbTags = append(dbTags, result...)
 
-	return result
+	return dbTags
 }
 
-func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, location []string, isPublic bool) ([]Tag, []UserPref) {
+func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, location string, isPublic bool) ([]Tag, []UserPref) {
 	if len(tags) <= 0 {
 		return []Tag{}, []UserPref{}
 	}
 	tagArray := SQLFormattedIndexArray(tags)
 	updatedField := ""
-	locArray := SQLFormattedArray(location)
 	isUpvote := upvoteAmount > 0
 	if isUpvote {
 		updatedField = "upvotes"
@@ -136,7 +155,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 		return fmt.Sprintf("(%d, %d, %d, -1)", userId, voteKind, i)
 	})
 	tagVoteRows := SQLFormattedIndexList(tagIndices, func(i int64) string {
-		return fmt.Sprintf("(%d, %d, -1, %s)", voteKind, i, locArray)
+		return fmt.Sprintf("(%d, %d, -1, %s)", voteKind, i, location)
 	})
 	tagIndexArray := SQLFormattedIndexArray(tagIndices)
 	upsertUserTags := fmt.Sprintf(`
@@ -155,7 +174,7 @@ func DBVoteTags(db *sql.DB, userId int64, tags []int64, upvoteAmount int64, loca
 	RETURNING %s, 0.0, 0.0
 	`, tagVoteRows,
 		updatedField, updatedField, upvoteAmount,
-		voteKind, tagIndexArray, locArray, utc().Format("2006-01-02"),
+		voteKind, tagIndexArray, location, utc().Format("2006-01-02"),
 		tagIndexRows,
 		updatedField, updatedField, upvoteAmount,
 		voteKind, userId, tagIndexArray, SQLFieldsForUserPref())
@@ -188,15 +207,30 @@ func DBGetTagsFromIDs(db *sql.DB, ids []int64) []Tag {
 	return result
 }
 
+func DBGetTagsFromNames(db *sql.DB, names []string) []Tag {
+	query := fmt.Sprintf(`
+	SELECT %s
+	FROM Tags p
+	WHERE ARRAY[p.name] <@ %s
+	`, SQLFieldsForTagAlias(), SQLFormattedArray(names))
+	rows, e := db.Query(query)
+	result := []Tag{}
+	if DidFail(e, "get tags by id") {
+		return result
+	}
+	result = ScanTags(rows, false, false, false)
+	return result
+}
+
 func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) []Tag {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 
-	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	cond := []string{}
 	joins := ""
 	if id > 0 {
@@ -213,8 +247,12 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 		}
 	}
 
+	locArray := ""
+	if len(popularIn) > 0 {
+		locArray = DBGetLocationIndex(db, popularIn)
+	}
 	getTags := SQLGetItems("Tags p", voteTable, SQLFieldsForTagAlias(),
-		SQLFieldsForTag(), joins, popularIn, cond, usingVotesTable,
+		SQLFieldsForTag(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, startDate, endDate, forUser, search)
 

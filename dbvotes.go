@@ -2,14 +2,14 @@ package main
 
 import "fmt"
 
-func SQLMakeVote(kind UserPrefKind, pid int64, sid int64, location []string, upvoteAmount int64, isUpvote bool) string {
-	locArray := SQLFormattedArray(location)
+func SQLMakeVote(kind UserPrefKind, pid int64, sid int64, location []int64, upvoteAmount int64, isUpvote bool) string {
 	var updateField string
 	if isUpvote {
 		updateField = "upvotes"
 	} else {
 		updateField = "downvotes"
 	}
+	locArray := SQLFormattedIndexArray(location)
 
 	query := fmt.Sprintf(`
 	INSERT INTO Votes(kind, pid, sid, location)

@@ -17,6 +17,7 @@ type Comment struct {
 	Downvotes  int64
 	ReplyCount int64
 	Trashed    bool
+	Edited     bool
 	IsReview   bool
 
 	Score float64
@@ -35,6 +36,7 @@ type CommentResult struct {
 	Downvotes  int64
 	ReplyCount int64
 	Trashed    bool
+	Edited     bool
 	IsReview   bool
 
 	Score float64
@@ -43,20 +45,20 @@ type CommentResult struct {
 }
 
 func SQLFieldsForComment() string {
-	return "id, postId, userId, replyId, content, createdAt, upvotes, downvotes, replyCount, trashed, isReview"
+	return "id, postId, userId, replyId, content, createdAt, upvotes, downvotes, replyCount, trashed, edited, isReview"
 }
 
 func SQLFieldsForCommentResult() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, p.trashed, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, p.trashed, p.edited, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func SQLFieldsForCommentResultAlias() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes AS item_up, p.downvotes AS item_down, p.replyCount, p.trashed, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes AS item_up, p.downvotes AS item_down, p.replyCount, p.trashed, p.edited, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func ScanComment(row *sql.Row) (Comment, error) {
 	c := Comment{}
-	e := row.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview)
+	e := row.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview)
 	return c, e
 }
 
@@ -64,7 +66,7 @@ func ScanCommentResult(row *sql.Row) (CommentResult, error) {
 	c := CommentResult{}
 	var userId int64
 	var email string
-	e := row.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview, &c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email)
+	e := row.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview, &c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email)
 	c.Author.IsAgent = len(email) == 0
 	return c, e
 }
@@ -73,7 +75,7 @@ func ScanComments(rows *sql.Rows) []Comment {
 	result := []Comment{}
 	for rows.Next() {
 		c := Comment{}
-		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview, &c.Cred, &c.Score)
+		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview, &c.Cred, &c.Score)
 		if DidFail(e, "scan comment") {
 			continue
 		}
@@ -93,18 +95,18 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentRe
 		var email string
 		if hasRank {
 			if hasVotes {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &up, &down, &c.Cred, &c.Score, &c.Rank)
 			} else {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &c.Cred, &c.Score, &c.Rank)
 			}
 		} else {
 			if hasVotes {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &up, &down, &c.Cred, &c.Score)
 			} else {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &c.Cred, &c.Score)
 			}
 		}
@@ -187,9 +189,9 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 }
 
 func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) Comment {
-	updateFromPostComments := fmt.Sprintf(`UPDATE comments SET content=$1 WHERE id=$2
+	updateFromPostComments := fmt.Sprintf(`UPDATE comments SET content=$1, Edited=true WHERE id=$2 AND postId=$3
 	RETURNING %s`, SQLFieldsForComment())
-	row := db.QueryRow(updateFromPostComments, content, commentId)
+	row := db.QueryRow(updateFromPostComments, content, commentId, postId)
 	comment, e := ScanComment(row)
 	if DidFail(e, "update comment ", commentId, " from post ", postId, " comments table") {
 		return Comment{}
@@ -206,7 +208,8 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 		updateField = "downvotes"
 		upvoteAmount = -upvoteAmount
 	}
-	voteQuery := SQLMakeVote(upComment, postId, commentId, location, upvoteAmount, isUpvote)
+	locIndex := DBCreateLocation(db, location)
+	voteQuery := SQLMakeVote(upComment, postId, commentId, locIndex, upvoteAmount, isUpvote)
 	updateVoteForPost := fmt.Sprintf(`
 		%s
 		UPDATE Comments SET 
@@ -245,7 +248,8 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 	sortOrder SortOrder, limit int64, offset int64,
 	startCreated string, endCreated string, forUser int64, search string) []CommentResult {
 	voteTable := "p"
-	if len(popularIn) > 0 {
+	usingVotesTable := len(popularIn) > 0 || len(start) > 0 || len(end) > 0
+	if usingVotesTable {
 		voteTable = "v"
 	}
 
@@ -273,14 +277,17 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 		cond = append(cond, "p.isReview=false")
 	}
 
-	usingVotesTable := len(popularIn) > 0 || len(start) > 0 || len(end) > 0
 	if usingVotesTable {
 		joins += "JOIN Votes v ON v.pid = p.postId AND v.sid = p.id\n"
 		cond = append(cond, "kind=2")
 	}
 
+	locArray := ""
+	if len(popularIn) > 0 {
+		locArray = DBGetLocationIndex(db, popularIn)
+	}
 	getComments := SQLGetItems("Comments p", voteTable, SQLFieldsForCommentResultAlias(),
-		SQLFieldsForCommentResult(), joins, popularIn, cond, usingVotesTable,
+		SQLFieldsForCommentResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, start, end, forUser, search)
 
