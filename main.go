@@ -149,14 +149,14 @@ func main() {
 	}
 	defer mainDB.Close()
 
-	// DBClearAllTables(db)
-
 	DBSetup(mainDB)
 
-	agents = NAReadAllNewsAgents()
-	agentsMutex = KeyedMutex{}
-	NARegisterHourlyUpdates()
-	NARegisterWeeklyCleanUp()
+	// agents = NAReadAllNewsAgents()
+	// agentsMutex = KeyedMutex{}
+	// NARegisterHourlyUpdates()
+	// NARegisterWeeklyCleanUp()
+
+	// ConvertAllAgentsFromFileToDB(mainDB)
 
 	port := os.Getenv("PORT")
 	if port == "" {

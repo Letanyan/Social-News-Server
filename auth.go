@@ -25,22 +25,11 @@ var AUTHUserSecrets map[int64][]string
 var googleKeys map[string]string
 var appleTokens sync.Map
 
-type InAppPurchase struct {
-	Platform  string
-	ProductId string
-	Data      string
-}
-
-var iapMutex sync.Mutex
-var inAppPurchases map[int64][]InAppPurchase
-
 func init() {
 	userSecretMutex = sync.Mutex{}
 	AUTHUserSecrets = IndexSetFromFile[[]string]("user_secrets.gob")
 	googleKeys = map[string]string{}
 	appleTokens = sync.Map{}
-	iapMutex = sync.Mutex{}
-	inAppPurchases = IndexSetFromFile[[]InAppPurchase]("user_iap.gob")
 }
 
 // -------------------------------------------------------------------------
@@ -190,23 +179,6 @@ func mapProductIdToCredit(id string) int64 {
 		return 100
 	}
 	return -1
-}
-
-func AUTHAlreadyPurchased(userId int64, data string, productId string, platform string) bool {
-	purchases := inAppPurchases[userId]
-	for _, purchase := range purchases {
-		if purchase.Data == data && purchase.ProductId == productId &&
-			purchase.Platform == platform {
-			return true
-		}
-	}
-	purchase := InAppPurchase{Platform: platform, ProductId: productId, Data: data}
-	purchases = append(purchases, purchase)
-	iapMutex.Lock()
-	inAppPurchases[userId] = purchases
-	IndexSetWriteToFile(inAppPurchases, "user_iap.gob")
-	iapMutex.Unlock()
-	return false
 }
 
 // -------------------------------------------------------------------------

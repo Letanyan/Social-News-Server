@@ -14,6 +14,8 @@ func DBSetup(db *sql.DB) {
 	DBLocationSetup(db)
 	DBTagsSetup(db)
 	DBFlagsSetup(db)
+	DBIapSetup(db)
+	DBAgentsSetup(db)
 	DBFunctionSetup(db)
 	DBMigrations(db)
 }
@@ -274,6 +276,61 @@ func DBFlagsSetup(db *sql.DB) {
 	mod := 20
 	for i := 0; i < mod; i += 1 {
 		createFlagsTable(mod, i)
+	}
+}
+
+func DBIapSetup(db *sql.DB) {
+	createIap := `CREATE TABLE IF NOT EXISTS Iap (
+		userId BIGINT,
+		platform CHAR(1),
+		productId TEXT,
+		data TEXT,
+
+		PRIMARY KEY (userId, platform, productId, data)
+	) PARTITION BY HASH(userId);`
+	_, e := db.Exec(createIap)
+	DidFail(e, "create iap table")
+	createIapTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS Iap%d 
+		PARTITION OF Iap
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS Iap%d_index 
+		ON Iap%d (userId, platform, productId, data)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create iap partition instance")
+	}
+	mod := 20
+	for i := 0; i < mod; i += 1 {
+		createIapTable(mod, i)
+	}
+}
+
+func DBAgentsSetup(db *sql.DB) {
+	createAgents := `CREATE TABLE IF NOT EXISTS Agents (
+		agentId BIGINT,
+		path TEXT,
+		date TIMESTAMP DEFAULT (now() at time zone 'utc'),
+
+		PRIMARY KEY (agentId, path)
+	) PARTITION BY HASH(agentId, path);`
+	_, e := db.Exec(createAgents)
+	DidFail(e, "create agents table")
+	createIapTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS Agents%d 
+		PARTITION OF Agents
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS Agents%d_index 
+		ON Agents%d (agentId, path)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create agents partition instance")
+	}
+	mod := 10
+	for i := 0; i < mod; i += 1 {
+		createIapTable(mod, i)
 	}
 }
 

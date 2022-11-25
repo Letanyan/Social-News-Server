@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -212,6 +213,28 @@ func ConvertAllAgentsFromBoolToUnix() {
 			converted[k] = time.Now().UTC().Unix()
 		}
 		HashSetWriteToFile(converted, hashFile)
+	}
+}
+
+func ConvertAllAgentsFromFileToDB(db *sql.DB) {
+	content, e := ioutil.ReadFile("./agents/agents.json")
+	if DidFail(e, "read agents.json file") {
+		return
+	}
+
+	var result []NewsAgent
+	e = json.Unmarshal(content, &result)
+	if DidFail(e, "unmarshal news agents") {
+		return
+	}
+
+	for i := range result {
+		agent := result[i]
+		hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
+		visited := HashSetFromFile[int64](hashFile)
+		for k := range visited {
+			DBAgentPathInsert(db, agent.ID, k)
+		}
 	}
 }
 

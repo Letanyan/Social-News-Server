@@ -1683,11 +1683,12 @@ func APIVerifyGoogleIAP(c *gin.Context) {
 		APIReturn(c, false, -1)
 		return
 	}
-	alreadyPurchased := AUTHAlreadyPurchased(in.UserId, in.Data, in.ProductId, "google")
+	alreadyPurchased := DBIapExists(mainDB, in.UserId, "g", in.ProductId, in.Data)
 	if alreadyPurchased {
 		APIReturn(c, false, -1)
 		return
 	}
+	DBIapInsert(mainDB, in.UserId, "g", in.ProductId, in.Data)
 
 	result := DBAddUserCredit(mainDB, in.UserId, amount)
 	APIReturn(c, true, result)
@@ -1718,11 +1719,12 @@ func APIVerifyAppleIAP(c *gin.Context) {
 		APIReturn(c, false, -1)
 		return
 	}
-	alreadyPurchased := AUTHAlreadyPurchased(in.UserId, in.Data, in.ProductId, "apple")
+	alreadyPurchased := DBIapExists(mainDB, in.UserId, "a", in.ProductId, in.Data)
 	if alreadyPurchased {
 		APIReturn(c, false, -1)
 		return
 	}
+	DBIapInsert(mainDB, in.UserId, "a", in.ProductId, in.Data)
 	result := DBAddUserCredit(mainDB, in.UserId, amount)
 
 	APIReturn(c, true, result)
