@@ -251,7 +251,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getTags := SQLGetItems("Tags p", voteTable, SQLFieldsForTagAlias(),
+	getTags := SQLGetItems(db, "Tags p", voteTable, SQLFieldsForTagAlias(),
 		SQLFieldsForTag(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, startDate, endDate, forUser, search)

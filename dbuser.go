@@ -292,7 +292,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getUsers := SQLGetItems("Users p", voteTable, SQLFieldsForUserProfileAlias(),
+	getUsers := SQLGetItems(db, "Users p", voteTable, SQLFieldsForUserProfileAlias(),
 		SQLFieldsForUserProfile(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate, forUser, search)
 

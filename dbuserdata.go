@@ -324,7 +324,7 @@ func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getUsers += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 	if len(search) > 0 {
-		search, _ := DBPrepareSearchString(search)
+		search, _ := DBPrepareSearchString(db, search)
 		if len(search) > 0 {
 			getUsers += fmt.Sprintf("AND p.Name @@ to_tsquery('%s') ", search)
 		}
@@ -380,7 +380,7 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getPosts += fmt.Sprintf("AND p.userId = %d ", authorId)
 	}
 	if len(search) > 0 {
-		search, altTags := DBPrepareSearchString(search)
+		search, altTags := DBPrepareSearchString(db, search)
 		tags = append(tags, altTags...)
 		if len(search) > 0 {
 			getPosts += fmt.Sprintf("AND p.Content @@ to_tsquery('%s') ", search)
@@ -468,7 +468,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 		getComments += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 	if len(search) > 0 {
-		search, _ := DBPrepareSearchString(search)
+		search, _ := DBPrepareSearchString(db, search)
 		if len(search) > 0 {
 			getComments += fmt.Sprintf("AND p.Content @@ to_tsquery('%s') ", search)
 		}
@@ -538,7 +538,7 @@ func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int6
 		getTags += fmt.Sprintf("p.downvotes < %d\n", -downvotes)
 	}
 	if len(search) > 0 {
-		search, _ := DBPrepareSearchString(search)
+		search, _ := DBPrepareSearchString(db, search)
 		if len(search) > 0 {
 			getTags += fmt.Sprintf("AND p.Name @@ to_tsquery('%s') ", search)
 		}
@@ -679,7 +679,7 @@ func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64
 	`, SQLFieldsForPostResultAlias(), userId, kind)
 
 	if len(search) > 0 {
-		search, altTags := DBPrepareSearchString(search)
+		search, altTags := DBPrepareSearchString(db, search)
 		tags = append(tags, altTags...)
 		if len(search) > 0 {
 			query += fmt.Sprintf("AND p.Content @@ to_tsquery('%s') ", search)
@@ -775,7 +775,7 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 		getComments += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 	if len(search) > 0 {
-		search, _ := DBPrepareSearchString(search)
+		search, _ := DBPrepareSearchString(db, search)
 		if len(search) > 0 {
 			getComments += fmt.Sprintf("AND p.Content @@ to_tsquery('%s') ", search)
 		}

@@ -20,14 +20,27 @@ import (
 	"github.com/awa/go-iap/playstore"
 )
 
+var userSecretMutex sync.Mutex
 var AUTHUserSecrets map[int64][]string
 var googleKeys map[string]string
 var appleTokens sync.Map
 
+type InAppPurchase struct {
+	Platform  string
+	ProductId string
+	Data      string
+}
+
+var iapMutex sync.Mutex
+var inAppPurchases map[int64][]InAppPurchase
+
 func init() {
-	AUTHUserSecrets = AUTHLoadFromFile("user_secrets.gob")
+	userSecretMutex = sync.Mutex{}
+	AUTHUserSecrets = IndexSetFromFile[[]string]("user_secrets.gob")
 	googleKeys = map[string]string{}
 	appleTokens = sync.Map{}
+	iapMutex = sync.Mutex{}
+	inAppPurchases = IndexSetFromFile[[]InAppPurchase]("user_iap.gob")
 }
 
 // -------------------------------------------------------------------------
@@ -42,6 +55,7 @@ func AUTHRegister(user int64) string {
 		r := rand.Int31n(int32(len(tokens)))
 		result += string(tokens[r])
 	}
+	userSecretMutex.Lock()
 	if data, hasKey := AUTHUserSecrets[user]; hasKey {
 		if len(data) > 5 {
 			data = data[1:]
@@ -51,7 +65,8 @@ func AUTHRegister(user int64) string {
 	} else {
 		AUTHUserSecrets[user] = []string{result}
 	}
-	AUTHWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+	IndexSetWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+	userSecretMutex.Unlock()
 	return result
 }
 
@@ -72,8 +87,10 @@ func AUTHMatchSecret(user int64, secret string) bool {
 func AUTHDeregister(user int64, secret string) {
 	secrets := AUTHGetSecret(user)
 	if len(secrets) == 1 {
+		userSecretMutex.Lock()
 		delete(AUTHUserSecrets, user)
-		AUTHWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+		IndexSetWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+		userSecretMutex.Unlock()
 	} else if len(secrets) > 1 {
 		j := -1
 		for i, s := range secrets {
@@ -83,9 +100,11 @@ func AUTHDeregister(user int64, secret string) {
 			}
 		}
 		if j >= 0 {
+			userSecretMutex.Lock()
 			secrets[j] = secrets[len(secrets)-1]
 			AUTHUserSecrets[user] = secrets[:len(secrets)-1]
-			AUTHWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+			IndexSetWriteToFile(AUTHUserSecrets, "user_secrets.gob")
+			userSecretMutex.Unlock()
 		}
 	}
 }
@@ -123,17 +142,6 @@ func AUTHAppleIAP_URL(url string, receipt string) int {
 }
 
 func AUTHAppleIAP(receipt string) bool {
-	// productionURL := "https://buy.itunes.apple.com/verifyReceipt"
-	// sandboxURL := "https://sandbox.itunes.apple.com/verifyReceipt"
-
-	// status := AUTHAppleIAP_URL(productionURL, receipt)
-	// if status == 0 {
-	// 	return true
-	// } else if status == 21007 {
-	// 	return AUTHAppleIAP_URL(sandboxURL, receipt) == 0
-	// } else {
-	// 	return false
-	// }
 	client := appstore.New()
 	req := appstore.IAPRequest{
 		ReceiptData:            receipt,
@@ -182,6 +190,23 @@ func mapProductIdToCredit(id string) int64 {
 		return 100
 	}
 	return -1
+}
+
+func AUTHAlreadyPurchased(userId int64, data string, productId string, platform string) bool {
+	purchases := inAppPurchases[userId]
+	for _, purchase := range purchases {
+		if purchase.Data == data && purchase.ProductId == productId &&
+			purchase.Platform == platform {
+			return true
+		}
+	}
+	purchase := InAppPurchase{Platform: platform, ProductId: productId, Data: data}
+	purchases = append(purchases, purchase)
+	iapMutex.Lock()
+	inAppPurchases[userId] = purchases
+	IndexSetWriteToFile(inAppPurchases, "user_iap.gob")
+	iapMutex.Unlock()
+	return false
 }
 
 // -------------------------------------------------------------------------

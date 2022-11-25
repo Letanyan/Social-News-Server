@@ -1,11 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 )
 
-func SQLGetItems(table string, voteTable string, aliasFields string, returnedFields string, joins string,
+func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string, returnedFields string, joins string,
 	popularIn string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) string {
@@ -132,7 +133,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	}
 	if len(search) > 0 {
 		if table == "Posts p" || table == "Comments p" {
-			search, altTags := DBPrepareSearchString(search)
+			search, altTags := DBPrepareSearchString(db, search)
 			if table == "Posts p" && len(altTags) > 0 {
 				queryTags := SQLFormattedIndexArray(altTags)
 				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
@@ -146,7 +147,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}
 		} else if table == "Users p" || table == "Tags p" {
-			search, _ := DBPrepareSearchString(search)
+			search, _ := DBPrepareSearchString(db, search)
 			cond = append(cond, fmt.Sprintf("p.name @@ to_tsquery('%s')", search))
 			if sortOrder == soRank {
 				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.name), to_tsquery('%s')) AS rank", search))

@@ -372,8 +372,8 @@ func APIGetUsers(c *gin.Context) {
 		popularIn = []string{}
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -475,8 +475,8 @@ func APIGetUserPrefUsers(c *gin.Context) {
 		return
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 	search := c.DefaultQuery("search", "")
 	isOwner := ContextMatchSecret(c, uid)
 
@@ -546,8 +546,8 @@ func APIGetUserPrefPosts(c *gin.Context) {
 		return
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 	search := c.DefaultQuery("search", "")
 
 	isOwner := ContextMatchSecret(c, uid)
@@ -607,8 +607,8 @@ func APIGetUserPrefComments(c *gin.Context) {
 		return
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 	search := c.DefaultQuery("search", "")
 
 	isOwner := ContextMatchSecret(c, uid)
@@ -667,8 +667,8 @@ func APIGetUserPrefTags(c *gin.Context) {
 		return
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 	search := c.DefaultQuery("search", "")
 	isOwner := ContextMatchSecret(c, uid)
 
@@ -724,8 +724,8 @@ func APIGetUserContPost(kind UserContKind) func(*gin.Context) {
 			return
 		}
 
-		startDate := c.DefaultQuery("start", "")
-		endDate := c.DefaultQuery("end", "")
+		startDate := sanitizeDate(c.DefaultQuery("start", ""))
+		endDate := sanitizeDate(c.DefaultQuery("end", ""))
 		search := c.DefaultQuery("search", "")
 		isOwner := ContextMatchSecret(c, uid)
 
@@ -775,8 +775,8 @@ func APIGetUserContComments(c *gin.Context) {
 		return
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 	search := c.DefaultQuery("search", "")
 	isReview := c.DefaultQuery("isReview", "0") == "1"
 
@@ -800,8 +800,8 @@ func APIGetUserContUsers(ucp UserContKind) func(*gin.Context) {
 			return
 		}
 		isOwner := ContextMatchSecret(c, uid)
-		startDate := c.DefaultQuery("start", "")
-		endDate := c.DefaultQuery("end", "")
+		startDate := sanitizeDate(c.DefaultQuery("start", ""))
+		endDate := sanitizeDate(c.DefaultQuery("end", ""))
 
 		users := DBGetUserContUsers(mainDB, isOwner, uid, ucp, limit, offset, startDate, endDate)
 		APIReturn(c, true, users)
@@ -824,8 +824,8 @@ func APIGetUserContTags(ucp UserContKind) func(*gin.Context) {
 			return
 		}
 		isOwner := ContextMatchSecret(c, uid)
-		startDate := c.DefaultQuery("start", "")
-		endDate := c.DefaultQuery("end", "")
+		startDate := sanitizeDate(c.DefaultQuery("start", ""))
+		endDate := sanitizeDate(c.DefaultQuery("end", ""))
 
 		tags := DBGetUserContTag(mainDB, isOwner, uid, ucp, limit, offset, startDate, endDate)
 		APIReturn(c, true, tags)
@@ -902,10 +902,10 @@ func APIGetPosts(c *gin.Context) {
 		return
 	}
 
-	start := c.DefaultQuery("startCreated", "")
-	end := c.DefaultQuery("endCreated", "")
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	start := sanitizeDate(c.DefaultQuery("startCreated", ""))
+	end := sanitizeDate(c.DefaultQuery("endCreated", ""))
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -939,8 +939,8 @@ func APIGetSimilarPosts(c *gin.Context) {
 		return
 	}
 
-	// startDate := c.DefaultQuery("start", "")
-	// endDate := c.DefaultQuery("end", "")
+	// startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	// endDate := sanitizeDate(c.DefaultQuery("end", ""))
 
 	pid, e := strconv.ParseInt(c.DefaultQuery("pid", "0"), 10, 64)
 	if APIFailed(c, e, "invalid post id") {
@@ -1015,11 +1015,14 @@ func APIGetComments(c *gin.Context) {
 		popularIn = []string{}
 	}
 
-	startCreated := c.DefaultQuery("startCreated", "")
-	endCreated := c.DefaultQuery("endCreated", "")
-	start := c.DefaultQuery("start", "")
-	end := c.DefaultQuery("end", "")
-	isReview := c.DefaultQuery("isReview", "0") == "1"
+	startCreated := sanitizeDate(c.DefaultQuery("startCreated", ""))
+	endCreated := sanitizeDate(c.DefaultQuery("endCreated", ""))
+	start := sanitizeDate(c.DefaultQuery("start", ""))
+	end := sanitizeDate(c.DefaultQuery("end", ""))
+	isReview, e := strconv.ParseInt(c.DefaultQuery("isReview", "0"), 10, 64)
+	if APIFailed(c, e, "isReview must be int") {
+		return
+	}
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -1028,7 +1031,7 @@ func APIGetComments(c *gin.Context) {
 
 	search := c.DefaultQuery("search", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, isReview, start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
+	result := DBGetComments(mainDB, pid, uid, replyId, int8(isReview), start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
 	APIReturn(c, true, result)
 }
 
@@ -1100,8 +1103,8 @@ func APIGetTags(c *gin.Context) {
 		return
 	}
 
-	startDate := c.DefaultQuery("start", "")
-	endDate := c.DefaultQuery("end", "")
+	startDate := sanitizeDate(c.DefaultQuery("start", ""))
+	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -1671,14 +1674,23 @@ func APIVerifyGoogleIAP(c *gin.Context) {
 	}
 
 	isAuthentic := AUTHGoogleIAP(in.Data, in.ProductId)
+	if !isAuthentic {
+		APIReturn(c, false, -1)
+		return
+	}
 	amount := mapProductIdToCredit(in.ProductId)
 	if amount == -1 {
 		APIReturn(c, false, -1)
 		return
 	}
-	result := DBAddUserCredit(mainDB, in.UserId, amount)
+	alreadyPurchased := AUTHAlreadyPurchased(in.UserId, in.Data, in.ProductId, "google")
+	if alreadyPurchased {
+		APIReturn(c, false, -1)
+		return
+	}
 
-	APIReturn(c, isAuthentic, result)
+	result := DBAddUserCredit(mainDB, in.UserId, amount)
+	APIReturn(c, true, result)
 }
 
 func APIVerifyAppleIAP(c *gin.Context) {
@@ -1697,14 +1709,23 @@ func APIVerifyAppleIAP(c *gin.Context) {
 	}
 
 	isAuthentic := AUTHAppleIAP(in.Data)
+	if !isAuthentic {
+		APIReturn(c, false, -1)
+		return
+	}
 	amount := mapProductIdToCredit(in.ProductId)
 	if amount == -1 {
 		APIReturn(c, false, -1)
 		return
 	}
+	alreadyPurchased := AUTHAlreadyPurchased(in.UserId, in.Data, in.ProductId, "apple")
+	if alreadyPurchased {
+		APIReturn(c, false, -1)
+		return
+	}
 	result := DBAddUserCredit(mainDB, in.UserId, amount)
 
-	APIReturn(c, isAuthentic, result)
+	APIReturn(c, true, result)
 }
 
 func APIAvailable(c *gin.Context) {

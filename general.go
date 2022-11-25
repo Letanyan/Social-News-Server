@@ -1,23 +1,12 @@
 package main
 
 import (
-	"encoding/gob"
-	"os"
+	"database/sql"
 	"regexp"
 	"strings"
 	"sync"
 	"unicode"
 )
-
-func replaceUnicode(original string, shouldRemove func(rune) bool) string {
-	result := ""
-	for _, c := range original {
-		if !shouldRemove(c) {
-			result += string(c)
-		}
-	}
-	return result
-}
 
 func filterMapUnicode(original string, shouldRemove func(rune) bool, mapping func(rune) rune) string {
 	result := ""
@@ -42,10 +31,6 @@ func tagFormat(original string) []string {
 		}
 	}
 	return result
-}
-
-func isNotWebSearchQuery(c rune) bool {
-	return !(unicode.IsLetter(c) || unicode.IsNumber(c) || unicode.IsSpace(c) || c == '-' || c == '"')
 }
 
 func ContainsItem[I comparable](item I, list []I) bool {
@@ -74,7 +59,6 @@ func DBPrepareTaggedString(text string, removeOnlyHash bool) (string, []string) 
 	tagNames := []string{}
 	tags := []string{}
 	if DidFail(e, "compile tag regex") {
-		text = replaceUnicode(text, isNotWebSearchQuery)
 		return text, tags
 	}
 	text = tagRe.ReplaceAllStringFunc(text, func(m string) string {
@@ -233,10 +217,10 @@ func DBParseSearchString(query string) string {
 	return cleaned
 }
 
-func DBPrepareSearchString(query string) (string, []int64) {
+func DBPrepareSearchString(db *sql.DB, query string) (string, []int64) {
 	text, tagNames := DBPrepareTaggedString(query, false)
 	text = DBParseSearchString(text)
-	tagObjects := DBGetTags(mainDB, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
+	tagObjects := DBGetTags(db, -1, tagNames, []string{}, 0, 0, soUpvotes, int64(len(tagNames)), 0, "", "", 0, "")
 	tags := []int64{}
 	for _, t := range tagObjects {
 		tags = append(tags, t.ID)
@@ -245,34 +229,34 @@ func DBPrepareSearchString(query string) (string, []int64) {
 	return text, tags
 }
 
-func AUTHLoadFromFile(fileName string) map[int64][]string {
-	result := map[int64][]string{}
-	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
-	if DidFail(e, "open file ", fileName) {
-		return result
-	}
-	defer file.Close()
+// func AUTHLoadFromFile(fileName string) map[int64][]string {
+// 	result := map[int64][]string{}
+// 	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+// 	if DidFail(e, "open file ", fileName) {
+// 		return result
+// 	}
+// 	defer file.Close()
 
-	dec := gob.NewDecoder(file)
-	e = dec.Decode(&result)
-	if DidFail(e, "decode file ", fileName, " to hash map") {
-		return result
-	}
-	return result
-}
+// 	dec := gob.NewDecoder(file)
+// 	e = dec.Decode(&result)
+// 	if DidFail(e, "decode file ", fileName, " to hash map") {
+// 		return result
+// 	}
+// 	return result
+// }
 
-func AUTHWriteToFile(data map[int64][]string, fileName string) {
-	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
-	if DidFail(e, "open file ", fileName) {
-		return
-	}
-	defer file.Close()
-	enc := gob.NewEncoder(file)
-	e = enc.Encode(data)
-	if DidFail(e, "gob write file") {
-		return
-	}
-}
+// func AUTHWriteToFile(data map[int64][]string, fileName string) {
+// 	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
+// 	if DidFail(e, "open file ", fileName) {
+// 		return
+// 	}
+// 	defer file.Close()
+// 	enc := gob.NewEncoder(file)
+// 	e = enc.Encode(data)
+// 	if DidFail(e, "gob write file") {
+// 		return
+// 	}
+// }
 
 func Zero[T any]() T {
 	var result T

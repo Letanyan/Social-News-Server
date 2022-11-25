@@ -356,7 +356,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getPosts := SQLGetItems("Posts p", voteTable, SQLFieldsForPostResultAlias(),
+	getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
 		SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, startDate, endDate, forUser, search)

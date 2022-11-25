@@ -243,7 +243,7 @@ func DBGetComment(db *sql.DB, postId int64, commentId int64) CommentResult {
 }
 
 // ignore postId if 0, ignore userId if 0, ignore replyId if less than 0, start < CreatedAt < end ignore if empty, ignore upvotes if 0
-func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isReview bool,
+func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isReview int8,
 	start string, end string, popularIn []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startCreated string, endCreated string, forUser int64, search string) []CommentResult {
@@ -271,9 +271,9 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 	} else if len(endCreated) > 0 {
 		cond = append(cond, fmt.Sprintf("p.createdAt < (TIMESTAMP '%s')\n", endCreated))
 	}
-	if isReview {
+	if isReview == 1 {
 		cond = append(cond, "p.isReview=true")
-	} else {
+	} else if isReview == 0 {
 		cond = append(cond, "p.isReview=false")
 	}
 
@@ -286,7 +286,7 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getComments := SQLGetItems("Comments p", voteTable, SQLFieldsForCommentResultAlias(),
+	getComments := SQLGetItems(db, "Comments p", voteTable, SQLFieldsForCommentResultAlias(),
 		SQLFieldsForCommentResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, start, end, forUser, search)
