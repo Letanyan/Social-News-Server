@@ -1,6 +1,9 @@
 package main
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+)
 
 func DBAgentPathExists(db *sql.DB, agentId int64, path string) bool {
 	query := `
@@ -29,4 +32,13 @@ func DBAgentPathInsert(db *sql.DB, agentId int64, path string) bool {
 	`
 	_, e := db.Exec(query, agentId, path)
 	return !DidFail(e, "insert iap for user", query)
+}
+
+func DBAgentPathRemoveOld(db *sql.DB, monthAgo int) {
+	query := fmt.Sprintf(`
+	DELETE FROM Agents
+	WHERE date < ((now() at time zone 'utc') - interval '%d month')
+	`, monthAgo)
+	_, e := db.Exec(query)
+	DidFail(e, "delete old agent paths", query)
 }

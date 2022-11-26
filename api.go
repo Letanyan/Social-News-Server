@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -102,7 +103,7 @@ func APICreateUser(c *gin.Context) {
 
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID > 0 {
-		SendValidationKey(user.ID, user.Email, user.ValidationKey)
+		MailValidationKey(user.ID, user.Email, user.ValidationKey)
 		secret := AUTHRegister(user.ID)
 		APIReturn(c, true, gin.H{"user": user, "token": secret})
 	} else {
@@ -1611,6 +1612,78 @@ func APISignOut(c *gin.Context) {
 	APIReturn(c, true, "")
 }
 
+func APISendPasswordReset(c *gin.Context) {
+	type Input struct {
+		Email string `json:"email"`
+	}
+
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for password reset") {
+		return
+	}
+
+	user := DBGetUser(mainDB, 0, in.Email)
+	if user.ID == 0 {
+		APIReturn(c, false, fmt.Sprintf("no user with email '%s' exists", in.Email))
+		return
+	}
+
+	rand.Seed(time.Now().Unix())
+	key := rand.Int31()
+	AUTHUserReset.Store(user.ID, key)
+	time.AfterFunc(time.Minute*30, func() {
+		AUTHUserReset.Delete(user.ID)
+	})
+
+	MailPasswordReset(user.ID, in.Email, key)
+	APIReturn(c, true, 0)
+}
+
+func APIPasswordResetForm(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if DidFail(e, "invalid user id") {
+		return
+	}
+
+	key, e := strconv.ParseInt(c.Param("key"), 10, 32)
+	if DidFail(e, "invalid key") {
+		return
+	}
+
+	APIReturnHTML(c, "reset_password_form.html", gin.H{"UserId": uid, "Key": key, "Src": serverAddr})
+}
+
+func APIResetPassword(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if DidFail(e, "invalid user id") {
+		APIReturnHTML(c, "reset_password_failed.html", gin.H{})
+		return
+	}
+
+	nKey, e := strconv.ParseInt(c.Param("key"), 10, 32)
+	if DidFail(e, "invalid key") {
+		APIReturnHTML(c, "reset_password_failed.html", gin.H{})
+		return
+	}
+
+	oKey, loaded := AUTHUserReset.LoadAndDelete(uid)
+	if !(loaded && int32(nKey) == oKey.(int32)) {
+		APIReturnHTML(c, "reset_password_failed.html", gin.H{})
+		return
+	}
+
+	type Input struct {
+		Password string `json:"password"`
+	}
+	var in Input
+	if e := c.Bind(&in); APIFailed(c, e, "get input for password reset") {
+		return
+	}
+	DBResetPasswordForUser(mainDB, uid, password)
+
+	APIReturnHTML(c, "reset_password_confirmed.html", gin.H{})
+}
+
 func APIResendVerificationLink(c *gin.Context) {
 	type Input struct {
 		Email string `json:"email"`
@@ -1628,7 +1701,7 @@ func APIResendVerificationLink(c *gin.Context) {
 		return
 	}
 
-	SendValidationKey(uid, in.Email, in.Key)
+	MailValidationKey(uid, in.Email, in.Key)
 	APIReturn(c, true, 0)
 }
 

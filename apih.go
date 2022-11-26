@@ -122,7 +122,7 @@ func APIUpdateAgent(c *gin.Context) {
 		return
 	}
 
-	result := NAUpdateNewsAgentWithID(aid)
+	result := NAUpdateNewsAgentWithID(mainDB, aid)
 
 	APIReturn(c, true, result)
 }
@@ -132,7 +132,7 @@ func APIUpdateAgents(c *gin.Context) {
 		return
 	}
 
-	result := NAUpdateAllNewsAgent(0)
+	result := NAUpdateAllNewsAgent(mainDB, 0)
 
 	APIReturn(c, true, result)
 }

@@ -314,7 +314,7 @@ func DBAgentsSetup(db *sql.DB) {
 		date TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (agentId, path)
-	) PARTITION BY HASH(agentId, path);`
+	) PARTITION BY HASH(agentId);`
 	_, e := db.Exec(createAgents)
 	DidFail(e, "create agents table")
 	createIapTable := func(mod int, rem int) {

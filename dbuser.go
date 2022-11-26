@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"math/rand"
-	"net/smtp"
-	"text/template"
 	"time"
 )
 
@@ -193,30 +190,6 @@ func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
 		return false
 	}
 	return key == 0
-}
-
-func SendValidationKey(userId int64, email string, key int32) {
-	host := "smtp.gmail.com"
-	port := "587"
-	from := "letanyan.a@gmail.com"
-	auth := smtp.PlainAuth("", from, "wlyoihckobjsbzlv", host)
-	t, _ := template.ParseFiles("templates/verify.html")
-	var body bytes.Buffer
-	mimeHeaders := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
-	body.Write([]byte(fmt.Sprintf("Subject: New Source Email Verification \n%s\n\n", mimeHeaders)))
-	t.Execute(&body, struct {
-		UserId int64
-		Key    int32
-	}{
-		UserId: userId,
-		Key:    key,
-	})
-
-	e := smtp.SendMail(host+":"+port, auth, from, []string{email}, body.Bytes())
-
-	if DidFail(e, "send mail") {
-		return
-	}
 }
 
 func DBSignIn(db *sql.DB, email string, password string) User {

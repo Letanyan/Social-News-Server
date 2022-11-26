@@ -22,12 +22,14 @@ import (
 
 var userSecretMutex sync.Mutex
 var AUTHUserSecrets map[int64][]string
+var AUTHUserReset sync.Map
 var googleKeys map[string]string
 var appleTokens sync.Map
 
 func init() {
 	userSecretMutex = sync.Mutex{}
 	AUTHUserSecrets = IndexSetFromFile[[]string]("user_secrets.gob")
+	AUTHUserReset = sync.Map{}
 	googleKeys = map[string]string{}
 	appleTokens = sync.Map{}
 }

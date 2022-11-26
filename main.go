@@ -27,11 +27,11 @@ var (
 )
 
 var (
-	mainDB        *sql.DB
-	agents        []NewsAgent
-	agentHashSets map[int64]map[string]int64
-	agentsMutex   KeyedMutex
-	englishWords  map[string]bool
+	mainDB       *sql.DB
+	agents       []NewsAgent
+	agentsMutex  KeyedMutex
+	englishWords map[string]bool
+	serverAddr   string
 )
 
 func main() {
@@ -41,6 +41,7 @@ func main() {
 		user = "dev"
 		password = "AbstractData00"
 		dbname = "socialnewsserverdev"
+		serverAddr = "http://localhost:8080"
 	} else {
 		host = os.Getenv("DB_HOSTNAME")
 		port, _ = strconv.ParseInt(os.Getenv("DB_PORT"), 10, 64)
@@ -48,10 +49,19 @@ func main() {
 		password = os.Getenv("DB_PASSWORD")
 		dbname = os.Getenv("DB_DATABASE")
 		gin.SetMode(gin.ReleaseMode)
+		serverAddr = "https://new-source-server-mhvly.ondigitalocean.app"
 	}
 
 	router := gin.Default()
-	router.LoadHTMLFiles("./templates/verify_confirmed.html", "./templates/verify_failed.html")
+	router.LoadHTMLFiles(
+		"./templates/verify.html",
+		"./templates/verify_confirmed.html",
+		"./templates/verify_failed.html",
+		"./templates/reset_password.html",
+		"./templates/reset_password_form.html",
+		"./templates/reset_password_confirmed.html",
+		"./templates/reset_password_failed.html",
+	)
 	router.GET("/", index)
 
 	api := router.Group("/api")
@@ -65,6 +75,11 @@ func main() {
 		v1.POST("/auth/sign-out", APISignOut)
 		v1.POST("/auth/verification/users/:uid", APIResendVerificationLink)
 		v1.GET("/users/:uid/verification/:key", APIVerifyUserEmail)
+
+		v1.POST("/auth/password-reset", APISendPasswordReset)
+		v1.GET("/users/:uid/password-reset/:key", APIPasswordResetForm)
+		v1.POST("/users/:uid/password-reset/:key", APIResetPassword)
+
 		v1.POST("/auth/google-iap", APIVerifyGoogleIAP)
 		v1.POST("/auth/apple-iap", APIVerifyAppleIAP)
 		v1.GET("/available", APIAvailable)
@@ -153,10 +168,9 @@ func main() {
 
 	// agents = NAReadAllNewsAgents()
 	// agentsMutex = KeyedMutex{}
-	// NARegisterHourlyUpdates()
-	// NARegisterWeeklyCleanUp()
-
-	// ConvertAllAgentsFromFileToDB(mainDB)
+	// NARegisterHourlyUpdates(mainDB)
+	// NARegisterWeeklyCleanUp(mainDB)
+	// SendValidationKey(1, "letanyan.a@gmail.com", 42)
 
 	port := os.Getenv("PORT")
 	if port == "" {
