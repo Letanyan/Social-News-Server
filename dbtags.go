@@ -196,7 +196,7 @@ func DBGetTagsFromIDs(db *sql.DB, ids []int64) []Tag {
 	query := fmt.Sprintf(`
 	SELECT %s
 	FROM Tags p
-	WHERE ARRAY[p.id] <@ %s
+	WHERE ARRAY[p.id] <@ %s;
 	`, SQLFieldsForTagAlias(), SQLFormattedIndexArray(ids))
 	rows, e := db.Query(query)
 	result := []Tag{}
@@ -211,7 +211,7 @@ func DBGetTagsFromNames(db *sql.DB, names []string) []Tag {
 	query := fmt.Sprintf(`
 	SELECT %s
 	FROM Tags p
-	WHERE ARRAY[p.name] <@ %s
+	WHERE ARRAY[p.name] <@ %s;
 	`, SQLFieldsForTagAlias(), SQLFormattedArray(names))
 	rows, e := db.Query(query)
 	result := []Tag{}
@@ -251,7 +251,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getTags := SQLGetItems("Tags p", voteTable, SQLFieldsForTagAlias(),
+	getTags := SQLGetItems(db, "Tags p", voteTable, SQLFieldsForTagAlias(),
 		SQLFieldsForTag(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, startDate, endDate, forUser, search)

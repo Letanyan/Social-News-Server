@@ -21,7 +21,7 @@ type Post struct {
 	Downvotes    int64
 	CommentCount int32
 	Trashed      bool
-	Edited       bool
+	Edited       time.Time
 
 	Score float64
 	Cred  float64
@@ -39,7 +39,7 @@ type PostResult struct {
 	Downvotes    int64
 	CommentCount int32
 	Trashed      bool
-	Edited       bool
+	Edited       time.Time
 
 	Score float64
 	Cred  float64
@@ -144,10 +144,12 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 	for _, t := range tagObjects {
 		tagIndices = append(tagIndices, t.ID)
 	}
+	locIndex := DBCreateLocation(db, location)
+	locArray := SQLFormattedIndexArray(locIndex)
 
 	insertPost := fmt.Sprintf(`
-	INSERT INTO posts(userId, content, tags, createdAt, location) 
-	VALUES ($1, $2, %s, '%s', %s) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, SQLFormattedArray(location), SQLFieldsForPost())
+	INSERT INTO posts(userId, content, tags, createdAt, edited, location) 
+	VALUES ($1, $2, %s, '%s', '%s', %s) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, nowTime, locArray, SQLFieldsForPost())
 	row := db.QueryRow(insertPost, userId, content)
 
 	post, e := ScanPost(row)
@@ -166,10 +168,15 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 }
 
 func DBUpdatePost(db *sql.DB, postId int64, content string) Post {
+	t := utc()
+	nowTime := formatTime(t)
+
 	updatePost := fmt.Sprintf(`
-	UPDATE Posts SET content=$1, Edited=True WHERE id=$2
+	UPDATE Posts 
+	SET content=$1, Edited='%s' 
+	WHERE id=$2
 	RETURNING %s
-	`, SQLFieldsForPost())
+	`, nowTime, SQLFieldsForPost())
 	row := db.QueryRow(updatePost, content, postId)
 	post, e := ScanPost(row)
 	if DidFail(e, "update post ", postId) {
@@ -356,7 +363,7 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getPosts := SQLGetItems("Posts p", voteTable, SQLFieldsForPostResultAlias(),
+	getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
 		SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, startDate, endDate, forUser, search)

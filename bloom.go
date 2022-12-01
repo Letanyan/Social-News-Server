@@ -110,6 +110,35 @@ func HashSetWriteToFile[V any](hashSet map[string]V, fileName string) {
 	}
 }
 
+func IndexSetFromFile[V any](fileName string) map[int64]V {
+	result := map[int64]V{}
+	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
+	if DidFail(e, "open file ", fileName) {
+		return result
+	}
+	defer file.Close()
+
+	dec := gob.NewDecoder(file)
+	e = dec.Decode(&result)
+	if DidFail(e, "decode file ", fileName, " to hash map") {
+		return result
+	}
+	return result
+}
+
+func IndexSetWriteToFile[V any](data map[int64]V, fileName string) {
+	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, 0644)
+	if DidFail(e, "open file ", fileName) {
+		return
+	}
+	defer file.Close()
+	enc := gob.NewEncoder(file)
+	e = enc.Encode(data)
+	if DidFail(e, "gob write file") {
+		return
+	}
+}
+
 func MurmurHash(word string, seed uint32) uint32 {
 	m := uint32(0x5bd1e995)
 	r := int32(24)

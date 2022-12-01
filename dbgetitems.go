@@ -1,11 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 )
 
-func SQLGetItems(table string, voteTable string, aliasFields string, returnedFields string, joins string,
+func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string, returnedFields string, joins string,
 	popularIn string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
 	sortOrder SortOrder, limit int64, offset int64,
 	startDate string, endDate string, forUser int64, search string) string {
@@ -45,14 +46,17 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 				FROM UserPrefs, TagTotal t
 				WHERE kind=3 OR kind=4 -- liked tags or watched tags
 			), TImp AS (
-				SELECT t.id id, 0.1 AS value
+				SELECT t.id id, 0.2 AS value
 				FROM UserConts uc
 				JOIN Tags t ON t.id=uc.pid
 				WHERE uc.kind=6 -- favourite tag
 			)
-			SELECT a.id id, (COALESCE(a.value, 0) + COALESCE(b.value, 0)) AS value
-			FROM TEx a
-			FULL JOIN TImp b ON a.id=b.id
+			SELECT id, SUM(value) AS Value
+			FROM (
+				SELECT id, value FROM TEx
+				UNION ALL
+				SELECT id, value FROM TImp
+			) T GROUP BY id
 		),
 		
 		
@@ -66,13 +70,17 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 				FROM UserPrefs, UserTotal t
 				WHERE kind=0 -- liked users
 			), USImp AS (
-				SELECT uc.pid id, 0.05 AS value
+				SELECT uc.pid id, 0.2 AS value
 				FROM UserConts uc
 				WHERE uc.kind=3 -- following user
 			) 
-			SELECT a.id id, (COALESCE(a.value, 0) + COALESCE(b.value, 0)) AS value
-			FROM USEx a
-			FULL JOIN USImp b ON a.id=b.id
+			SELECT id, SUM(value) AS Value
+			
+			FROM (
+				SELECT id, value FROM USEx
+				UNION ALL
+				SELECT id, value FROM USImp
+			) T GROUP BY id
 		),
 		
 		Ignored AS (
@@ -132,7 +140,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 	}
 	if len(search) > 0 {
 		if table == "Posts p" || table == "Comments p" {
-			search, altTags := DBPrepareSearchString(search)
+			search, altTags := DBPrepareSearchString(db, search)
 			if table == "Posts p" && len(altTags) > 0 {
 				queryTags := SQLFormattedIndexArray(altTags)
 				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
@@ -146,7 +154,7 @@ func SQLGetItems(table string, voteTable string, aliasFields string, returnedFie
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}
 		} else if table == "Users p" || table == "Tags p" {
-			search, _ := DBPrepareSearchString(search)
+			search, _ := DBPrepareSearchString(db, search)
 			cond = append(cond, fmt.Sprintf("p.name @@ to_tsquery('%s')", search))
 			if sortOrder == soRank {
 				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(to_tsvector(p.name), to_tsquery('%s')) AS rank", search))
