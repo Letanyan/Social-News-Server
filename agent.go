@@ -162,7 +162,7 @@ func NAReadAllNewsAgents() []NewsAgent {
 	createdNew := false
 	for i := range result {
 		agent := result[i]
-		oldUser := DBGetUser(mainDB, agent.ID, "")
+		oldUser, _ := DBGetUser(mainDB, agent.ID, "")
 		if oldUser.ID == 0 || oldUser.Email != "" {
 			createdNew = true
 			user := DBCreateUser(mainDB, agent.Name, "", "")
@@ -174,6 +174,14 @@ func NAReadAllNewsAgents() []NewsAgent {
 		NAWriteAllNewsAgents(result)
 	}
 
+	return result
+}
+
+func NAReadAllAgentsOnboarding() map[string]int64 {
+	result := map[string]int64{}
+	for _, agent := range agents {
+		result[agent.Name] = agent.ID
+	}
 	return result
 }
 
@@ -285,7 +293,7 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 	scraping := NAScrapeWebsite(agent.Origin)
 
 	if scraping.Type == "article" {
-		NACreatePost(agent.ID, agent.Origin, scraping)
+		NACreatePost(agent.ID, agent.Origin, scraping, true)
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
@@ -309,7 +317,7 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 				DBAgentPathInsert(db, id, canURLString)
 				subScraping := NAScrapeWebsite(urlString)
 				if subScraping.Type == "article" {
-					NACreatePost(agent.ID, urlString, subScraping)
+					NACreatePost(agent.ID, urlString, subScraping, true)
 				}
 			}
 		}
@@ -436,6 +444,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				} else if names["article:section"] || properties["article:section"] {
 					tagList := tagFormat(getFirstValForAttr(n, "content"))
 					tags = append(tags, tagList...)
+					englishWordTagCount += countEnglishTagWords(tagList)
 				} else if names["og:type"] || properties["og:type"] {
 					contentType = getFirstValForAttr(n, "content")
 				} else if names["article:modified_time"] || properties["article:modified_time"] {
@@ -449,6 +458,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 				} else if names["og:section"] || properties["og:section"] {
 					tagList := tagFormat(getFirstValForAttr(n, "content"))
 					tags = append(tags, tagList...)
+					englishWordTagCount += countEnglishTagWords(tagList)
 				}
 			case "a":
 				links = append(links, getFirstValForAttr(n, "href"))
@@ -484,7 +494,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, locale, language, date}
 }
 
-func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
+func NACreatePost(userId int64, url string, scrape WebsiteScrapings, store bool) PostResult {
 	body := url + "\n!" + scrape.Title
 
 	if len(scrape.Image) > 0 {
@@ -508,34 +518,54 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings) {
 
 	tags := scrape.Tags
 	comps := strings.Split(url, "/")
-	common := map[string]bool{
-		"sport": true, "boxing": true, "football": true,
-		"news": true, "politics": true, "money": true,
-		"tv": true, "cricket": true, "travel": true,
-		"gaming": true, "world": true, "business": true,
-		"technology": true, "science": true, "lifestyle": true,
-		"film": true, "movies": true, "family": true, "sex": true,
-		"dieting": true, "weird": true, "crime": true, "health": true,
-		"tech": true, "ufc": true, "rugby": true, "f1": true,
-		"racing": true, "golf": true, "tennis": true, "athletics": true,
-		"darts": true, "snooker": true, "baseball": true,
-		"basketball": true, "celebrity": true,
-		"weird-news": true, "africa": true, "americas": true,
-		"china": true, "asia": true, "asia-pacific": true,
-		"europe": true, "india": true, "middle-east": true,
-		"united-kingdom": true, "uk": true, "us": true,
-		"energy": true, "environment": true, "finance": true,
-	}
 	for _, comp := range comps {
 		t := strings.ToLower(comp)
-		if _, found := common[t]; found {
+		if _, found := tagsOnboarding[t]; found {
 			tags = append(tags, t)
 		}
 	}
 	tags = makeUnique(tags)
 	reverse(tags)
 
-	DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
+	var result PostResult
+	if store {
+		result = DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
+	} else {
+		user, _ := DBGetUser(mainDB, userId, "")
+		author := UserProfile{user.ID, user.Name, user.RegisterDate, user.Upvotes, user.Downvotes, int64(user.Investment), false, 0, 0, 0}
+		tagObjs := DBCreateTags(mainDB, tags)
+		tagIds := []int64{}
+		for _, tag := range tagObjs {
+			tagIds = append(tagIds, tag.ID)
+		}
+		currentTime := utc()
+		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0}
+	}
+	return result
+}
+
+func NAReadAllTagsOnboarding() map[string]int64 {
+	raw := []string{
+		"money", "crime", "energy", "health", "ufc",
+		"basketball", "travel", "cricket", "golf",
+		"baseball", "snooker", "boxing", "china",
+		"tennis", "athletics", "europe", "tv",
+		"environment", "football", "family", "india",
+		"f1", "africa", "film", "politics",
+		"gaming", "world", "finance", "business",
+		"us", "tech", "uk", "americas",
+		"news", "darts", "science", "rugby",
+		"racing", "middle-east", "weird-news", "dieting",
+		"celebrity", "sport", "lifestyle", "asia",
+		"movies", "asia-pacific", "sex", "weird",
+		"technology",
+	}
+	tags := DBCreateTags(mainDB, raw)
+	result := map[string]int64{}
+	for _, tag := range tags {
+		result[tag.Name] = tag.ID
+	}
+	return result
 }
 
 func NARegisterHourlyUpdates(db *sql.DB) {

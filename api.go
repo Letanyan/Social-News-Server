@@ -105,7 +105,7 @@ func APICreateUser(c *gin.Context) {
 	if user.ID > 0 {
 		MailValidationKey(user.ID, user.Email, user.ValidationKey)
 		secret := AUTHRegister(user.ID)
-		APIReturn(c, true, gin.H{"user": user, "token": secret})
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": user.Credits, "following": []string{}, "ignored": []string{}, "tags": []string{}})
 	} else {
 		APIReturn(c, false, "could not create user")
 	}
@@ -113,8 +113,10 @@ func APICreateUser(c *gin.Context) {
 
 func APICreatePost(c *gin.Context) {
 	type Input struct {
-		UserID  int64  `json:"userId"`
-		Content string `json:"content"`
+		UserID    int64    `json:"userId"`
+		Content   string   `json:"content"`
+		Location  []string `json:"location"`
+		IsPreview bool     `json:"isPreview"`
 	}
 	var in Input
 
@@ -131,14 +133,29 @@ func APICreatePost(c *gin.Context) {
 		return
 	}
 
-	loc := getAddress(c.ClientIP())
-	date := time.Time{}
-	text, tags := DBPrepareTaggedString(in.Content, true)
-	post := DBCreatePost(mainDB, in.UserID, text, date, tags, loc)
-	if post.ID > 0 {
-		APIReturn(c, true, post)
+	if in.IsPreview {
+		// assume the client verified that content is just a url
+		// and wants to use server for producing a preview.
+		// In other words `IsPreview` can only be true if `Content`
+		// is a single url.
+		scrape := NAScrapeWebsite(in.Content)
+		result := NACreatePost(in.UserID, in.Content, scrape, false)
+		APIReturn(c, true, result)
 	} else {
-		APIReturn(c, false, "could not create post")
+		user, _ := DBGetUser(mainDB, in.UserID, "")
+		if user.Blocked.After(utc()) {
+			APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
+		} else {
+			date := time.Time{}
+			text, tags := DBPrepareTaggedString(in.Content, true)
+			post := DBCreatePost(mainDB, in.UserID, text, date, tags, in.Location)
+			if post.ID > 0 {
+				APIReturn(c, true, post)
+			} else {
+				APIReturn(c, false, "could not create post")
+			}
+		}
+
 	}
 }
 
@@ -172,11 +189,16 @@ func APICreateComment(c *gin.Context) {
 		return
 	}
 
-	comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
-	if comment.ID > 0 {
-		APIReturn(c, true, comment)
+	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if user.Blocked.After(utc()) {
+		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
 	} else {
-		APIReturn(c, false, "could not create post")
+		comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
+		if comment.ID > 0 {
+			APIReturn(c, true, comment)
+		} else {
+			APIReturn(c, false, "could not create post")
+		}
 	}
 }
 
@@ -201,8 +223,13 @@ func APIUpdatePost(c *gin.Context) {
 		return
 	}
 
-	post := DBUpdatePost(mainDB, postId, in.Content)
-	APIReturn(c, true, post)
+	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if user.Blocked.After(utc()) {
+		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
+	} else {
+		post := DBUpdatePost(mainDB, postId, in.Content)
+		APIReturn(c, true, post)
+	}
 }
 
 func APIUpdateComment(c *gin.Context) {
@@ -231,8 +258,13 @@ func APIUpdateComment(c *gin.Context) {
 		return
 	}
 
-	comment := DBUpdateComment(mainDB, postId, commentId, in.Content)
-	APIReturn(c, true, comment)
+	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if user.Blocked.After(utc()) {
+		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
+	} else {
+		comment := DBUpdateComment(mainDB, postId, commentId, in.Content)
+		APIReturn(c, true, comment)
+	}
 }
 
 // ------------------------------------------------------------------------
@@ -331,14 +363,14 @@ func APIGetUser(c *gin.Context) {
 		return
 	}
 
-	user := DBGetUser(mainDB, uid, "")
-	if user.ID == 0 {
-		APIReturn(c, false, "no user found with id"+fmt.Sprint(uid))
+	user, streak := DBGetUser(mainDB, uid, "")
+	if user.ID <= 0 {
+		APIReturn(c, false, "no user found with id "+fmt.Sprint(uid))
 	} else {
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
-		APIReturn(c, true, gin.H{"user": user, "token": "notSecret", "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{"user": user, "token": "notSecret", "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
 }
 
@@ -634,10 +666,6 @@ func APIGetUserPrefTags(c *gin.Context) {
 		return
 	}
 
-	location := strings.Split(c.DefaultQuery("location", ""), ",")
-	if len(location) == 1 && location[0] == "" {
-		location = []string{}
-	}
 	tags := strings.Split(c.DefaultQuery("tags", ""), ",")
 	if len(tags) == 1 && tags[0] == "" {
 		tags = []string{}
@@ -673,7 +701,7 @@ func APIGetUserPrefTags(c *gin.Context) {
 	search := c.DefaultQuery("search", "")
 	isOwner := ContextMatchSecret(c, uid)
 
-	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, location, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, result)
 }
 
@@ -1063,6 +1091,10 @@ func APIGetTagsFromIDs(c *gin.Context) {
 		APIReturn(c, false, "invalid input values")
 		return
 	}
+	if len(in.Ids) == 0 {
+		APIReturn(c, true, []Tag{})
+		return
+	}
 
 	result := DBGetTagsFromIDs(mainDB, in.Ids)
 
@@ -1353,6 +1385,31 @@ func APIUpdateUser(c *gin.Context) {
 	APIReturn(c, true, "")
 }
 
+func APIOnboard(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+	type Input struct {
+		Tags  []int64 `json:"tags"`
+		Users []int64 `json:"users"`
+	}
+	var in Input
+	if e := c.BindJSON(&in); APIFailed(c, e, "get input for vote post") {
+		return
+	}
+	for _, tag := range in.Tags {
+		DBCreateUserCont(mainDB, ucpTagFollow, uid, tag, -1)
+	}
+	for _, user := range in.Users {
+		DBCreateUserCont(mainDB, ucpUserFollow, uid, user, -1)
+	}
+
+	following := DBGetUserContUsers(mainDB, true, uid, ucpUserFollow, 0, 0, "", "")
+	tagFollowing := DBGetUserContTag(mainDB, true, uid, ucpTagFollow, 0, 0, "", "")
+	APIReturn(c, true, gin.H{"following": following, "tags": tagFollowing})
+}
+
 func APIWatchUser(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if APIFailed(c, e, "invalid user id") {
@@ -1382,6 +1439,14 @@ func APIWatchUser(c *gin.Context) {
 	APIReturn(c, true, pref)
 }
 
+func APIOnboardAgents(c *gin.Context) {
+	APIReturn(c, true, agentsOnboarding)
+}
+
+func APIOnboardTags(c *gin.Context) {
+	APIReturn(c, true, tagsOnboarding)
+}
+
 // ------------------------------------------------------------------------
 // Admin
 // ------------------------------------------------------------------------
@@ -1397,6 +1462,10 @@ func APICreateFlag(c *gin.Context) {
 
 	var in Input
 	if e := c.BindJSON(&in); APIFailed(c, e, "get input for flag") {
+		return
+	}
+
+	if !APIMatchSecret(c, in.UID) {
 		return
 	}
 
@@ -1421,6 +1490,10 @@ func APIGetFlaggedPosts(c *gin.Context) {
 		return
 	}
 
+	if !APIMatchSecret(c, -1) {
+		return
+	}
+
 	content := DBGetFlaggedPosts(mainDB, FlagReason(kind), limit, offset)
 
 	APIReturn(c, true, content)
@@ -1439,6 +1512,10 @@ func APIGetFlaggedComments(c *gin.Context) {
 
 	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	if APIFailed(c, e, "invalid offset value") {
+		return
+	}
+
+	if !APIMatchSecret(c, -1) {
 		return
 	}
 
@@ -1464,6 +1541,10 @@ func APIHandleFlag(c *gin.Context) {
 		return
 	}
 
+	if !APIMatchSecret(c, -1) {
+		return
+	}
+
 	DBHandleFlag(mainDB, id, in.PID, in.SID, in.Action)
 
 	APIReturn(c, true, gin.H{})
@@ -1483,13 +1564,13 @@ func APISignIn(c *gin.Context) {
 		return
 	}
 
-	user := DBSignIn(mainDB, in.Email, in.Password)
+	user, streak := DBSignIn(mainDB, in.Email, in.Password)
 	if user.ID > 0 || user.ID == -1 {
 		secret := AUTHRegister(user.ID)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
 	} else {
 		if user.ID == -2 {
 			APIReturn(c, false, "missing")
@@ -1536,12 +1617,12 @@ func APISignInWithApple(c *gin.Context) {
 		return
 	}
 
-	user := DBGetUser(mainDB, 0, claims.Email)
+	user, streak := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(newUser.ID)
-			APIReturn(c, true, gin.H{"user": newUser, "token": secret})
+			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "streak": newUser.Credits, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
@@ -1553,7 +1634,7 @@ func APISignInWithApple(c *gin.Context) {
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
 		user.Password = ""
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
 }
 
@@ -1572,12 +1653,12 @@ func APISignInWithGoogle(c *gin.Context) {
 		return
 	}
 
-	user := DBGetUser(mainDB, 0, claims.Email)
+	user, streak := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(newUser.ID)
-			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
+			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "streak": newUser.Credits, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
@@ -1589,7 +1670,7 @@ func APISignInWithGoogle(c *gin.Context) {
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
 		user.Password = ""
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
 	}
 }
 
@@ -1622,7 +1703,7 @@ func APISendPasswordReset(c *gin.Context) {
 		return
 	}
 
-	user := DBGetUser(mainDB, 0, in.Email)
+	user, _ := DBGetUser(mainDB, 0, in.Email)
 	if user.ID == 0 {
 		APIReturn(c, false, fmt.Sprintf("no user with email '%s' exists", in.Email))
 		return
@@ -1722,7 +1803,7 @@ func APIVerifyUserEmail(c *gin.Context) {
 	if res {
 		APIReturnHTML(c, "verify_confirmed.html", gin.H{})
 	} else {
-		user := DBGetUser(mainDB, uid, "")
+		user, _ := DBGetUser(mainDB, uid, "")
 		if user.ValidationKey == 0 {
 			APIReturnHTML(c, "verify_confirmed.html", gin.H{})
 		} else {

@@ -22,9 +22,9 @@ func DBSetup(db *sql.DB) {
 
 func DBUsersSetup(db *sql.DB) {
 	createUsers := `CREATE TABLE IF NOT EXISTS Users (
-		id BIGSERIAL,
+		id BIGSERIAL, -- -1 implies admin user, 0 assumes user does not exist
 		name VARCHAR(21) NOT NULL,
-		email TEXT NOT NULL,
+		email TEXT NOT NULL, -- empty email implies agent
 		password TEXT NOT NULL,
 		registerDate TIMESTAMP DEFAULT (now() at time zone 'utc'),
 		upvotes BIGINT DEFAULT 0,
@@ -33,11 +33,13 @@ func DBUsersSetup(db *sql.DB) {
 		validationKey BIGINT NOT NULL,
 		trashed BOOLEAN DEFAULT false,
 		blocked TIMESTAMP DEFAULT '1970-01-01'::timestamp,
+		Investment BIGINT DEFAULT 0,
 
 		publicViews BOOLEAN DEFAULT true,
 		publicReadLater BOOLEAN DEFAULT true,
 		publicFollowing BOOLEAN DEFAULT true,
 		publicIgnored BOOLEAN DEFAULT true,
+		publicTagFollow BOOLEAN DEFAULT true,
 
 		publicPostVotes BOOLEAN DEFAULT true,
 		publicCommentVotes BOOLEAN DEFAULT true,
@@ -116,6 +118,7 @@ func DBPostsSetup(db *sql.DB) {
 		location TEXT[],
 		trashed BOOLEAN DEFAULT false,
 		commentCount INTEGER DEFAULT 0,
+		edited TIMESTAMP,
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
@@ -150,6 +153,7 @@ func DBCommentsSetup(db *sql.DB) {
 		trashed BOOLEAN DEFAULT false,
 		replyCount SMALLINT DEFAULT 0,
 		isReview BOOLEAN DEFAULT false,
+		edited TIMESTAMP,
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`
@@ -384,6 +388,24 @@ func DBMigrations(db *sql.DB) {
 	TYPE INTEGER[] USING Location::int[];
 
 	CREATE UNIQUE INDEX IF NOT EXISTS location_name_idx ON Location(name);
+
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS loginDate TIMESTAMP 
+	DEFAULT (now() at time zone 'utc');
+
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS streak INTEGER 
+	DEFAULT 0;
+
+	ALTER TABLE Posts 
+	ALTER COLUMN Edited DROP default;
+	ALTER TABLE Posts
+	ALTER COLUMN Edited TYPE TIMESTAMP USING createdAt;
+
+	ALTER TABLE Comments 
+	ALTER COLUMN Edited DROP default;
+	ALTER TABLE Comments
+	ALTER COLUMN Edited TYPE TIMESTAMP USING createdAt;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")

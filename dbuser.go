@@ -19,6 +19,9 @@ type User struct {
 	Credits       int32
 	Investment    int32
 	ValidationKey int32
+	LoginDate     time.Time
+	Streak        int32
+	Blocked       time.Time
 
 	PublicViews     bool
 	PublicReadLater bool
@@ -48,6 +51,7 @@ type UserProfile struct {
 
 func SQLFieldsForUser() string {
 	return "id, name, email, password, registerDate, upvotes, downvotes, credits, investment, validationKey, " +
+		"loginDate, streak, blocked, " +
 		"publicViews, publicReadLater, publicFollowing, publicIgnored, publicTagFollow, " +
 		"publicPostVotes, publicCommentVotes, publicUserVotes, publicTagVotes"
 }
@@ -64,6 +68,7 @@ func ScanUser(row *sql.Row) (User, error) {
 	u := User{}
 	e := row.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes,
 		&u.Downvotes, &u.Credits, &u.Investment, &u.ValidationKey,
+		&u.LoginDate, &u.Streak, &u.Blocked,
 		&u.PublicViews, &u.PublicReadLater, &u.PublicFollowing, &u.PublicIgnored, &u.PublicTagFollow,
 		&u.PublicPostVotes, &u.PublicCommentVotes, &u.PublicTagVotes, &u.PublicTagVotes)
 	return u, e
@@ -192,15 +197,15 @@ func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
 	return key == 0
 }
 
-func DBSignIn(db *sql.DB, email string, password string) User {
-	user := DBGetUser(db, 0, email)
+func DBSignIn(db *sql.DB, email string, password string) (User, int32) {
+	user, streak := DBGetUser(db, 0, email)
 	if user.ID == 0 {
-		return User{ID: -2}
+		return User{ID: -2}, 0
 	} else if DBEqualHashAndPassword(user.Password, password) {
 		user.Password = ""
-		return user
+		return user, streak
 	} else {
-		return User{ID: -3}
+		return User{ID: -3}, 0
 	}
 }
 
@@ -226,7 +231,7 @@ func DBBlockUser(db *sql.DB, userId int64, duration int) {
 
 // ignore email if userId > 0
 // FIXME: ensure only one and only one of userId or email
-func DBGetUser(db *sql.DB, userId int64, email string) User {
+func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
 	if userId > 0 || userId == -1 {
@@ -239,10 +244,66 @@ func DBGetUser(db *sql.DB, userId int64, email string) User {
 	row := db.QueryRow(getUser, arg)
 	user, e := ScanUser(row)
 	if DidFail(e, "get user from email/id ", arg) {
-		return User{}
+		return User{}, 0
 	}
 
-	return user
+	streak := DBUpdateUserLogin(db, user)
+	user.Credits += streak
+	user.Streak = DBGetNextStreakAmount(streak)
+
+	return user, streak
+}
+
+func DBGetNextStreakAmount(current int32) int32 {
+	switch current {
+	case 1:
+		return 2
+	case 2:
+		return 3
+	case 3:
+		return 5
+	case 5:
+		return 5
+	default:
+		return 1
+	}
+}
+
+func DBUpdateUserLogin(db *sql.DB, user User) int32 {
+	if len(user.Email) == 0 {
+		return 0
+	}
+	now := utc()
+	login := user.LoginDate
+	ny, nm, nd := now.Date()
+	ly, lm, ld := login.Date()
+	streak := user.Streak
+	var result int32 = 0
+	if ly != ny || lm != nm || ld != nd {
+		nextDay := login.AddDate(0, 0, 1)
+		if nextDay.Day() == nd && nextDay.Month() == nm && nextDay.Year() == ny {
+			streak = DBGetNextStreakAmount(streak)
+			result = streak
+		} else {
+			streak = 1
+			result = 1
+		}
+
+	}
+	query := fmt.Sprintf(`
+	UPDATE Users
+	SET
+		loginDate = (now() at time zone 'utc'),
+		streak = %d,
+		credits = credits + %d
+	WHERE
+		id = %d
+	`, streak, result, user.ID)
+	_, e := db.Exec(query)
+	if DidFail(e, "update user streak and login date") {
+		return 0
+	}
+	return result
 }
 
 func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
@@ -299,6 +360,9 @@ func DBResetPasswordForUser(db *sql.DB, userId int64, new string) {
 }
 
 func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64, location []string) (UserProfile, UserPref) {
+	if userId == targetId {
+		return UserProfile{}, UserPref{}
+	}
 	updatedField := ""
 	isUpvote := upvoteAmount > 0
 	if isUpvote {

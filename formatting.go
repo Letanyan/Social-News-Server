@@ -11,6 +11,11 @@ func formatTime(t time.Time) string {
 	return nowTime
 }
 
+func formatDate(t time.Time) string {
+	nowTime := t.Format("2006-01-02")
+	return nowTime
+}
+
 func formatTimestamp(t time.Time) string {
 	nowTime := fmt.Sprintf("%d", t.UnixNano())
 	return nowTime

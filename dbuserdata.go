@@ -391,7 +391,8 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getPosts += fmt.Sprintf("AND %s && p.tags ", queryTags)
 	}
 	if len(location) > 0 {
-		queryLoc := SQLFormattedArray(location)
+		locIndex := DBCreateLocation(db, location)
+		queryLoc := SQLFormattedIndexArray(locIndex)
 		getPosts += fmt.Sprintf("AND p.location @> %s ", queryLoc)
 	}
 	if upvotes > 0 {
@@ -489,7 +490,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 }
 
 func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64, downvoteAmount int64,
-	tags []string, location []string, upvotes int64, downvotes int64,
+	tags []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, search string, limit int64, offset int64, startDate string, endDate string) []UserPrefTag {
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
@@ -522,10 +523,6 @@ func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int6
 	if len(tags) > 0 {
 		tagArray := SQLFormattedArray(tags)
 		getTags += fmt.Sprintf("AND ARRAY[p.name] <@ %s\n", tagArray)
-	}
-	if len(location) > 0 {
-		locArray := SQLFormattedArray(location)
-		getTags += fmt.Sprintf("AND p.location @> %s\n", locArray)
 	}
 	if upvotes > 0 {
 		getTags += fmt.Sprintf("AND p.upvotes >= %d\n", upvotes)
@@ -698,7 +695,8 @@ func DBGetUserContPost(db *sql.DB, isOwner bool, kind UserContKind, userId int64
 		query += fmt.Sprintf("AND %s && p.tags ", queryTags)
 	}
 	if len(location) > 0 {
-		queryLoc := SQLFormattedArray(location)
+		locIndex := DBCreateLocation(db, location)
+		queryLoc := SQLFormattedIndexArray(locIndex)
 		query += fmt.Sprintf("AND p.location @> %s ", queryLoc)
 	}
 	if upvotes > 0 {
@@ -805,15 +803,16 @@ func DBGetUserContUsers(db *sql.DB, isOwner bool, userId int64, kind UserContKin
 	if !isOwner {
 		switch kind {
 		case ucpUserFollow:
-			permission = "AND p.publicFollowing "
+			permission = "AND x.publicFollowing "
 		case ucpUserIgnored:
-			permission = "AND p.publicIgnored "
+			permission = "AND x.publicIgnored "
 		}
 	}
 
 	query := fmt.Sprintf(`SELECT %s 
 	FROM UserCont up
 	JOIN Users p ON up.pid = p.id
+	JOIN Users x ON up.uid = x.id 
 	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d %s
 	`, SQLFieldsForUserProfile(), userId, kind, permission)
 	if len(startDate) > 0 && len(endDate) > 0 {
@@ -842,13 +841,14 @@ func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind,
 	if !isOwner {
 		switch kind {
 		case ucpTagFollow:
-			permission = "AND p.publicTagFollow "
+			permission = "AND x.publicTagFollow "
 		}
 	}
 
 	query := fmt.Sprintf(`SELECT %s 
 	FROM UserCont up
 	JOIN Tags p ON up.pid = p.id
+	JOIN Users x ON up.uid = x.id
 	WHERE up.uid = %d AND up.sid <= 0 AND up.kind = %d %s
 	`, SQLFieldsForTag(), userId, kind, permission)
 	if len(startDate) > 0 && len(endDate) > 0 {

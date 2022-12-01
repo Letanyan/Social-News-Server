@@ -17,7 +17,7 @@ type Comment struct {
 	Downvotes  int64
 	ReplyCount int64
 	Trashed    bool
-	Edited     bool
+	Edited     time.Time
 	IsReview   bool
 
 	Score float64
@@ -36,7 +36,7 @@ type CommentResult struct {
 	Downvotes  int64
 	ReplyCount int64
 	Trashed    bool
-	Edited     bool
+	Edited     time.Time
 	IsReview   bool
 
 	Score float64
@@ -125,10 +125,10 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	nowTime := formatTime(t)
 
 	insertComment := fmt.Sprintf(`
-	INSERT INTO Comments(id, userId, postId, replyId, content, createdAt, isReview) 
+	INSERT INTO Comments(id, userId, postId, replyId, content, createdAt, edited, isReview) 
 	VALUES(nextval('comments_id_seq') * 10000 + extract(year from now() at time zone ('utc')), %d, %d, %d, $1, $2, $3) 
 	RETURNING %s`, userId, postId, replyId, SQLFieldsForComment())
-	row := db.QueryRow(insertComment, content, nowTime, isReview)
+	row := db.QueryRow(insertComment, content, nowTime, nowTime, isReview)
 	comment, e := ScanComment(row)
 	if DidFail(e, "insert comment") {
 		return comment, UserCont{}
@@ -189,8 +189,14 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 }
 
 func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) Comment {
-	updateFromPostComments := fmt.Sprintf(`UPDATE comments SET content=$1, Edited=true WHERE id=$2 AND postId=$3
-	RETURNING %s`, SQLFieldsForComment())
+	t := utc()
+	nowTime := formatTime(t)
+
+	updateFromPostComments := fmt.Sprintf(`
+	UPDATE comments 
+	SET content=$1, Edited='%s' 
+	WHERE id=$2 AND postId=$3
+	RETURNING %s`, nowTime, SQLFieldsForComment())
 	row := db.QueryRow(updateFromPostComments, content, commentId, postId)
 	comment, e := ScanComment(row)
 	if DidFail(e, "update comment ", commentId, " from post ", postId, " comments table") {

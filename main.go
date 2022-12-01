@@ -32,6 +32,9 @@ var (
 	agentsMutex  KeyedMutex
 	englishWords map[string]bool
 	serverAddr   string
+
+	agentsOnboarding map[string]int64
+	tagsOnboarding   map[string]int64
 )
 
 func main() {
@@ -136,7 +139,10 @@ func main() {
 		v1.POST("/users/:uid/content/tag-follows", APIAddUserCont(ucpTagFollow))
 		v1.POST("/users/:uid/content/recommendations", APIRefreshUserContRecommendations)
 
+		v1.POST("/users/:uid/content/onboard", APIOnboard)
 		v1.POST("/users/:uid/watch/:pid", APIWatchUser)
+		v1.GET("/onboard/agents", APIOnboardAgents)
+		v1.GET("/onboard/tags", APIOnboardTags)
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)
@@ -166,11 +172,12 @@ func main() {
 
 	DBSetup(mainDB)
 
-	// agents = NAReadAllNewsAgents()
-	// agentsMutex = KeyedMutex{}
-	// NARegisterHourlyUpdates(mainDB)
-	// NARegisterWeeklyCleanUp(mainDB)
-	// SendValidationKey(1, "letanyan.a@gmail.com", 42)
+	agents = NAReadAllNewsAgents()
+	agentsOnboarding = NAReadAllAgentsOnboarding()
+	tagsOnboarding = NAReadAllTagsOnboarding()
+	agentsMutex = KeyedMutex{}
+	NARegisterHourlyUpdates(mainDB)
+	NARegisterWeeklyCleanUp(mainDB)
 
 	port := os.Getenv("PORT")
 	if port == "" {
