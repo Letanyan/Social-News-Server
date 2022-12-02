@@ -52,7 +52,8 @@ func APIFailed(c *gin.Context, e error, reason string) bool {
 
 func ContextMatchSecret(c *gin.Context, user int64) bool {
 	secret := c.DefaultQuery("secret", "")
-	return AUTHMatchSecret(user, secret)
+	deviceId, _ := url.QueryUnescape(c.DefaultQuery("device", ""))
+	return AUTHMatchSecret(mainDB, user, deviceId, secret)
 }
 
 func APIMatchSecret(c *gin.Context, user int64) bool {
@@ -101,10 +102,12 @@ func APICreateUser(c *gin.Context) {
 		return
 	}
 
+	deviceId := c.DefaultQuery("device", "")
+
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID > 0 {
 		MailValidationKey(user.ID, user.Email, user.ValidationKey)
-		secret := AUTHRegister(user.ID)
+		secret := AUTHRegister(mainDB, user.ID, deviceId)
 		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": user.Credits, "following": []string{}, "ignored": []string{}, "tags": []string{}})
 	} else {
 		APIReturn(c, false, "could not create user")
@@ -1557,6 +1560,7 @@ func APISignIn(c *gin.Context) {
 	type Input struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		DeviceId string `json:"device"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for sign in") {
@@ -1566,7 +1570,7 @@ func APISignIn(c *gin.Context) {
 
 	user, streak := DBSignIn(mainDB, in.Email, in.Password)
 	if user.ID > 0 || user.ID == -1 {
-		secret := AUTHRegister(user.ID)
+		secret := AUTHRegister(mainDB, user.ID, in.DeviceId)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
@@ -1604,7 +1608,8 @@ func APIRedirectAppleSignIn(c *gin.Context) {
 
 func APISignInWithApple(c *gin.Context) {
 	type Input struct {
-		Code string `json:"code"`
+		Code     string `json:"code"`
+		DeviceId string `json:"device"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); APIFailed(c, e, "get apple sign in token") {
@@ -1621,13 +1626,13 @@ func APISignInWithApple(c *gin.Context) {
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
 		if newUser.ID > 0 {
-			secret := AUTHRegister(newUser.ID)
+			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId)
 			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "streak": newUser.Credits, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
 	} else {
-		secret := AUTHRegister(user.ID)
+		secret := AUTHRegister(mainDB, user.ID, in.DeviceId)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
@@ -1640,8 +1645,9 @@ func APISignInWithApple(c *gin.Context) {
 
 func APISignInWithGoogle(c *gin.Context) {
 	type Input struct {
-		Token  string `json:"token"`
-		Access string `json:"access"`
+		Token    string `json:"token"`
+		Access   string `json:"access"`
+		DeviceId string `json:"device"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); APIFailed(c, e, "get google sign in token") {
@@ -1657,13 +1663,13 @@ func APISignInWithGoogle(c *gin.Context) {
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
 		if newUser.ID > 0 {
-			secret := AUTHRegister(newUser.ID)
+			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId)
 			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "streak": newUser.Credits, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
 	} else {
-		secret := AUTHRegister(user.ID)
+		secret := AUTHRegister(mainDB, user.ID, in.DeviceId)
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
@@ -1676,7 +1682,8 @@ func APISignInWithGoogle(c *gin.Context) {
 
 func APISignOut(c *gin.Context) {
 	type Input struct {
-		UserId int64 `json:"userId"`
+		UserId   int64  `json:"userId"`
+		DeviceId string `json:"device"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); APIFailed(c, e, "get input for sign out") {
@@ -1684,11 +1691,11 @@ func APISignOut(c *gin.Context) {
 	}
 
 	secret := c.DefaultQuery("secret", "")
-	if !AUTHMatchSecret(in.UserId, secret) {
+	if !AUTHMatchSecret(mainDB, in.UserId, in.DeviceId, secret) {
 		APIReturn(c, true, "")
 	}
 
-	AUTHDeregister(in.UserId, secret)
+	AUTHDeregister(mainDB, in.UserId, in.DeviceId, secret)
 
 	APIReturn(c, true, "")
 }

@@ -229,6 +229,19 @@ func DBBlockUser(db *sql.DB, userId int64, duration int) {
 	DidFail(e, "block user ", userId, " for duration ", duration)
 }
 
+func DBGetUserAgent(db *sql.DB, name string) User {
+	getUser := fmt.Sprintf(`
+	SELECT %s 
+	FROM Users p 
+	WHERE email='' AND name=$1`, SQLFieldsForUser())
+	row := db.QueryRow(getUser, name)
+	user, e := ScanUser(row)
+	if DidFail(e, "get user agent ", name) {
+		return User{}
+	}
+	return user
+}
+
 // ignore email if userId > 0
 // FIXME: ensure only one and only one of userId or email
 func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {

@@ -42,3 +42,19 @@ func DBAgentPathRemoveOld(db *sql.DB, monthAgo int) {
 	_, e := db.Exec(query)
 	DidFail(e, "delete old agent paths", query)
 }
+
+func DBDeleteDuplicateAgentPosts(db *sql.DB) {
+	agentIds := []int64{}
+	for _, agent := range agents {
+		agentIds = append(agentIds, agent.ID)
+	}
+	agentArray := SQLFormattedIndexArray(agentIds)
+
+	query := fmt.Sprintf(`
+	DELETE FROM Posts a 
+	USING Posts b 
+	WHERE a.userId=ANY(%s) AND a.userId=b.userId AND a.id < b.id AND a.Content = b.Content; 
+	`, agentArray)
+	_, e := db.Exec(query)
+	DidFail(e, "remove duplicate agent posts")
+}

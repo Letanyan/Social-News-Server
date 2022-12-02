@@ -16,6 +16,7 @@ func DBSetup(db *sql.DB) {
 	DBFlagsSetup(db)
 	DBIapSetup(db)
 	DBAgentsSetup(db)
+	DBUserAuthSetup(db)
 	DBFunctionSetup(db)
 	DBMigrations(db)
 }
@@ -335,6 +336,34 @@ func DBAgentsSetup(db *sql.DB) {
 	mod := 10
 	for i := 0; i < mod; i += 1 {
 		createIapTable(mod, i)
+	}
+}
+
+func DBUserAuthSetup(db *sql.DB) {
+	createUserAuth := `CREATE TABLE IF NOT EXISTS UserAuth (
+		userId BIGINT,
+		deviceId TEXT,
+		secret CHAR(8),
+		lastAction TIMESTAMP DEFAULT (now() at time zone 'utc'),
+
+		PRIMARY KEY (userId, deviceId)
+	) PARTITION BY HASH(userId);`
+	_, e := db.Exec(createUserAuth)
+	DidFail(e, "create user auth table")
+	createUserAuthTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS UserAuth%d 
+		PARTITION OF UserAuth
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS UserAuth%d_index 
+		ON UserAuth%d (userId, deviceId)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create user auth partition instance")
+	}
+	mod := 10
+	for i := 0; i < mod; i += 1 {
+		createUserAuthTable(mod, i)
 	}
 }
 

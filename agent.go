@@ -159,18 +159,27 @@ func NAReadAllNewsAgents() []NewsAgent {
 		return []NewsAgent{}
 	}
 
-	createdNew := false
+	updated := false
+	agentNames := map[string]bool{}
 	for i := range result {
 		agent := result[i]
-		oldUser, _ := DBGetUser(mainDB, agent.ID, "")
-		if oldUser.ID == 0 || oldUser.Email != "" {
-			createdNew = true
+		oldUser := DBGetUserAgent(mainDB, agent.Name)
+		if _, found := agentNames[oldUser.Name]; found {
+			fail.Println("duplicate agent name ", oldUser.Name)
+			continue
+		}
+		agentNames[oldUser.Name] = true
+		if oldUser.ID == 0 {
+			updated = true
 			user := DBCreateUser(mainDB, agent.Name, "", "")
 			DBValidateUser(mainDB, user.ID, user.ValidationKey)
 			result[i].ID = user.ID
+		} else if oldUser.ID != agent.ID {
+			updated = true
+			result[i].ID = oldUser.ID
 		}
 	}
-	if createdNew && len(result) > 0 {
+	if updated && len(result) > 0 {
 		NAWriteAllNewsAgents(result)
 	}
 
@@ -575,6 +584,10 @@ func NARegisterHourlyUpdates(db *sql.DB) {
 }
 
 func NARegisterWeeklyCleanUp(db *sql.DB) {
-	time.AfterFunc(0, func() { NATrimOldUrlsFromNewAgentHashSets(db) })
+	time.AfterFunc(0, func() {
+		NATrimOldUrlsFromNewAgentHashSets(db)
+		DBDeleteDuplicateAgentPosts(db)
+		AUTHRemoveOldSecrets(db, 6)
+	})
 	time.AfterFunc(time.Hour*24*7, func() { NARegisterWeeklyCleanUp(db) })
 }
