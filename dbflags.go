@@ -50,6 +50,7 @@ func SQLFieldsForFlaggedComment() string {
 func ScanFlaggedPosts(rows *sql.Rows) []FlaggedPost {
 	result := []FlaggedPost{}
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
@@ -76,6 +77,7 @@ func ScanFlaggedPosts(rows *sql.Rows) []FlaggedPost {
 func ScanFlaggedComments(rows *sql.Rows) []FlaggedComment {
 	result := []FlaggedComment{}
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		p := CommentResult{}
 		u := UserProfile{}
@@ -135,7 +137,6 @@ func DBGetFlaggedPosts(db *sql.DB, kind FlagReason, limit int64, offset int64) [
 	if DidFail(e, "get flagged posts") {
 		return []FlaggedPost{}
 	}
-	defer rows.Close()
 
 	result := ScanFlaggedPosts(rows)
 	return result
@@ -165,7 +166,6 @@ func DBGetFlaggedComments(db *sql.DB, kind FlagReason, limit int64, offset int64
 	if DidFail(e, "get flagged posts") {
 		return []FlaggedComment{}
 	}
-	defer rows.Close()
 
 	result := ScanFlaggedComments(rows)
 	return result

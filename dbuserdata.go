@@ -419,7 +419,6 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 	if DidFail(e, "get posts") {
 		return []UserPrefPost{}
 	}
-	defer rows.Close()
 
 	result := ScanUserPrefPosts(rows)
 	return result
@@ -553,7 +552,6 @@ func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int6
 	if DidFail(e, "get tags", getTags) {
 		return []UserPrefTag{}
 	}
-	defer rows.Close()
 
 	result := ScanUserPrefTags(rows)
 

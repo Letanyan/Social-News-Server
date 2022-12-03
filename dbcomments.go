@@ -73,6 +73,7 @@ func ScanCommentResult(row *sql.Row) (CommentResult, error) {
 
 func ScanComments(rows *sql.Rows) []Comment {
 	result := []Comment{}
+	defer rows.Close()
 	for rows.Next() {
 		c := Comment{}
 		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview, &c.Cred, &c.Score)

@@ -79,7 +79,7 @@ func ScanPostResult(row *sql.Row) (PostResult, error) {
 func ScanPosts(rows *sql.Rows) []Post {
 	result := []Post{}
 	var e error
-
+	defer rows.Close()
 	for rows.Next() {
 		p := Post{}
 		e = rows.Scan(&p.ID, &p.UserID, &p.Content, pq.Array(&p.Tags), &p.CreatedAt, pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.Trashed, &p.Edited, &p.Cred, &p.Score)
