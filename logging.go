@@ -14,6 +14,7 @@ var (
 )
 
 func init() {
+	os.Mkdir("logs", os.ModePerm)
 	filename := fmt.Sprintf("logs/%s.txt", formatTimestamp(utc()))
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if isDebug || err != nil {

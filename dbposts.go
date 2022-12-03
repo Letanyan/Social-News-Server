@@ -95,7 +95,7 @@ func ScanPosts(rows *sql.Rows) []Post {
 func ScanPostResults(rows *sql.Rows, hasVotes bool, hasRank bool) []PostResult {
 	result := []PostResult{}
 	var e error
-
+	defer rows.Close()
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
@@ -373,7 +373,6 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	if DidFail(e, "get posts\n", getPosts) {
 		return result
 	}
-	defer rows.Close()
 
 	result = ScanPostResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 	if forUser > 0 && len(result) == 0 { // if no more recommended show 2nd degree recommended
@@ -471,7 +470,6 @@ func DBGetSimilarPosts(db *sql.DB, userId int64, postId int64, sortOrder SortOrd
 	if DidFail(e, "get posts\n", getPosts) {
 		return result
 	}
-	defer rows.Close()
 
 	result = ScanPostResults(rows, false, false)
 	return result

@@ -49,7 +49,7 @@ func DBCreateLocation(db *sql.DB, location []string) []int64 {
 		if DidFail(e, "create tags", query) {
 			return []int64{}
 		}
-
+		defer rows.Close()
 		var id int64
 		for rows.Next() {
 			rows.Scan(&id)
@@ -77,6 +77,7 @@ func DBGetLocation(db *sql.DB, location []string) []Location {
 	if DidFail(e, "create tags") {
 		return []Location{}
 	}
+	defer rows.Close()
 	result := []Location{}
 	var loc Location
 	for rows.Next() {

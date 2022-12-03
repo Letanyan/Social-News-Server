@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 func DBSetup(db *sql.DB) {
@@ -639,36 +638,13 @@ func DBClearAllTables(db *sql.DB) {
 	DBDeleteTable(db, "tags")
 }
 
-func DBGetTableNamesLike(db *sql.DB, query string) []string {
-	cmd := fmt.Sprintf("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%s'", query)
-	rows, e := db.Query(cmd)
-	result := []string{}
-	if DidFail(e, "get all table names like ", query) {
-		return result
-	}
-	for rows.Next() {
-		name := ""
-		rows.Scan(&name)
-		result = append(result, name)
-	}
-	return result
-}
-
-func BuildUnionForYears(query string, years []int64) string {
-	names := []string{}
-	for _, y := range years {
-		names = append(names, fmt.Sprint(y))
-	}
-	return BuildUnionForNames(query, "{year}", names)
-}
-
-func BuildUnionForNames(query string, placeholder string, names []string) string {
-	result := ""
-	for i, y := range names {
-		result += "(" + strings.ReplaceAll(query, placeholder, fmt.Sprint(y)) + ")"
-		if i < len(names)-1 {
-			result += "\nunion\n"
-		}
-	}
-	return result
+func DBClearTrashedContent(db *sql.DB) {
+	query := `
+	DELETE FROM Posts WHERE Trashed=True;
+	DELETE FROM Comments WHERE Trashed=True;
+	DELETE FROM Users WHERE Trashed=True;
+	DELETE FROM UserCont WHERE Trashed=True;
+	`
+	_, e := db.Exec(query)
+	DidFail(e, "remove trashed content")
 }

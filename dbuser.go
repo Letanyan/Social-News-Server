@@ -85,6 +85,7 @@ func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []UserProfile {
 	result := []UserProfile{}
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		u := UserProfile{}
 		var up int64
@@ -143,13 +144,14 @@ func validateLength(name string, value string, min int, max int) string {
 
 func DBContainsEmail(db *sql.DB, email string) bool {
 	isUsed := `SELECT email FROM users WHERE email = $1`
-	res, e := db.Query(isUsed, email)
+	rows, e := db.Query(isUsed, email)
 	if DidFail(e, "get matching email") {
 		return true
 	}
+	defer rows.Close()
 	var found string
-	for res.Next() {
-		res.Scan(&found)
+	for rows.Next() {
+		rows.Scan(&found)
 	}
 	return len(found) > 0
 }

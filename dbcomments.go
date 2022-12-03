@@ -86,6 +86,7 @@ func ScanComments(rows *sql.Rows) []Comment {
 
 func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentResult {
 	result := []CommentResult{}
+	defer rows.Close()
 	for rows.Next() {
 		c := CommentResult{}
 		var userId int64

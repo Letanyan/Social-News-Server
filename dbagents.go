@@ -15,6 +15,7 @@ func DBAgentPathExists(db *sql.DB, agentId int64, path string) bool {
 	if DidFail(e, "query iap exists", query) {
 		return false
 	}
+	defer rows.Close()
 	var id int64
 	found := false
 	for rows.Next() {

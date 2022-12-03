@@ -20,7 +20,7 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 
 	scoreField := fmt.Sprintf("%s(%s.upvotes, %s.upvotes, %s.downvotes)", weightedRatioFunc, voteTable, voteTable, voteTable)
 	if table == "Users p" && !usingVotes {
-		scoreField = "WeightRatio(p.upvotes + p.investment, p.upvotes + p.investment, p.downvotes)"
+		scoreField = "WeightRatio(p.upvotes, p.upvotes + p.investment, p.downvotes + p.investment)"
 	}
 	withTable := ""
 	if forUser > 0 {

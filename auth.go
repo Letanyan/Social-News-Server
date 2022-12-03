@@ -77,6 +77,7 @@ func AUTHGetSecret(db sql.DB, user int64, deviceId string) string {
 	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
 		return ""
 	}
+	defer rows.Close()
 	var secret string
 	for rows.Next() {
 		e := rows.Scan(&secret)
@@ -108,6 +109,7 @@ func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) boo
 	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
 		return false
 	}
+	defer rows.Close()
 	var s string
 	for rows.Next() {
 		e := rows.Scan(&s)

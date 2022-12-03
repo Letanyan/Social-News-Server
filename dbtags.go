@@ -27,6 +27,7 @@ func SQLFieldsForTagAlias() string {
 func ScanTags(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []Tag {
 	result := []Tag{}
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		var up int64
 		var down int64
@@ -260,7 +261,6 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	if DidFail(e, "get tags", getTags) {
 		return []Tag{}
 	}
-	defer rows.Close()
 
 	result := ScanTags(rows, true, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 

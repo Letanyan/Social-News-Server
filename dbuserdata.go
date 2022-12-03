@@ -125,6 +125,7 @@ func ScanUserPrefRows(rows *sql.Rows) []UserPref {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		up := UserPref{}
 		e = rows.Scan(&up.Kind, &up.PID, &up.SID, &up.Upvotes, &up.Downvotes, &cred, &score)
@@ -141,6 +142,7 @@ func ScanUserPrefUsers(rows *sql.Rows) []UserPrefUser {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		u := UserProfile{}
 		var up int64
@@ -161,6 +163,7 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
@@ -186,6 +189,7 @@ func ScanUserPrefComments(rows *sql.Rows) []UserPrefComment {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		c := CommentResult{}
 		u := UserProfile{}
@@ -211,6 +215,7 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		tag := Tag{}
 		var up int64
@@ -792,7 +797,6 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	if DidFail(e, "get posts") {
 		return []CommentResult{}
 	}
-	defer rows.Close()
 
 	result := ScanCommentResults(rows, false, false)
 	return result
