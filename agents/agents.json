@@ -1,1 +1,299 @@
-[{"ID":48,"Name":"Mirror","Origin":"https://mirror.co.uk/","LastUpdate":"2022-11-20T20:27:24.326835541Z","Subs":["sport/","sport/football/","news/","news/politics/","money/","tv/","sport/boxing/","sport/cricket/","travel/","gaming/"]},{"ID":50,"Name":"Reuters","Origin":"https://reuters.com/","LastUpdate":"2022-11-20T20:27:24.326838221Z","Subs":["world/","business/","breakingviews/","technology/"]},{"ID":53,"Name":"PBS","Origin":"https://pbs.org/","LastUpdate":"2022-11-20T20:27:24.326838961Z","Subs":["newshour/"]},{"ID":57,"Name":"BBC News","Origin":"https://bbc.co.uk/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["sport/","sport/football/","sport/football/world-cup/","sport/cricket/","sport/formula1/","sport/rugby-union/","sport/tennis/","sport/golf/","sport/athletics/","sport/cycling/","sport/winter-sports/","news/world/","news/uk/","news/business/","news/technology/","news/science_and_environment/","news/stories/","news/entertainment_and_arts/","news/health/","news/world_radio_and_tv/"]},{"ID":58,"Name":"CNN US","Origin":"https://us.cnn.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["africa/","americas/","asia/","australia/","china/","europe/","india/","middle-east/","uk/","specials/space-science/","specials/us/crime-and-justice/","specials/us/energy-and-environment/"]},{"ID":59,"Name":"CNN Edition","Origin":"https://edition.cnn.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["business/","business/tech","business/media","specials/health/fitness-life-but-better","specials/health/food-life-but-better","specials/health/sleep-life-but-better","specials/health/mindfulness-life-but-better","specials/health/relationships-life-but-better","entertainment/movies","entertainment/celebrities","entertainment/tv-shows"]},{"ID":60,"Name":"Huffpost","Origin":"https://huffpost.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["news/","entertainment/","life/"]},{"ID":61,"Name":"Fox News","Origin":"https://foxnews.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["us/","politics/","media/","entertainment/","sports/","lifestyle/"]},{"ID":62,"Name":"USA Today","Origin":"https://usatoday.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["news/","sports/","entertainment/","life/","money/","tech/","travel/"]},{"ID":63,"Name":"Politico","Origin":"https://politico.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":[]},{"ID":64,"Name":"Yahoo News","Origin":"https://news.yahoo.com/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["us/","politics/","world/","health/","science/"]},{"ID":65,"Name":"NPR","Origin":"https://npr.org/","LastUpdate":"2022-11-25T13:35:43.645038683Z","Subs":["sections/national/","sections/world/","sections/news/","sections/politics/","sections/business/","sections/climate/","sections/science/","sections/health/","sections/culture/","sections/books/","sections/movies/","sections/television/","sections/pop-culture/","sections/food/","sections/art-design/","sections/performing-arts/"]},{"ID":71,"Name":"Independent","Origin":"https://independent.co.uk/","LastUpdate":"2022-11-29T17:13:09.615834411Z","Subs":["news/","news/uk/","news/world/","news/world/americas/","sport/","sport/football/","f1/","sport/rugby/rugby-union/","sport/cricket/","sport/tennis/","sport/boxing/","sport/ufc/","sport/cycling/","sport/golf/","arts-entertainment/","arts-entertainment/films/","arts-entertainment/tv/","arts-entertainment/books/","arts-entertainment/art/","arts-entertainment/photography/","arts-entertainment/theatre-dance/"]},{"ID":72,"Name":"Metro","Origin":"https://metro.co.uk/","LastUpdate":"2022-11-29T17:13:09.615834411Z","Subs":["news/","news/uk/","news/us/","news/world/","sport/","sport/football/","sport/rugby/rugby-union/","sport/cricket/","sport/boxing/","sport/snooker/","entertainment/","entertainment/film/","entertainment/tv/","entertainment/music/","entertainment/gaming/"]},{"ID":73,"Name":"Radio Free Asia","Origin":"https://rfa.org/english/","LastUpdate":"2022-11-29T17:13:09.615834411Z","Subs":["news/","news/cambodia/","news/china/","news/laos/","news/korea/","news/tibet/","news/myanmar/","news/uyghur/","news/vietnam/","news/pacific/","news/southchinasea/"]},{"ID":74,"Name":"The Diplomat","Origin":"https://thediplomat.com/","LastUpdate":"2022-12-03T14:20:12.076176602Z","Subs":["regions/central-asia","regions/east-asia","regions/oceania-region","regions/south-asia","regions/southeast-asia","topics/diplomacy/","topics/economy/","topics/environment/","topics/opinion/","topics/politics/","topics/security/","topics/society/"]}]
+[
+    {
+        "ID": 48,
+        "Name": "Mirror",
+        "Locale": "en",
+        "Origin": "https://mirror.co.uk/",
+        "LastUpdate": "2022-11-20T20:27:24.326835541Z",
+        "Subs": [
+            "sport/",
+            "sport/football/",
+            "news/",
+            "news/politics/",
+            "money/",
+            "tv/",
+            "sport/boxing/",
+            "sport/cricket/",
+            "travel/",
+            "gaming/"
+        ]
+    },
+    {
+        "ID": 50,
+        "Name": "Reuters",
+        "Locale": "en",
+        "Origin": "https://reuters.com/",
+        "LastUpdate": "2022-11-20T20:27:24.326838221Z",
+        "Subs": [
+            "world/",
+            "business/",
+            "breakingviews/",
+            "technology/"
+        ]
+    },
+    {
+        "ID": 53,
+        "Name": "PBS",
+        "Locale": "en",
+        "Origin": "https://pbs.org/",
+        "LastUpdate": "2022-11-20T20:27:24.326838961Z",
+        "Subs": [
+            "newshour/"
+        ]
+    },
+    {
+        "ID": 57,
+        "Name": "BBC News",
+        "Locale": "en",
+        "Origin": "https://bbc.co.uk/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "sport/",
+            "sport/football/",
+            "sport/football/world-cup/",
+            "sport/cricket/",
+            "sport/formula1/",
+            "sport/rugby-union/",
+            "sport/tennis/",
+            "sport/golf/",
+            "sport/athletics/",
+            "sport/cycling/",
+            "sport/winter-sports/",
+            "news/world/",
+            "news/uk/",
+            "news/business/",
+            "news/technology/",
+            "news/science_and_environment/",
+            "news/stories/",
+            "news/entertainment_and_arts/",
+            "news/health/",
+            "news/world_radio_and_tv/"
+        ]
+    },
+    {
+        "ID": 58,
+        "Name": "CNN US",
+        "Locale": "en",
+        "Origin": "https://us.cnn.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "africa/",
+            "americas/",
+            "asia/",
+            "australia/",
+            "china/",
+            "europe/",
+            "india/",
+            "middle-east/",
+            "uk/",
+            "specials/space-science/",
+            "specials/us/crime-and-justice/",
+            "specials/us/energy-and-environment/"
+        ]
+    },
+    {
+        "ID": 59,
+        "Name": "CNN Edition",
+        "Locale": "en",
+        "Origin": "https://edition.cnn.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "business/",
+            "business/tech",
+            "business/media",
+            "specials/health/fitness-life-but-better",
+            "specials/health/food-life-but-better",
+            "specials/health/sleep-life-but-better",
+            "specials/health/mindfulness-life-but-better",
+            "specials/health/relationships-life-but-better",
+            "entertainment/movies",
+            "entertainment/celebrities",
+            "entertainment/tv-shows"
+        ]
+    },
+    {
+        "ID": 60,
+        "Name": "Huffpost",
+        "Locale": "en",
+        "Origin": "https://huffpost.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "news/",
+            "entertainment/",
+            "life/"
+        ]
+    },
+    {
+        "ID": 61,
+        "Name": "Fox News",
+        "Locale": "en",
+        "Origin": "https://foxnews.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "us/",
+            "politics/",
+            "media/",
+            "entertainment/",
+            "sports/",
+            "lifestyle/"
+        ]
+    },
+    {
+        "ID": 62,
+        "Name": "USA Today",
+        "Locale": "en",
+        "Origin": "https://usatoday.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "news/",
+            "sports/",
+            "entertainment/",
+            "life/",
+            "money/",
+            "tech/",
+            "travel/"
+        ]
+    },
+    {
+        "ID": 63,
+        "Name": "Politico",
+        "Locale": "en",
+        "Origin": "https://politico.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": []
+    },
+    {
+        "ID": 64,
+        "Name": "Yahoo News",
+        "Locale": "en",
+        "Origin": "https://news.yahoo.com/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "us/",
+            "politics/",
+            "world/",
+            "health/",
+            "science/"
+        ]
+    },
+    {
+        "ID": 65,
+        "Name": "NPR",
+        "Locale": "en",
+        "Origin": "https://npr.org/",
+        "LastUpdate": "2022-11-25T13:35:43.645038683Z",
+        "Subs": [
+            "sections/national/",
+            "sections/world/",
+            "sections/news/",
+            "sections/politics/",
+            "sections/business/",
+            "sections/climate/",
+            "sections/science/",
+            "sections/health/",
+            "sections/culture/",
+            "sections/books/",
+            "sections/movies/",
+            "sections/television/",
+            "sections/pop-culture/",
+            "sections/food/",
+            "sections/art-design/",
+            "sections/performing-arts/"
+        ]
+    },
+    {
+        "ID": 71,
+        "Name": "Independent",
+        "Locale": "en",
+        "Origin": "https://independent.co.uk/",
+        "LastUpdate": "2022-11-29T17:13:09.615834411Z",
+        "Subs": [
+            "news/",
+            "news/uk/",
+            "news/world/",
+            "news/world/americas/",
+            "sport/",
+            "sport/football/",
+            "f1/",
+            "sport/rugby/rugby-union/",
+            "sport/cricket/",
+            "sport/tennis/",
+            "sport/boxing/",
+            "sport/ufc/",
+            "sport/cycling/",
+            "sport/golf/",
+            "arts-entertainment/",
+            "arts-entertainment/films/",
+            "arts-entertainment/tv/",
+            "arts-entertainment/books/",
+            "arts-entertainment/art/",
+            "arts-entertainment/photography/",
+            "arts-entertainment/theatre-dance/"
+        ]
+    },
+    {
+        "ID": 72,
+        "Name": "Metro",
+        "Locale": "en",
+        "Origin": "https://metro.co.uk/",
+        "LastUpdate": "2022-11-29T17:13:09.615834411Z",
+        "Subs": [
+            "news/",
+            "news/uk/",
+            "news/us/",
+            "news/world/",
+            "sport/",
+            "sport/football/",
+            "sport/rugby/rugby-union/",
+            "sport/cricket/",
+            "sport/boxing/",
+            "sport/snooker/",
+            "entertainment/",
+            "entertainment/film/",
+            "entertainment/tv/",
+            "entertainment/music/",
+            "entertainment/gaming/"
+        ]
+    },
+    {
+        "ID": 73,
+        "Name": "Radio Free Asia",
+        "Locale": "en",
+        "Origin": "https://rfa.org/english/",
+        "LastUpdate": "2022-11-29T17:13:09.615834411Z",
+        "Subs": [
+            "news/",
+            "news/cambodia/",
+            "news/china/",
+            "news/laos/",
+            "news/korea/",
+            "news/tibet/",
+            "news/myanmar/",
+            "news/uyghur/",
+            "news/vietnam/",
+            "news/pacific/",
+            "news/southchinasea/"
+        ]
+    },
+    {
+        "ID": 74,
+        "Name": "The Diplomat",
+        "Locale": "en",
+        "Origin": "https://thediplomat.com/",
+        "LastUpdate": "2022-12-04T09:24:34.608018124Z",
+        "Subs": [
+            "regions/central-asia",
+            "regions/east-asia",
+            "regions/oceania-region",
+            "regions/south-asia",
+            "regions/southeast-asia",
+            "topics/diplomacy/",
+            "topics/economy/",
+            "topics/environment/",
+            "topics/opinion/",
+            "topics/politics/",
+            "topics/security/",
+            "topics/society/"
+        ]
+    }
+]

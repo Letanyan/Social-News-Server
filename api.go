@@ -120,6 +120,7 @@ func APICreatePost(c *gin.Context) {
 		Content   string   `json:"content"`
 		Location  []string `json:"location"`
 		IsPreview bool     `json:"isPreview"`
+		Locale    string   `json:"locale"`
 	}
 	var in Input
 
@@ -142,7 +143,7 @@ func APICreatePost(c *gin.Context) {
 		// In other words `IsPreview` can only be true if `Content`
 		// is a single url.
 		scrape := NAScrapeWebsite(in.Content)
-		result := NACreatePost(in.UserID, in.Content, scrape, false)
+		result := NACreatePost(in.UserID, in.Content, in.Locale, scrape, false)
 		APIReturn(c, true, result)
 	} else {
 		user, _ := DBGetUser(mainDB, in.UserID, "")
@@ -151,7 +152,7 @@ func APICreatePost(c *gin.Context) {
 		} else {
 			date := time.Time{}
 			text, tags := DBPrepareTaggedString(in.Content, true)
-			post := DBCreatePost(mainDB, in.UserID, text, date, tags, in.Location)
+			post := DBCreatePost(mainDB, in.UserID, text, date, tags, in.Location, in.Locale)
 			if post.ID > 0 {
 				APIReturn(c, true, post)
 			} else {
@@ -168,6 +169,7 @@ func APICreateComment(c *gin.Context) {
 		ReplyID  int64  `json:"replyId"`
 		Content  string `json:"content"`
 		IsReview bool   `json:"isReview"`
+		Locale   string `json:"locale"`
 	}
 	var in Input
 
@@ -196,7 +198,7 @@ func APICreateComment(c *gin.Context) {
 	if user.Blocked.After(utc()) {
 		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
 	} else {
-		comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview)
+		comment, _ := DBCreateComment(mainDB, in.UserID, in.Content, postId, in.ReplyID, in.IsReview, in.Locale)
 		if comment.ID > 0 {
 			APIReturn(c, true, comment)
 		} else {

@@ -19,6 +19,7 @@ import (
 type NewsAgent struct {
 	ID         int64
 	Name       string
+	Locale     string
 	Origin     string
 	LastUpdate time.Time
 	Subs       []string
@@ -37,12 +38,12 @@ type WebsiteScrapings struct {
 	Date        time.Time
 }
 
-func NACreateNewsAgent(id int64, name string, origin string) (NewsAgent, error) {
+func NACreateNewsAgent(id int64, name string, origin string, locale string) (NewsAgent, error) {
 	e := NAAgentExists(name, origin)
 	if e != nil {
 		return NewsAgent{}, e
 	}
-	agent := NewsAgent{id, name, origin, utc(), []string{}}
+	agent := NewsAgent{id, name, locale, origin, utc(), []string{}}
 	agents = append(agents, agent)
 	NAWriteAllNewsAgents(agents)
 	return agent, nil
@@ -302,7 +303,7 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 	scraping := NAScrapeWebsite(agent.Origin)
 
 	if scraping.Type == "article" {
-		NACreatePost(agent.ID, agent.Origin, scraping, true)
+		NACreatePost(agent.ID, agent.Origin, agent.Locale, scraping, true)
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
@@ -326,7 +327,7 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 				DBAgentPathInsert(db, id, canURLString)
 				subScraping := NAScrapeWebsite(urlString)
 				if subScraping.Type == "article" {
-					NACreatePost(agent.ID, urlString, subScraping, true)
+					NACreatePost(agent.ID, urlString, agent.Locale, subScraping, true)
 				}
 			}
 		}
@@ -503,7 +504,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, locale, language, date}
 }
 
-func NACreatePost(userId int64, url string, scrape WebsiteScrapings, store bool) PostResult {
+func NACreatePost(userId int64, url string, locale string, scrape WebsiteScrapings, store bool) PostResult {
 	body := url + "\n!" + scrape.Title
 
 	if len(scrape.Image) > 0 {
@@ -538,7 +539,7 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings, store bool)
 
 	var result PostResult
 	if store {
-		result = DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
+		result = DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{}, locale)
 	} else {
 		user, _ := DBGetUser(mainDB, userId, "")
 		author := UserProfile{user.ID, user.Name, user.RegisterDate, user.Upvotes, user.Downvotes, int64(user.Investment), false, 0, 0, 0}
@@ -587,7 +588,7 @@ func NARegisterWeeklyCleanUp(db *sql.DB) {
 	time.AfterFunc(0, func() {
 		NATrimOldUrlsFromNewAgentHashSets(db)
 		DBDeleteDuplicateAgentPosts(db)
-		AUTHRemoveOldSecrets(db, 6)
+		// DBClearTrashedContent(db)
 	})
 	time.AfterFunc(time.Hour*24*7, func() { NARegisterWeeklyCleanUp(db) })
 }

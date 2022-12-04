@@ -21,6 +21,9 @@ func DBAgentPathExists(db *sql.DB, agentId int64, path string) bool {
 	for rows.Next() {
 		rows.Scan(&id)
 		found = true
+		if found {
+			break
+		}
 	}
 	return found
 }
