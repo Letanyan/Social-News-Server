@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"math/rand"
 	"time"
@@ -159,7 +160,7 @@ func DBContainsEmail(db *sql.DB, email string) bool {
 func DBHashPassword(password string) string {
 	h := sha256.New()
 	h.Write([]byte("{" + password + "_}"))
-	result := fmt.Sprintf("%x", h.Sum(nil))
+	result := base64.StdEncoding.EncodeToString(h.Sum(nil))
 	return result
 }
 

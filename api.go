@@ -73,6 +73,7 @@ func APICreateUser(c *gin.Context) {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		Device   string `json:"device"`
 	}
 	var input Input
 
@@ -102,13 +103,18 @@ func APICreateUser(c *gin.Context) {
 		return
 	}
 
-	deviceId := c.DefaultQuery("device", "")
-
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID > 0 {
 		MailValidationKey(user.ID, user.Email, user.ValidationKey)
-		secret := AUTHRegister(mainDB, user.ID, deviceId)
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": user.Credits, "following": []string{}, "ignored": []string{}, "tags": []string{}})
+		secret := AUTHRegister(mainDB, user.ID, input.Device)
+		APIReturn(c, true, gin.H{
+			"user":      user,
+			"token":     secret,
+			"streak":    user.Credits,
+			"following": []string{},
+			"ignored":   []string{},
+			"tags":      []string{},
+		})
 	} else {
 		APIReturn(c, false, "could not create user")
 	}
@@ -306,14 +312,12 @@ func APIDeletePost(c *gin.Context) {
 
 func APIDeleteComment(c *gin.Context) {
 	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
-	if APIFailed(c, e, "invalid post id") {
-		APIReturn(c, false, "invalid post id provided")
+	if APIFailed(c, e, "invalid post id provided") {
 		return
 	}
 
 	cid, e := strconv.ParseInt(c.Param("cid"), 10, 64)
-	if APIFailed(c, e, "invalid post id") {
-		APIReturn(c, false, "invalid post id provided")
+	if APIFailed(c, e, "invalid comment id provided") {
 		return
 	}
 
@@ -336,7 +340,6 @@ func APIDeleteUserContPlaylist(kind UserContKind) func(*gin.Context) {
 	return func(c *gin.Context) {
 		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 		if APIFailed(c, e, "invalid user id") {
-			APIReturn(c, false, "invalid user id")
 			return
 		}
 
@@ -346,7 +349,6 @@ func APIDeleteUserContPlaylist(kind UserContKind) func(*gin.Context) {
 
 		pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
 		if APIFailed(c, e, "invalid post/user id") {
-			APIReturn(c, false, "invalid post/user id")
 			return
 		}
 
@@ -944,6 +946,11 @@ func APIGetPosts(c *gin.Context) {
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
 		return
+	}
+	if forUser != 0 {
+		if !APIMatchSecret(c, forUser) {
+			return
+		}
 	}
 
 	search := c.DefaultQuery("search", "")
@@ -1576,7 +1583,14 @@ func APISignIn(c *gin.Context) {
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{
+			"user":      user,
+			"token":     secret,
+			"streak":    streak,
+			"following": following,
+			"ignored":   ignored,
+			"tags":      tagFollowing,
+		})
 	} else {
 		if user.ID == -2 {
 			APIReturn(c, false, "missing")
@@ -1629,7 +1643,14 @@ func APISignInWithApple(c *gin.Context) {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId)
-			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "streak": newUser.Credits, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
+			APIReturn(c, true, gin.H{
+				"user":      newUser,
+				"token":     secret,
+				"streak":    newUser.Credits,
+				"following": []UserProfile{},
+				"ignored":   []UserProfile{},
+				"tags":      []Tag{},
+			})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
@@ -1641,7 +1662,14 @@ func APISignInWithApple(c *gin.Context) {
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
 		user.Password = ""
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{
+			"user":      user,
+			"token":     secret,
+			"streak":    streak,
+			"following": following,
+			"ignored":   ignored,
+			"tags":      tagFollowing,
+		})
 	}
 }
 
@@ -1666,7 +1694,14 @@ func APISignInWithGoogle(c *gin.Context) {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId)
-			APIReturn(c, true, gin.H{"user": newUser, "token": secret, "streak": newUser.Credits, "following": []UserProfile{}, "ignored": []UserProfile{}, "tags": []Tag{}})
+			APIReturn(c, true, gin.H{
+				"user":      newUser,
+				"token":     secret,
+				"streak":    newUser.Credits,
+				"following": []UserProfile{},
+				"ignored":   []UserProfile{},
+				"tags":      []Tag{},
+			})
 		} else {
 			APIReturn(c, false, "could not create user")
 		}
@@ -1678,7 +1713,14 @@ func APISignInWithGoogle(c *gin.Context) {
 		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		user.ValidationKey = 0
 		user.Password = ""
-		APIReturn(c, true, gin.H{"user": user, "token": secret, "streak": streak, "following": following, "ignored": ignored, "tags": tagFollowing})
+		APIReturn(c, true, gin.H{
+			"user":      user,
+			"token":     secret,
+			"streak":    streak,
+			"following": following,
+			"ignored":   ignored,
+			"tags":      tagFollowing,
+		})
 	}
 }
 
@@ -1692,12 +1734,7 @@ func APISignOut(c *gin.Context) {
 		return
 	}
 
-	secret := c.DefaultQuery("secret", "")
-	if !AUTHMatchSecret(mainDB, in.UserId, in.DeviceId, secret) {
-		APIReturn(c, true, "")
-	}
-
-	AUTHDeregister(mainDB, in.UserId, in.DeviceId, secret)
+	AUTHDeregister(mainDB, in.UserId, in.DeviceId)
 
 	APIReturn(c, true, "")
 }

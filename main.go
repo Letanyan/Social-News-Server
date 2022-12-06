@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strconv"
 
@@ -56,16 +55,7 @@ func main() {
 	}
 
 	router := gin.Default()
-	router.LoadHTMLFiles(
-		"./templates/verify.html",
-		"./templates/verify_confirmed.html",
-		"./templates/verify_failed.html",
-		"./templates/reset_password.html",
-		"./templates/reset_password_form.html",
-		"./templates/reset_password_confirmed.html",
-		"./templates/reset_password_failed.html",
-	)
-	router.GET("/", index)
+	ServeFiles(router)
 
 	api := router.Group("/api")
 	v1 := api.Group("/v1")
@@ -186,8 +176,4 @@ func main() {
 	if err := router.Run(":" + port); err != nil {
 		log.Panicf("error: %s", err.Error())
 	}
-}
-
-func index(c *gin.Context) {
-	c.String(http.StatusOK, "Index")
 }

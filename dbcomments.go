@@ -127,7 +127,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	nowTime := formatTime(t)
 
 	insertComment := fmt.Sprintf(`
-	INSERT INTO Comments(id, userId, postId, replyId, content, createdAt, edited, isReview, Language) 
+	INSERT INTO Comments(id, userId, postId, replyId, content, createdAt, edited, isReview, language) 
 	VALUES(nextval('comments_id_seq') * 10000 + extract(year from now() at time zone ('utc')), %d, %d, %d, $1, $2, $3, $4) 
 	RETURNING %s`, userId, postId, replyId, SQLFieldsForComment())
 	row := db.QueryRow(insertComment, content, nowTime, nowTime, isReview, DBLocaleToLanguageConfig(locale))

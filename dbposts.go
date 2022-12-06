@@ -148,7 +148,7 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 	locArray := SQLFormattedIndexArray(locIndex)
 
 	insertPost := fmt.Sprintf(`
-	INSERT INTO posts(userId, content, tags, createdAt, edited, location, locale) 
+	INSERT INTO posts(userId, content, tags, createdAt, edited, location, language) 
 	VALUES ($1, $2, %s, '%s', '%s', %s, $3) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, nowTime, locArray, SQLFieldsForPost())
 	row := db.QueryRow(insertPost, userId, content, DBLocaleToLanguageConfig(locale))
 

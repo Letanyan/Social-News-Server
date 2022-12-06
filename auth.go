@@ -124,12 +124,12 @@ func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) boo
 	return false
 }
 
-func AUTHDeregister(db *sql.DB, user int64, deviceId string, secret string) bool {
+func AUTHDeregister(db *sql.DB, user int64, deviceId string) bool {
 	removeUserAuth := `
 	DELETE FROM UserAuth
-	WHERE userId=$1 AND deviceId=$2 AND secret=$3
+	WHERE userId=$1 AND deviceId=$2
 	`
-	_, e := db.Exec(removeUserAuth, user, deviceId, secret)
+	_, e := db.Exec(removeUserAuth, user, deviceId)
 	return !DidFail(e, "remove secret for user ", user, " and device ", deviceId)
 }
 
