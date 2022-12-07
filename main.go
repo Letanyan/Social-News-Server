@@ -162,9 +162,9 @@ func main() {
 
 	DBSetup(mainDB)
 
-	agents = NAReadAllNewsAgents()
+	agents = NAReadAllNewsAgents(mainDB)
 	agentsOnboarding = NAReadAllAgentsOnboarding()
-	tagsOnboarding = NAReadAllTagsOnboarding()
+	tagsOnboarding = NAReadAllTagsOnboarding(mainDB)
 	agentsMutex = KeyedMutex{}
 	NARegisterHourlyUpdates(mainDB)
 	NARegisterWeeklyCleanUp(mainDB)

@@ -149,7 +149,7 @@ func APICreatePost(c *gin.Context) {
 		// In other words `IsPreview` can only be true if `Content`
 		// is a single url.
 		scrape := NAScrapeWebsite(in.Content)
-		result := NACreatePost(in.UserID, in.Content, in.Locale, scrape, false)
+		result := NACreatePost(mainDB, in.UserID, in.Content, in.Locale, scrape, false)
 		APIReturn(c, true, result)
 	} else {
 		user, _ := DBGetUser(mainDB, in.UserID, "")

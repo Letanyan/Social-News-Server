@@ -17,18 +17,18 @@ func TestDatabase(t *testing.T) {
 		email    string
 		password string
 	}{
-		{"rb t", "ribet@yahoo.com", "123456"},
-		{"ako", "akoblin@gmail.com", "password"},
-		{"ps", "portscan@comcast.net", "1234"},
-		{"noutlook", "mhanoh@outlook.com", "000"},
-		{"monsolo", "solomon@hotmail.com", "00000"},
-		{"com grady", "grady@comcast.net", "p15423"},
-		{"mac wag", "wagnerch@mac.com", "fniweufjk"},
-		{"jmail", "jandrese@gmail.com", "fcn5893gq8op%&"},
-		{"barnot", "barnett@hotmail.com", "fjijfiejfiej"},
-		{"yahear", "greear@yahoo.com", "geer"},
-		{"toku", "tokuhirom@sbcglobal.net", "pass"},
-		{"fat elk", "fatelk@gmail.com", "word"},
+		{"rb t", "ribet@new-source.app", "123456"},
+		{"ako", "akoblin@new-source.app", "password"},
+		{"ps", "portscan@new-source.app", "1234"},
+		{"noutlook", "mhanoh@new-source.app", "000"},
+		{"monsolo", "solomon@new-source.app", "00000"},
+		{"com grady", "grady@new-source.app", "p15423"},
+		{"mac wag", "wagnerch@new-source.app", "fniweufjk"},
+		{"jmail", "jandrese@new-source.app", "fcn5893gq8op%&"},
+		{"barnot", "barnett@new-source.app", "fjijfiejfiej"},
+		{"yahear", "greear@new-source.app", "geer"},
+		{"toku", "tokuhirom@new-source.app", "pass"},
+		{"fat elk", "fatelk@new-source.app", "word"},
 	}
 
 	matchUsers := func(name string, a User, b User) {
@@ -71,9 +71,9 @@ func TestDatabase(t *testing.T) {
 		t.Run(source.Name, func(t *testing.T) {
 			// t.Logf("%v\n", source)
 			rand.Seed(int64(i))
-			user1 := DBGetUser(db, source.ID, "")
+			user1, _ := DBGetUser(db, source.ID, "")
 			matchUsers("id matched user", source, user1)
-			user2 := DBGetUser(db, 0, source.Email)
+			user2, _ := DBGetUser(db, 0, source.Email)
 			matchUsers("email matched user", source, user2)
 
 			if user1.ValidationKey != 0 {
@@ -82,40 +82,44 @@ func TestDatabase(t *testing.T) {
 
 			newPassword := usersTC[rand.Intn(len(usersTC))].password
 			DBUpdatePasswordForUser(db, source.ID, usersTC[i].password, newPassword)
-			user3 := DBGetUser(db, source.ID, "")
+			user3, _ := DBGetUser(db, source.ID, "")
 			if !DBEqualHashAndPassword(user3.Password, newPassword) {
 				t.Errorf("not matching password (%s, %s) after update", user3.Password, newPassword)
 			}
 
 			otherUser := users[rand.Intn(len(users))]
-			user4 := DBGetUser(db, 0, otherUser.Email)
+			user4, _ := DBGetUser(db, 0, otherUser.Email)
 			amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
 			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount, []string{})
 
-			user5 := DBGetUser(db, user4.ID, "")
+			user5, _ := DBGetUser(db, user4.ID, "")
 			if amount < 0 && user5.Downvotes < 0 {
 				t.Errorf("Failed to update user total downvotes")
 			} else if amount > 0 && user5.Upvotes < 0 {
 				t.Errorf("Failed to update user total upvotes")
 			}
-			matchUserProfile("match vote and get user", srcUser, user5)
-
-			userPrefs := DBGetUserPref(db, true, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
-			if len(userPrefs) != 1 {
-				t.Errorf("failed to get user prefs for user %d", source.ID)
-			} else {
-				p := userPrefs[0]
-				if amount < 0 && p.Downvotes < amount {
-					t.Errorf("failed to update user pref downvotes for other user")
-				} else if amount > 0 && p.Upvotes < amount {
-					t.Errorf("failed to update user pref upvotes for other user")
+			if source.ID == user4.ID {
+				if srcUser.ID != 0 {
+					t.Errorf("User voted for self should not return")
 				}
-				if p.Downvotes != srcPref.Downvotes || p.Upvotes != srcPref.Upvotes ||
-					p.Kind != srcPref.Kind || p.PID != srcPref.PID || p.SID != srcPref.SID {
-					t.Errorf("mismatch between get user pref and vote user pref")
+			} else {
+				matchUserProfile("match vote and get user", srcUser, user5)
+				userPrefs := DBGetUserPref(db, true, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
+				if len(userPrefs) != 1 {
+					t.Errorf("failed to get user prefs for user %d", source.ID)
+				} else {
+					p := userPrefs[0]
+					if amount < 0 && p.Downvotes < amount {
+						t.Errorf("failed to update user pref downvotes for other user")
+					} else if amount > 0 && p.Upvotes < amount {
+						t.Errorf("failed to update user pref upvotes for other user")
+					}
+					if p.Downvotes != srcPref.Downvotes || p.Upvotes != srcPref.Upvotes ||
+						p.Kind != srcPref.Kind || p.PID != srcPref.PID || p.SID != srcPref.SID {
+						t.Errorf("mismatch between get user pref and vote user pref")
+					}
 				}
 			}
-
 		})
 	}
 
@@ -167,7 +171,7 @@ func TestDatabase(t *testing.T) {
 	for i, tc := range posts {
 		t.Run(tc.content, func(t *testing.T) {
 			rand.Seed(int64(i))
-			source := DBCreatePost(db, tc.userId, tc.content, time.Time{}, tc.tags, tc.location)
+			source := DBCreatePost(db, tc.userId, tc.content, time.Time{}, tc.tags, tc.location, "en")
 			post1 := DBGetPost(db, source.ID)
 			matchPost(source, post1)
 			matchUserProfile("", post1.Author, users[tc.userId-1])
@@ -175,10 +179,10 @@ func TestDatabase(t *testing.T) {
 			for i := 0; i < rand.Intn(10); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
-				other := DBGetUser(db, 0, otherUser.Email)
+				other, _ := DBGetUser(db, 0, otherUser.Email)
 				pidx := rand.Intn(len(posts))
 
-				comt, cont := DBCreateComment(db, other.ID, posts[pidx].content, post1.ID, 0, false)
+				comt, cont := DBCreateComment(db, other.ID, posts[pidx].content, post1.ID, 0, false, "")
 
 				if comt.Content != posts[pidx].content {
 					t.Errorf("comment content not correct")
@@ -197,7 +201,7 @@ func TestDatabase(t *testing.T) {
 			for i := 0; i < rand.Intn(50); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
-				other := DBGetUser(db, 0, otherUser.Email)
+				other, _ := DBGetUser(db, 0, otherUser.Email)
 				pidx := rand.Intn(len(posts))
 				loc := posts[pidx].location
 				amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
@@ -208,19 +212,21 @@ func TestDatabase(t *testing.T) {
 				} else if amount > 0 && post2.Upvotes < amount {
 					t.Errorf("Post upvotes not updated")
 				}
-				if amount < 0 && userPoster.Downvotes < amount {
-					t.Errorf("Post downvotes for poster not updated")
-				} else if amount > 0 && userPoster.Upvotes < amount {
-					t.Errorf("Post upvotes for poster not updated")
-				}
-				uPref := prefs[0]
-				if uPref.Kind != upUser && uPref.PID != other.ID {
-					t.Errorf("User pref not update user voted for")
-				}
-				if amount < 0 && uPref.Downvotes < amount {
-					t.Errorf("User pref downvotes for poster not updated")
-				} else if amount > 0 && uPref.Upvotes < amount {
-					t.Errorf("User pref upvotes for poster not updated")
+				if other.ID != source.Author.ID {
+					if amount < 0 && userPoster.Downvotes < amount {
+						t.Errorf("Post downvotes for poster not updated")
+					} else if amount > 0 && userPoster.Upvotes < amount {
+						t.Errorf("Post upvotes for poster not updated")
+					}
+					uPref := prefs[0]
+					if uPref.Kind != upUser && uPref.PID != other.ID {
+						t.Errorf("User pref not update user voted for")
+					}
+					if amount < 0 && uPref.Downvotes < amount {
+						t.Errorf("User pref downvotes for poster not updated")
+					} else if amount > 0 && uPref.Upvotes < amount {
+						t.Errorf("User pref upvotes for poster not updated")
+					}
 				}
 				pPref := prefs[1]
 				if pPref.Kind != upPost && pPref.PID != source.ID {

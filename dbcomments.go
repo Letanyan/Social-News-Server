@@ -125,14 +125,14 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentRe
 func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, replyId int64, isReview bool, locale string) (Comment, UserCont) {
 	t := utc()
 	nowTime := formatTime(t)
-
+	lang := DBLocaleToLanguageConfig(locale)
 	insertComment := fmt.Sprintf(`
-	INSERT INTO Comments(id, userId, postId, replyId, content, createdAt, edited, isReview, language) 
-	VALUES(nextval('comments_id_seq') * 10000 + extract(year from now() at time zone ('utc')), %d, %d, %d, $1, $2, $3, $4) 
-	RETURNING %s`, userId, postId, replyId, SQLFieldsForComment())
-	row := db.QueryRow(insertComment, content, nowTime, nowTime, isReview, DBLocaleToLanguageConfig(locale))
+	INSERT INTO Comments(userId, postId, replyId, content, createdAt, edited, isReview, language, contentLocaleVector) 
+	VALUES(%d, %d, %d, $1, $2, $3, $4, $5, to_tsvector('%s', $1)) 
+	RETURNING %s`, userId, postId, replyId, lang, SQLFieldsForComment())
+	row := db.QueryRow(insertComment, content, nowTime, nowTime, isReview, lang)
 	comment, e := ScanComment(row)
-	if DidFail(e, "insert comment") {
+	if DidFail(e, "insert comment", insertComment) {
 		return comment, UserCont{}
 	}
 
@@ -196,7 +196,7 @@ func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) 
 
 	updateFromPostComments := fmt.Sprintf(`
 	UPDATE comments 
-	SET content=$1, Edited='%s' 
+	SET content=$1, Edited='%s', contentLocaleVector=to_tsvector(language::regconfig, $1)
 	WHERE id=$2 AND postId=$3
 	RETURNING %s`, nowTime, SQLFieldsForComment())
 	row := db.QueryRow(updateFromPostComments, content, commentId, postId)

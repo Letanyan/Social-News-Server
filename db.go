@@ -31,6 +31,8 @@ func DBUsersSetup(db *sql.DB) {
 		downvotes BIGINT DEFAULT 0,
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
+		loginDate TIMESTAMP DEFAULT (now() at time zone 'utc'),
+		streak INTEGER DEFAULT 0,
 		trashed BOOLEAN DEFAULT false,
 		blocked TIMESTAMP DEFAULT '1970-01-01'::timestamp,
 		Investment BIGINT DEFAULT 0,
@@ -119,6 +121,7 @@ func DBPostsSetup(db *sql.DB) {
 		trashed BOOLEAN DEFAULT false,
 		commentCount INTEGER DEFAULT 0,
 		edited TIMESTAMP,
+		Language TEXT DEFAULT 'english',
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
@@ -154,6 +157,7 @@ func DBCommentsSetup(db *sql.DB) {
 		replyCount SMALLINT DEFAULT 0,
 		isReview BOOLEAN DEFAULT false,
 		edited TIMESTAMP,
+		Language TEXT DEFAULT 'english',
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`
@@ -388,19 +392,15 @@ func DBMigrations(db *sql.DB) {
 	ADD COLUMN IF NOT EXISTS Language TEXT
 	DEFAULT 'english';
 
-	ALTER TABLE Posts 
-	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
-    GENERATED ALWAYS AS (to_tsvector(Language,Content)) STORED;
-	CREATE INDEX IF NOT EXISTS posts_idx_content_vector
-	ON Posts 
-	USING gin(ContentVector);
+	ALTER TABLE Posts DROP COLUMN IF EXISTS ContentVector;
+	ALTER TABLE Posts ADD COLUMN IF NOT EXISTS ContentLocaleVector TSVECTOR;
+	UPDATE Posts SET ContentLocaleVector = to_tsvector(language::regconfig, content) WHERE ContentLocaleVector is NULL;
+	CREATE INDEX IF NOT EXISTS posts_idx_content_vector ON Posts USING gin(ContentLocaleVector);
 
-	ALTER TABLE Comments 
-	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
-    GENERATED ALWAYS AS (to_tsvector(Language,Content)) STORED;
-	CREATE INDEX IF NOT EXISTS comments_idx_content_vector
-	ON Comments 
-	USING gin(ContentVector);
+	ALTER TABLE Comments DROP COLUMN IF EXISTS ContentVector;
+	ALTER TABLE Comments ADD COLUMN IF NOT EXISTS ContentLocaleVector TSVECTOR;
+	UPDATE Comments SET ContentLocaleVector = to_tsvector(language::regconfig, content) WHERE ContentLocaleVector is NULL;
+	CREATE INDEX IF NOT EXISTS comments_idx_content_vector ON Comments USING gin(ContentLocaleVector);
 
 	ALTER Table Posts
 	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
@@ -636,6 +636,7 @@ func DBDeleteAllUsers(db *sql.DB) {
 	DBDeleteTable(db, "Users")
 	DBDeleteTable(db, "UserPref")
 	DBDeleteTable(db, "UserCont")
+	DBDeleteTable(db, "UserAuth")
 }
 
 func DBClearAllTables(db *sql.DB) {
@@ -643,7 +644,9 @@ func DBClearAllTables(db *sql.DB) {
 	DBDeleteAllUsers(db)
 	DBDeleteAllVotes(db)
 	DBDeleteAllComments(db)
-	DBDeleteTable(db, "tags")
+	DBDeleteTable(db, "Tags")
+	DBDeleteTable(db, "Iap")
+	DBDeleteTable(db, "Agents")
 }
 
 func DBClearTrashedContent(db *sql.DB) {

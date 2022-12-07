@@ -11,7 +11,7 @@ func getTestDatabase() *sql.DB {
 		port     = 5432
 		user     = "dev"
 		password = "AbstractData00"
-		dbname   = "socialnewsservertest"
+		dbname   = "spcialnewsservertest"
 	)
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)

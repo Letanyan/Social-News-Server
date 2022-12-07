@@ -59,7 +59,7 @@ func APIEditAgent(c *gin.Context) {
 		return
 	}
 
-	agent := NAEditNewsAgent(aid, in.Name, in.Origin)
+	agent := NAEditNewsAgent(mainDB, aid, in.Name, in.Origin)
 
 	APIReturn(c, true, agent)
 }

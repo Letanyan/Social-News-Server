@@ -146,18 +146,19 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 	}
 	locIndex := DBCreateLocation(db, location)
 	locArray := SQLFormattedIndexArray(locIndex)
+	lang := DBLocaleToLanguageConfig(locale)
 
 	insertPost := fmt.Sprintf(`
-	INSERT INTO posts(userId, content, tags, createdAt, edited, location, language) 
-	VALUES ($1, $2, %s, '%s', '%s', %s, $3) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, nowTime, locArray, SQLFieldsForPost())
-	row := db.QueryRow(insertPost, userId, content, DBLocaleToLanguageConfig(locale))
+	INSERT INTO posts(userId, content, tags, createdAt, edited, location, language, contentLocaleVector) 
+	VALUES ($1, $2, %s, '%s', '%s', %s, $3, to_tsvector('%s', $2)) RETURNING %s`, SQLFormattedIndexArray(tagIndices), nowTime, nowTime, locArray, lang, SQLFieldsForPost())
+	row := db.QueryRow(insertPost, userId, content, lang)
 
 	post, e := ScanPost(row)
 	if DidFail(e, "create post") {
 		return PostResult{}
 	}
 
-	cont := DBCreateUserCont(mainDB, ucpCreated, post.UserID, post.ID, -1)
+	cont := DBCreateUserCont(db, ucpCreated, post.UserID, post.ID, -1)
 	if cont.pid == 0 {
 		return PostResult{}
 	}
@@ -173,7 +174,7 @@ func DBUpdatePost(db *sql.DB, postId int64, content string) Post {
 
 	updatePost := fmt.Sprintf(`
 	UPDATE Posts 
-	SET content=$1, Edited='%s' 
+	SET content=$1, Edited='%s', contentLocaleVector=to_tsvector(language::regconfig, $1)
 	WHERE id=$2
 	RETURNING %s
 	`, nowTime, SQLFieldsForPost())
@@ -381,12 +382,12 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 			today := utc()
 			lastWeek := today.AddDate(0, 0, -7)
 
-			result = DBGetPosts(mainDB, 0, []int64{}, []string{}, []string{},
+			result = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
 				0, 0, soScore, limit, offset, "", "",
 				formatTime(lastWeek), formatTime(today), 0, "")
 
 			if len(result) == 0 { // show new post if no trending
-				result = DBGetPosts(mainDB, 0, []int64{}, []string{}, []string{},
+				result = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
 					0, 0, soCreatedAt, limit, offset, "", "",
 					"", "", 0, "")
 			}
