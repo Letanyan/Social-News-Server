@@ -10,7 +10,7 @@ import (
 )
 
 type User struct {
-	ID            int64
+	ID            int64 `json:"ID,string"`
 	Name          string
 	Email         string
 	Password      string
@@ -37,7 +37,7 @@ type User struct {
 }
 
 type UserProfile struct {
-	ID           int64
+	ID           int64 `json:"ID,string"`
 	Name         string
 	RegisterDate time.Time
 	Upvotes      int64
@@ -259,7 +259,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	}
 	row := db.QueryRow(getUser, arg)
 	user, e := ScanUser(row)
-	if DidFail(e, "get user from email/id ", arg) {
+	if DidFail(e, "get user from email/id ", getUser) {
 		return User{}, 0
 	}
 

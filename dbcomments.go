@@ -7,7 +7,7 @@ import (
 )
 
 type Comment struct {
-	ID         int64
+	ID         int64 `json:"ID,string"`
 	PostID     int64
 	UserID     int64
 	ReplyID    int64
@@ -19,6 +19,7 @@ type Comment struct {
 	Trashed    bool
 	Edited     time.Time
 	IsReview   bool
+	FlagCount  int64 `json:"FlagCount,string"`
 
 	Score float64
 	Cred  float64
@@ -26,7 +27,7 @@ type Comment struct {
 }
 
 type CommentResult struct {
-	ID         int64
+	ID         int64 `json:"ID,string"`
 	PostID     int64
 	Author     UserProfile
 	ReplyID    int64
@@ -38,6 +39,7 @@ type CommentResult struct {
 	Trashed    bool
 	Edited     time.Time
 	IsReview   bool
+	FlagCount  int64 `json:"FlagCount,string"`
 
 	Score float64
 	Cred  float64
@@ -45,20 +47,20 @@ type CommentResult struct {
 }
 
 func SQLFieldsForComment() string {
-	return "id, postId, userId, replyId, content, createdAt, upvotes, downvotes, replyCount, trashed, edited, isReview"
+	return "id, postId, userId, replyId, content, createdAt, upvotes, downvotes, replyCount, trashed, edited, flagCount, isReview"
 }
 
 func SQLFieldsForCommentResult() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, p.trashed, p.edited, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes, p.downvotes, p.replyCount, p.trashed, p.edited, p.flagCount, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func SQLFieldsForCommentResultAlias() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes AS item_up, p.downvotes AS item_down, p.replyCount, p.trashed, p.edited, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.upvotes AS item_up, p.downvotes AS item_down, p.replyCount, p.trashed, p.edited, p.flagCount, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email"
 }
 
 func ScanComment(row *sql.Row) (Comment, error) {
 	c := Comment{}
-	e := row.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview)
+	e := row.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview)
 	return c, e
 }
 
@@ -66,7 +68,7 @@ func ScanCommentResult(row *sql.Row) (CommentResult, error) {
 	c := CommentResult{}
 	var userId int64
 	var email string
-	e := row.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview, &c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email)
+	e := row.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview, &c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email)
 	c.Author.IsAgent = len(email) == 0
 	return c, e
 }
@@ -76,7 +78,7 @@ func ScanComments(rows *sql.Rows) []Comment {
 	defer rows.Close()
 	for rows.Next() {
 		c := Comment{}
-		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview, &c.Cred, &c.Score)
+		e := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview, &c.Cred, &c.Score)
 		if DidFail(e, "scan comment") {
 			continue
 		}
@@ -97,18 +99,18 @@ func ScanCommentResults(rows *sql.Rows, hasVotes bool, hasRank bool) []CommentRe
 		var email string
 		if hasRank {
 			if hasVotes {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &up, &down, &c.Cred, &c.Score, &c.Rank)
 			} else {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &c.Cred, &c.Score, &c.Rank)
 			}
 		} else {
 			if hasVotes {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &up, &down, &c.Cred, &c.Score)
 			} else {
-				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.IsReview,
+				e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt, &c.Upvotes, &c.Downvotes, &c.ReplyCount, &c.Trashed, &c.Edited, &c.FlagCount, &c.IsReview,
 					&c.Author.ID, &c.Author.Name, &c.Author.RegisterDate, &c.Author.Upvotes, &c.Author.Downvotes, &email, &c.Cred, &c.Score)
 			}
 		}
@@ -196,7 +198,7 @@ func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) 
 
 	updateFromPostComments := fmt.Sprintf(`
 	UPDATE comments 
-	SET content=$1, Edited='%s', contentLocaleVector=to_tsvector(language::regconfig, $1)
+	SET content=$1, Edited='%s', flagCount=0, contentLocaleVector=to_tsvector(language::regconfig, $1)
 	WHERE id=$2 AND postId=$3
 	RETURNING %s`, nowTime, SQLFieldsForComment())
 	row := db.QueryRow(updateFromPostComments, content, commentId, postId)

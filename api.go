@@ -1297,7 +1297,7 @@ func APIAddUserCont(kind UserContKind) func(*gin.Context) {
 		}
 
 		type Input struct {
-			PID int64 `json:"pid"`
+			PID int64 `json:"pid,string"`
 		}
 		var in Input
 		if e := c.BindJSON(&in); DidFail(e, "get input for user cont") {

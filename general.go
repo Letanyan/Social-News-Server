@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"sync"
@@ -295,4 +297,49 @@ func reverse[T any](slice []T) {
 		j := inputLen - i - 1
 		slice[i], slice[j] = slice[j], slice[i]
 	}
+}
+
+func JSONBytesBuffer(data any) *bytes.Buffer {
+	jsonData, e := json.Marshal(data)
+	if DidFail(e, "marshal data", data) {
+		return &bytes.Buffer{}
+	}
+	return bytes.NewBuffer(jsonData)
+}
+
+type JSON struct {
+	Value map[string]interface{}
+}
+
+func (value JSON) Read(key string) JSON {
+	return JSON{value.Value[key].(map[string]interface{})}
+}
+
+func (value JSON) Path(keys ...string) JSON {
+	if len(keys) <= 0 {
+		fail.Panicf("keys must not be empty")
+	}
+	var result map[string]interface{}
+	for _, k := range keys {
+		result = result[k].(map[string]interface{})
+	}
+	return JSON{result}
+}
+
+func (value JSON) Get(keys ...string) interface{} {
+	if len(keys) == 1 {
+		return value.Value[keys[0]]
+	} else if len(keys) < 1 {
+		fail.Panicf("keys must not be empty")
+	}
+	partialKeys := keys[:len(keys)-1]
+	result := value.Value
+	for _, k := range partialKeys {
+		result = result[k].(map[string]interface{})
+	}
+	return result[keys[len(keys)-1]]
+}
+
+func GetJSON(value map[string]interface{}, key string) map[string]interface{} {
+	return value[key].(map[string]interface{})
 }

@@ -442,6 +442,11 @@ func DBMigrations(db *sql.DB) {
 	ALTER COLUMN Edited DROP default;
 	ALTER TABLE Comments
 	ALTER COLUMN Edited TYPE TIMESTAMP USING createdAt;
+
+	ALTER TABLE Posts
+	ADD COLUMN IF NOT EXISTS FlagCount BIGINT DEFAULT 0;
+	ALTER TABLE Comments
+	ADD COLUMN IF NOT EXISTS FlagCount BIGINT DEFAULT 0;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")

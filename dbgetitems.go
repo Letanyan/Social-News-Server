@@ -86,7 +86,7 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		Ignored AS (
 			SELECT pid
 			FROM UserConts
-			WHERE kind=3 -- ignored user
+			WHERE kind=4 -- ignored user
 		), Viewed AS (
 			(
 				SELECT pid

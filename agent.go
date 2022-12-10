@@ -169,7 +169,7 @@ func NAReadAllNewsAgents(db *sql.DB) []NewsAgent {
 			fail.Println("duplicate agent name ", oldUser.Name)
 			continue
 		}
-		agentNames[oldUser.Name] = true
+		agentNames[agent.Name] = true
 		if oldUser.ID == 0 {
 			updated = true
 			user := DBCreateUser(db, agent.Name, "", "")
@@ -549,7 +549,7 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 			tagIds = append(tagIds, tag.ID)
 		}
 		currentTime := utc()
-		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0}
+		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0}
 	}
 	return result
 }

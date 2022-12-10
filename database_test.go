@@ -1,16 +1,36 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
+func TestMain(m *testing.M) {
+	mainDB = getTestDatabase()
+	defer mainDB.Close()
+	DBClearAllTables(mainDB)
+	DBSetup(mainDB)
+
+	// agents = NAReadAllNewsAgents(mainDB)
+	// agentsOnboarding = NAReadAllAgentsOnboarding()
+	// tagsOnboarding = NAReadAllTagsOnboarding(mainDB)
+
+	exitCode := m.Run()
+
+	os.Exit(exitCode)
+}
+
 func TestDatabase(t *testing.T) {
-	db := getTestDatabase()
-	defer db.Close()
-	DBClearAllTables(db)
-	DBSetup(db)
+	mainDB = getTestDatabase()
+	defer mainDB.Close()
 
 	usersTC := []struct {
 		name     string
@@ -60,8 +80,8 @@ func TestDatabase(t *testing.T) {
 	rand.Seed(63487)
 	users := []User{}
 	for _, tc := range usersTC {
-		user := DBCreateUser(db, tc.name, tc.email, tc.password)
-		DBValidateUser(db, user.ID, user.ValidationKey)
+		user := DBCreateUser(mainDB, tc.name, tc.email, tc.password)
+		DBValidateUser(mainDB, user.ID, user.ValidationKey)
 		if !DBEqualHashAndPassword(user.Password, tc.password) {
 			t.Errorf("user password hash failed %s != %s", user.Password, tc.password)
 		}
@@ -71,9 +91,9 @@ func TestDatabase(t *testing.T) {
 		t.Run(source.Name, func(t *testing.T) {
 			// t.Logf("%v\n", source)
 			rand.Seed(int64(i))
-			user1, _ := DBGetUser(db, source.ID, "")
+			user1, _ := DBGetUser(mainDB, source.ID, "")
 			matchUsers("id matched user", source, user1)
-			user2, _ := DBGetUser(db, 0, source.Email)
+			user2, _ := DBGetUser(mainDB, 0, source.Email)
 			matchUsers("email matched user", source, user2)
 
 			if user1.ValidationKey != 0 {
@@ -81,18 +101,18 @@ func TestDatabase(t *testing.T) {
 			}
 
 			newPassword := usersTC[rand.Intn(len(usersTC))].password
-			DBUpdatePasswordForUser(db, source.ID, usersTC[i].password, newPassword)
-			user3, _ := DBGetUser(db, source.ID, "")
+			DBUpdatePasswordForUser(mainDB, source.ID, usersTC[i].password, newPassword)
+			user3, _ := DBGetUser(mainDB, source.ID, "")
 			if !DBEqualHashAndPassword(user3.Password, newPassword) {
 				t.Errorf("not matching password (%s, %s) after update", user3.Password, newPassword)
 			}
 
 			otherUser := users[rand.Intn(len(users))]
-			user4, _ := DBGetUser(db, 0, otherUser.Email)
+			user4, _ := DBGetUser(mainDB, 0, otherUser.Email)
 			amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-			srcUser, srcPref := DBVoteForUser(db, source.ID, user4.ID, amount, []string{})
+			srcUser, srcPref := DBVoteForUser(mainDB, source.ID, user4.ID, amount, []string{})
 
-			user5, _ := DBGetUser(db, user4.ID, "")
+			user5, _ := DBGetUser(mainDB, user4.ID, "")
 			if amount < 0 && user5.Downvotes < 0 {
 				t.Errorf("Failed to update user total downvotes")
 			} else if amount > 0 && user5.Upvotes < 0 {
@@ -104,7 +124,7 @@ func TestDatabase(t *testing.T) {
 				}
 			} else {
 				matchUserProfile("match vote and get user", srcUser, user5)
-				userPrefs := DBGetUserPref(db, true, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
+				userPrefs := DBGetUserPref(mainDB, true, source.ID, soScore, upUser, user5.ID, 0, 0, 0, 10, 0)
 				if len(userPrefs) != 1 {
 					t.Errorf("failed to get user prefs for user %d", source.ID)
 				} else {
@@ -171,18 +191,18 @@ func TestDatabase(t *testing.T) {
 	for i, tc := range posts {
 		t.Run(tc.content, func(t *testing.T) {
 			rand.Seed(int64(i))
-			source := DBCreatePost(db, tc.userId, tc.content, time.Time{}, tc.tags, tc.location, "en")
-			post1 := DBGetPost(db, source.ID)
+			source := DBCreatePost(mainDB, tc.userId, tc.content, time.Time{}, tc.tags, tc.location, "en")
+			post1 := DBGetPost(mainDB, source.ID)
 			matchPost(source, post1)
 			matchUserProfile("", post1.Author, users[tc.userId-1])
 
 			for i := 0; i < rand.Intn(10); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
-				other, _ := DBGetUser(db, 0, otherUser.Email)
+				other, _ := DBGetUser(mainDB, 0, otherUser.Email)
 				pidx := rand.Intn(len(posts))
 
-				comt, cont := DBCreateComment(db, other.ID, posts[pidx].content, post1.ID, 0, false, "")
+				comt, cont := DBCreateComment(mainDB, other.ID, posts[pidx].content, post1.ID, 0, false, "")
 
 				if comt.Content != posts[pidx].content {
 					t.Errorf("comment content not correct")
@@ -198,14 +218,32 @@ func TestDatabase(t *testing.T) {
 				}
 			}
 
+			flagCountIteration := 0
+			for i := 0; i < rand.Intn(3); i += 1 {
+				odx := rand.Intn(len(users))
+				otherUser := users[odx]
+				other, _ := DBGetUser(mainDB, 0, otherUser.Email)
+				flagCountIteration += 1
+				DBCreateFlag(mainDB, other.ID, post1.ID, -1, frSpam, "no reason")
+			}
+			flagPost := DBGetPost(mainDB, post1.ID)
+			if flagPost.FlagCount != int64(flagCountIteration) {
+				t.Errorf("flag count not matching")
+			}
+			DBIgnoreFlagContent(mainDB, post1.ID, -1)
+			flagPost = DBGetPost(mainDB, post1.ID)
+			if flagPost.FlagCount != -1000 {
+				t.Errorf("flag count not matching after handling")
+			}
+
 			for i := 0; i < rand.Intn(50); i += 1 {
 				odx := rand.Intn(len(users))
 				otherUser := users[odx]
-				other, _ := DBGetUser(db, 0, otherUser.Email)
+				other, _ := DBGetUser(mainDB, 0, otherUser.Email)
 				pidx := rand.Intn(len(posts))
 				loc := posts[pidx].location
 				amount := int64(rand.Intn(50)) * sign(rand.Intn(2) == 0)
-				post2, userPoster, tags, prefs := DBVotePost(db, other.ID, source.ID, amount, loc)
+				post2, userPoster, tags, prefs := DBVotePost(mainDB, other.ID, source.ID, amount, loc)
 
 				if amount < 0 && post2.Downvotes < amount {
 					t.Errorf("Post downvotes not updated")
@@ -250,5 +288,93 @@ func TestDatabase(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func FuzzDatabase(f *testing.F) {
+	mainDB := getTestDatabase()
+
+	usersTC := []struct {
+		name     string
+		email    string
+		password string
+	}{
+		{"rb t", "ribet1@new-source.app", "123456"},
+		{"ako", "akoblin1@new-source.app", "password"},
+		{"ps", "portscan1@new-source.app", "1234"},
+		{"noutlook", "mhanoh1@new-source.app", "000"},
+		{"monsolo", "solomon1@new-source.app", "00000"},
+		{"com grady", "grady1@new-source.app", "p15423"},
+		{"mac wag", "wagnerch1@new-source.app", "fniweufjk"},
+		{"jmail", "jandrese1@new-source.app", "fcn5893gq8op%&"},
+		{"barnot", "barnett1@new-source.app", "fjijfiejfiej"},
+		{"yahear", "greear1@new-source.app", "geer"},
+		{"toku", "tokuhirom1@new-source.app", "pass"},
+		{"fat elk", "fatelk1@new-source.app", "word"},
+	}
+
+	posts := []struct {
+		content  string
+		userId   int64
+		tags     []string
+		location []string
+	}{
+		{"After several other French cities", 1, []string{"france", "boycott", "qatar", "world cup"}, []string{"Europe", "Germany", "Hoffenheim", "1880"}},
+		{"What Modric is doing, playing at this level at his age", 2, []string{"Modric", "football", "age"}, []string{"Europe", "Spain", "Madrid", "10"}},
+		{"How the PL table shapes up after Matchweek 9", 1, []string{"PL", "table"}, []string{"Europe", "Germany", "Hoffenheim", "1880"}},
+		{"Gareth Bale launches lager and ale", 3, []string{"Bale", "Lager"}, []string{"South America", "Brazil", "Sao Paolo", "1888"}},
+		{"I know why the caged archon sings", 4, []string{"Genshin", "Nahida"}, []string{"Africa", "Egypt", "Giza", "3"}},
+		{"central berg in spring is something else", 5, []string{"Drakensberg", "Spring"}, []string{"Africa", "South Africa", "Free State", "Drakensberg"}},
+		{"Views from Lion's Head Cape Town. A moderate hike to the top", 6, []string{"Lions Head", "Hike"}, []string{"Africa", "South Africa", "West Cape", "Cape Town"}},
+		{"Whats your go-to radio station to listen or stream", 5, []string{"Music", "Stream", "radio"}, []string{"Africa", "South Africa", "Free State", "Drakensberg"}},
+		{"Whats your go-to radio station to listen or stream", 5, []string{"Music", "Stream", "radio"}, []string{"Africa", "South Africa", "Free State", "Drakensberg"}},
+		{"Gareth Bale launches lager and ale", 3, []string{"Bale", "Lager"}, []string{"South America", "Brazil", "Sao Paolo", "1888"}},
+		{"I know why the caged archon sings", 4, []string{"Genshin", "Nahida"}, []string{"Africa", "Egypt", "Giza", "3"}},
+		{"central berg in spring is something else", 5, []string{"Drakensberg", "Spring"}, []string{"Africa", "South Africa", "Free State", "Drakensberg"}},
+	}
+
+	for i, u := range usersTC {
+		f.Add(u.name, u.email, u.password, posts[i].content)
+	}
+	f.Fuzz(func(t *testing.T, n string, e string, p string, c string) {
+		user := DBCreateUser(mainDB, n, e, p)
+		if user.ID != 0 {
+			go func() {
+				post := DBCreatePost(mainDB, user.ID, c, utc(), []string{}, []string{}, "en")
+				go DBVotePost(mainDB, user.ID, post.ID, 1, []string{})
+			}()
+		}
+	})
+}
+
+func TestUserFlow(t *testing.T) {
+	mainDB = getTestDatabase()
+	r := getTestRouter()
+
+	w := httptest.NewRecorder()
+
+	req, _ := http.NewRequest("POST", "/api/v1/users", JSONBytesBuffer(gin.H{
+		"name":     "patient x",
+		"email":    "patientX@new-source.app",
+		"password": "h1z1init",
+		"device":   "blankStare",
+	}))
+	r.ServeHTTP(w, req)
+
+	var user JSON
+	json.Unmarshal(w.Body.Bytes(), &user.Value)
+	if user.Get("payload", "user", "Password") != DBHashPassword("h1z1init") {
+		t.Errorf("password hash not matching")
+	}
+	if user.Get("payload", "user", "Name") != "patient x" {
+		t.Errorf("incorrect name")
+	}
+
+	req, _ = http.NewRequest("GET", fmt.Sprintf("/api/v1/posts?uid=%d", user.Get("payload", "user", "ID").(int64)), nil)
+	r.ServeHTTP(w, req)
+	var post JSON
+	json.Unmarshal(w.Body.Bytes(), &post.Value)
+	if len(post.Get("payload").([]interface{})) != 0 {
+		t.Errorf("posts from new user must be empty")
 	}
 }

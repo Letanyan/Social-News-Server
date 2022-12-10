@@ -6,7 +6,7 @@ import (
 )
 
 type Tag struct {
-	ID        int64
+	ID        int64 `json:"ID,string"`
 	Name      string
 	Upvotes   int64
 	Downvotes int64
