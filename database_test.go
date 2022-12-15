@@ -1,12 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
-	"net/http"
-	"net/http/httptest"
 	"os"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +30,8 @@ func TestMain(m *testing.M) {
 func TestDatabase(t *testing.T) {
 	mainDB = getTestDatabase()
 	defer mainDB.Close()
+	DBClearAllTables(mainDB)
+	DBSetup(mainDB)
 
 	usersTC := []struct {
 		name     string
@@ -336,45 +337,88 @@ func FuzzDatabase(f *testing.F) {
 	for i, u := range usersTC {
 		f.Add(u.name, u.email, u.password, posts[i].content)
 	}
+	wg := new(sync.WaitGroup)
 	f.Fuzz(func(t *testing.T, n string, e string, p string, c string) {
 		user := DBCreateUser(mainDB, n, e, p)
 		if user.ID != 0 {
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				post := DBCreatePost(mainDB, user.ID, c, utc(), []string{}, []string{}, "en")
 				go DBVotePost(mainDB, user.ID, post.ID, 1, []string{})
 			}()
 		}
 	})
+	wg.Wait()
+	mainDB.Close()
 }
 
 func TestUserFlow(t *testing.T) {
 	mainDB = getTestDatabase()
+	defer mainDB.Close()
+	DBClearAllTables(mainDB)
+	DBSetup(mainDB)
 	r := getTestRouter()
 
-	w := httptest.NewRecorder()
-
-	req, _ := http.NewRequest("POST", "/api/v1/users", JSONBytesBuffer(gin.H{
+	user := CallAPI(r, "POST", "/api/v1/users", gin.H{
 		"name":     "patient x",
 		"email":    "patientX@new-source.app",
 		"password": "h1z1init",
 		"device":   "blankStare",
-	}))
-	r.ServeHTTP(w, req)
-
-	var user JSON
-	json.Unmarshal(w.Body.Bytes(), &user.Value)
+	})
 	if user.Get("payload", "user", "Password") != DBHashPassword("h1z1init") {
 		t.Errorf("password hash not matching")
 	}
 	if user.Get("payload", "user", "Name") != "patient x" {
 		t.Errorf("incorrect name")
 	}
+	secret := user.Get("payload", "token").(string)
+	device := "blankStare"
 
-	req, _ = http.NewRequest("GET", fmt.Sprintf("/api/v1/posts?uid=%d", user.Get("payload", "user", "ID").(int64)), nil)
-	r.ServeHTTP(w, req)
-	var post JSON
-	json.Unmarshal(w.Body.Bytes(), &post.Value)
-	if len(post.Get("payload").([]interface{})) != 0 {
+	pid, _ := strconv.ParseInt(user.Get("payload", "user", "ID").(string), 10, 64)
+	posts := CallAPI(r, "GET", fmt.Sprintf("/api/v1/posts?uid=%d", pid), gin.H{})
+	if len(posts.Get("payload").([]interface{})) != 0 {
 		t.Errorf("posts from new user must be empty")
+	}
+
+	user = CallAPI(r, "POST", "/api/v1/auth/sign-in", gin.H{
+		"email":    "patientX@new-source.app",
+		"password": "h1z1init",
+		"device":   "blankStare",
+	})
+	if user.Get("payload", "user", "Name") != "patient x" {
+		t.Errorf("sign in incorrect")
+	}
+	user = CallAPI(r, "POST", "/api/v1/auth/sign-in", gin.H{
+		"email":    "patientX@new-source",
+		"password": "h1z1init",
+		"device":   "blankStare",
+	})
+	if user.Get("reason") != "missing" {
+		t.Errorf("expected missing user with wrong email")
+	}
+	user = CallAPI(r, "POST", "/api/v1/auth/sign-in", gin.H{
+		"email":    "patientX@new-source.app",
+		"password": "h1z1",
+		"device":   "blankStare",
+	})
+	if user.Get("reason") != "password" {
+		t.Errorf("expected incorrect password")
+	}
+
+	post := CallAPI(r, "POST", fmt.Sprintf("/api/v1/posts?secret=%s&device=%s", secret, device), gin.H{
+		"userId":    "1",
+		"content":   "this is a post",
+		"location":  []string{"ZA", "Western Cape"},
+		"isPreview": false,
+		"locale":    "en",
+	})
+	if post.Get("payload", "ID").(string) != "1" {
+		t.Errorf("expected to create post")
+	}
+
+	posts = CallAPI(r, "GET", fmt.Sprintf("/api/v1/posts?uid=%d", pid), gin.H{})
+	if len(posts.Get("payload").([]interface{})) != 1 {
+		t.Errorf("posts must contain a single post")
 	}
 }

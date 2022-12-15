@@ -36,3 +36,14 @@ func servePrivacy(c *gin.Context) {
 func serveIndex(c *gin.Context) {
 	c.String(http.StatusOK, "Index")
 }
+
+func FSFooter() string {
+	return `
+<footer>
+	<br>
+	Customer Support: contact@new-source.app
+	<br>
+	Privacy Policy: <a href="https://new-source.app/privacy-policy/"></a>
+</footer>
+`
+}

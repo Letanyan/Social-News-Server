@@ -2,7 +2,10 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,4 +31,16 @@ func getTestRouter() *gin.Engine {
 	ServeFiles(router)
 	ServeAPI(router)
 	return router
+}
+
+func CallAPI(router *gin.Engine, method string, path string, body map[string]any) JSON {
+	r := httptest.NewRecorder()
+	req, e := http.NewRequest(method, path, JSONBytesBuffer(body))
+	if DidFail(e, "call api") {
+		panic("call api")
+	}
+	router.ServeHTTP(r, req)
+	var result JSON
+	json.Unmarshal(r.Body.Bytes(), &result.Value)
+	return result
 }

@@ -33,7 +33,7 @@ type PostResult struct {
 	ID           int64 `json:"ID,string"`
 	Author       UserProfile
 	Content      string
-	Tags         []int64
+	Tags         []string
 	CreatedAt    time.Time
 	Location     []string
 	Upvotes      int64

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 )
 
 var (
@@ -33,7 +34,7 @@ func DidFail(e error, message ...interface{}) bool {
 		if fail == nil {
 			return true
 		}
-		fail.Println(s)
+		fail.Println(s, "\n", string(debug.Stack()))
 		return true
 	} else {
 		_, file, line, _ := runtime.Caller(1)

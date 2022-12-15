@@ -122,7 +122,7 @@ func APICreateUser(c *gin.Context) {
 
 func APICreatePost(c *gin.Context) {
 	type Input struct {
-		UserID    int64    `json:"userId"`
+		UserID    int64    `json:"userId,string"`
 		Content   string   `json:"content"`
 		Location  []string `json:"location"`
 		IsPreview bool     `json:"isPreview"`
@@ -171,7 +171,7 @@ func APICreatePost(c *gin.Context) {
 
 func APICreateComment(c *gin.Context) {
 	type Input struct {
-		UserID   int64  `json:"userId"`
+		UserID   int64  `json:"userId,string"`
 		ReplyID  int64  `json:"replyId"`
 		Content  string `json:"content"`
 		IsReview bool   `json:"isReview"`
@@ -707,8 +707,9 @@ func APIGetUserPrefTags(c *gin.Context) {
 	endDate := sanitizeDate(c.DefaultQuery("end", ""))
 	search := c.DefaultQuery("search", "")
 	isOwner := ContextMatchSecret(c, uid)
+	isWatched := c.DefaultQuery("watched", "") == "true"
 
-	result := DBGetUserPrefTags(mainDB, isOwner, uid, upvoteAmount, downvoteAmount, tags, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
+	result := DBGetUserPrefTags(mainDB, isWatched, isOwner, uid, upvoteAmount, downvoteAmount, tags, upvotes, downvotes, order, search, limit, offset, startDate, endDate)
 	APIReturn(c, true, result)
 }
 
@@ -1095,7 +1096,7 @@ func APIGetTag(c *gin.Context) {
 
 func APIGetTagsFromIDs(c *gin.Context) {
 	type Input struct {
-		Ids []int64 `json:"ids"`
+		Ids []string `json:"ids"`
 	}
 	var in Input
 
@@ -1108,7 +1109,16 @@ func APIGetTagsFromIDs(c *gin.Context) {
 		return
 	}
 
-	result := DBGetTagsFromIDs(mainDB, in.Ids)
+	tags := []int64{}
+	for i := range in.Ids {
+		t, e := strconv.ParseInt(in.Ids[i], 10, 64)
+		if DidFail(e, "parse tag int") {
+			continue
+		}
+		tags = append(tags, t)
+	}
+
+	result := DBGetTagsFromIDs(mainDB, tags)
 
 	APIReturn(c, true, result)
 }
@@ -1321,7 +1331,7 @@ func APIRefreshUserContRecommendations(c *gin.Context) {
 	}
 
 	type Input struct {
-		PIDs []int64 `json:"pid"`
+		PIDs []string `json:"pid"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); DidFail(e, "get input for user cont") {
@@ -1329,7 +1339,16 @@ func APIRefreshUserContRecommendations(c *gin.Context) {
 		return
 	}
 
-	DBRefreshUserContRecommended(mainDB, uid, in.PIDs)
+	postIds := []int64{}
+	for i := range in.PIDs {
+		p, e := strconv.ParseInt(in.PIDs[i], 10, 64)
+		if DidFail(e, "parse int for post id") {
+			continue
+		}
+		postIds = append(postIds, p)
+	}
+
+	DBRefreshUserContRecommended(mainDB, uid, postIds)
 }
 
 func APIPurchaseCredit(c *gin.Context) {
@@ -1403,17 +1422,35 @@ func APIOnboard(c *gin.Context) {
 		return
 	}
 	type Input struct {
-		Tags  []int64 `json:"tags"`
-		Users []int64 `json:"users"`
+		Tags  []string `json:"tags"`
+		Users []string `json:"users"`
 	}
 	var in Input
 	if e := c.BindJSON(&in); APIFailed(c, e, "get input for vote post") {
 		return
 	}
-	for _, tag := range in.Tags {
+
+	tags := []int64{}
+	users := []int64{}
+	for i := range in.Tags {
+		t, e := strconv.ParseInt(in.Tags[i], 10, 64)
+		if DidFail(e, "parse string to int") {
+			continue
+		}
+		tags = append(tags, t)
+	}
+	for i := range in.Users {
+		u, e := strconv.ParseInt(in.Users[i], 10, 64)
+		if DidFail(e, "parse string to int") {
+			continue
+		}
+		users = append(users, u)
+	}
+
+	for _, tag := range tags {
 		DBCreateUserCont(mainDB, ucpTagFollow, uid, tag, -1)
 	}
-	for _, user := range in.Users {
+	for _, user := range users {
 		DBCreateUserCont(mainDB, ucpUserFollow, uid, user, -1)
 	}
 
@@ -1777,25 +1814,25 @@ func APIPasswordResetForm(c *gin.Context) {
 		return
 	}
 
-	APIReturnHTML(c, "reset_password_form.html", gin.H{"UserId": uid, "Key": key, "Src": serverAddr})
+	APIReturnHTML(c, "reset_password_form.html", gin.H{"UserId": uid, "Key": key, "Src": serverAddr, "Footer": FSFooter()})
 }
 
 func APIResetPassword(c *gin.Context) {
 	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if DidFail(e, "invalid user id") {
-		APIReturnHTML(c, "reset_password_failed.html", gin.H{})
+		APIReturnHTML(c, "reset_password_failed.html", gin.H{"Footer": FSFooter()})
 		return
 	}
 
 	nKey, e := strconv.ParseInt(c.Param("key"), 10, 32)
 	if DidFail(e, "invalid key") {
-		APIReturnHTML(c, "reset_password_failed.html", gin.H{})
+		APIReturnHTML(c, "reset_password_failed.html", gin.H{"Footer": FSFooter()})
 		return
 	}
 
 	oKey, loaded := AUTHUserReset.LoadAndDelete(uid)
 	if !(loaded && int32(nKey) == oKey.(int32)) {
-		APIReturnHTML(c, "reset_password_failed.html", gin.H{})
+		APIReturnHTML(c, "reset_password_failed.html", gin.H{"Footer": FSFooter()})
 		return
 	}
 
@@ -1808,7 +1845,7 @@ func APIResetPassword(c *gin.Context) {
 	}
 	DBResetPasswordForUser(mainDB, uid, password)
 
-	APIReturnHTML(c, "reset_password_confirmed.html", gin.H{})
+	APIReturnHTML(c, "reset_password_confirmed.html", gin.H{"Footer": FSFooter()})
 }
 
 func APIResendVerificationLink(c *gin.Context) {
@@ -1847,13 +1884,13 @@ func APIVerifyUserEmail(c *gin.Context) {
 
 	res := DBValidateUser(mainDB, uid, int32(key))
 	if res {
-		APIReturnHTML(c, "verify_confirmed.html", gin.H{})
+		APIReturnHTML(c, "verify_confirmed.html", gin.H{"Footer": FSFooter()})
 	} else {
 		user, _ := DBGetUser(mainDB, uid, "")
 		if user.ValidationKey == 0 {
-			APIReturnHTML(c, "verify_confirmed.html", gin.H{})
+			APIReturnHTML(c, "verify_confirmed.html", gin.H{"Footer": FSFooter()})
 		} else {
-			APIReturnHTML(c, "verify_failed.html", gin.H{})
+			APIReturnHTML(c, "verify_failed.html", gin.H{"Footer": FSFooter()})
 		}
 	}
 }

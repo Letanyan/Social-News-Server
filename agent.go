@@ -276,6 +276,7 @@ func NAUpdateAllNewsAgent(db *sql.DB, before time.Duration) []WebsiteScrapings {
 	wg := new(sync.WaitGroup)
 	m := sync.Mutex{}
 	for i := range agents {
+		k := i
 		a := agents[i]
 		if a.LastUpdate.Before(utc().Add(before)) {
 			wg.Add(1)
@@ -285,7 +286,7 @@ func NAUpdateAllNewsAgent(db *sql.DB, before time.Duration) []WebsiteScrapings {
 				scrape := NAUpdateNewsAgent(db, a, wg)
 				m.Lock()
 				result = append(result, scrape)
-				agents[i].LastUpdate = utc()
+				agents[k].LastUpdate = utc()
 				m.Unlock()
 			}()
 		}
@@ -544,9 +545,9 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 		user, _ := DBGetUser(db, userId, "")
 		author := UserProfile{user.ID, user.Name, user.RegisterDate, user.Upvotes, user.Downvotes, int64(user.Investment), false, 0, 0, 0}
 		tagObjs := DBCreateTags(db, tags)
-		tagIds := []int64{}
+		tagIds := []string{}
 		for _, tag := range tagObjs {
-			tagIds = append(tagIds, tag.ID)
+			tagIds = append(tagIds, fmt.Sprintf("%d", tag.ID))
 		}
 		currentTime := utc()
 		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0}
