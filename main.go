@@ -75,8 +75,8 @@ func main() {
 	agentsOnboarding = NAReadAllAgentsOnboarding()
 	tagsOnboarding = NAReadAllTagsOnboarding(mainDB)
 	agentsMutex = KeyedMutex{}
-	NARegisterHourlyUpdates(mainDB)
-	NARegisterWeeklyCleanUp(mainDB)
+	// NARegisterHourlyUpdates(mainDB)
+	// NARegisterWeeklyCleanUp(mainDB)
 
 	router := gin.Default()
 	ServeFiles(router)

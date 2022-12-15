@@ -162,6 +162,8 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 		return PostResult{}
 	}
 
+	DBCreatePostTags(db, post.ID, post.Tags)
+
 	cont := DBCreateUserCont(db, ucpCreated, post.UserID, post.ID, -1)
 	if cont.pid == 0 {
 		return PostResult{}
@@ -188,6 +190,23 @@ func DBUpdatePost(db *sql.DB, postId int64, content string) Post {
 		return Post{}
 	}
 	return post
+}
+
+func DBCreatePostTags(db *sql.DB, postId int64, tags []int64) {
+	tagRows := ""
+	for i := range tags {
+		comma := ""
+		if i != len(tags)-1 {
+			comma = ","
+		}
+		tagRows += fmt.Sprintf("(%d, %d)%s", postId, tags[i], comma)
+	}
+	query := fmt.Sprintf(`
+	INSERT INTO PostTags (postId, tagId)
+	VALUES %s ON CONFLICT (postId, tagId) DO NOTHING;
+	`, tagRows)
+	_, e := db.Exec(query)
+	DidFail(e, "insert post tags")
 }
 
 func DBVotePost(db *sql.DB, userId int64, postId int64, upvoteAmount int64, location []string) (Post, UserProfile, []Tag, []UserPref) {

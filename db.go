@@ -16,6 +16,7 @@ func DBSetup(db *sql.DB) {
 	DBIapSetup(db)
 	DBAgentsSetup(db)
 	DBUserAuthSetup(db)
+	DBPostTagsSetup(db)
 	DBFunctionSetup(db)
 	DBMigrations(db)
 }
@@ -117,7 +118,7 @@ func DBPostsSetup(db *sql.DB) {
 		createdAt TIMESTAMP,
 		upvotes BIGINT DEFAULT 0,
 		downvotes BIGINT DEFAULT 0,
-		location TEXT[],
+		location INT[],
 		trashed BOOLEAN DEFAULT false,
 		commentCount INTEGER DEFAULT 0,
 		edited TIMESTAMP,
@@ -370,6 +371,32 @@ func DBUserAuthSetup(db *sql.DB) {
 	}
 }
 
+func DBPostTagsSetup(db *sql.DB) {
+	createPostTags := `CREATE TABLE IF NOT EXISTS PostTags (
+		postId BIGINT,
+		tagId BIGINT,
+
+		PRIMARY KEY (postId, tagId)
+	) PARTITION BY HASH(postId);`
+	_, e := db.Exec(createPostTags)
+	DidFail(e, "create post tags table")
+	createPostTagsTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS PostTags%d 
+		PARTITION OF PostTags
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS PostTags%d_index 
+		ON PostTags%d (postId, tagId)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create posts tags partition instance")
+	}
+	mod := 10
+	for i := 0; i < mod; i += 1 {
+		createPostTagsTable(mod, i)
+	}
+}
+
 func DBMigrations(db *sql.DB) {
 	commands := `
 	ALTER TABLE Users 
@@ -450,6 +477,26 @@ func DBMigrations(db *sql.DB) {
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
+
+	postTagsCount := `SELECT COUNT(*) FROM PostTags;`
+	row := db.QueryRow(postTagsCount)
+	var count int
+	e = row.Scan(&count)
+	if DidFail(e, "scan count of PostTags") {
+		return
+	}
+	if count == 0 {
+		updatePostTags := `
+		INSERT INTO PostTags (postId, tagId)
+		SELECT p.id, tagId
+		FROM Posts p, unnest(p.tags) tagId
+		ON CONFLICT (postId, tagId) 
+		DO NOTHING;
+		`
+		_, e = db.Exec(updatePostTags)
+		DidFail(e, "insert post tag ids")
+	}
+
 }
 
 func DBFunctionSetup(db *sql.DB) {

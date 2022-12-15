@@ -102,7 +102,8 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		)
 		`, forUser, forUser)
 
-		joins += "JOIN TagScores ts ON ts.id = ANY(p.tags)\n"
+		joins += "JOIN PostTags pt ON p.id = pt.postId\n"
+		joins += "JOIN TagScores ts ON ts.id = pt.tagId\n"
 		joins += "JOIN UserScores us ON us.id = p.userId\n"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
