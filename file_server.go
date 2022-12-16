@@ -1,6 +1,7 @@
 package main
 
 import (
+	"html/template"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -37,13 +38,13 @@ func serveIndex(c *gin.Context) {
 	c.String(http.StatusOK, "Index")
 }
 
-func FSFooter() string {
-	return `
+func FSFooter() template.HTML {
+	return template.HTML(`
 <footer>
 	<br>
 	Customer Support: contact@new-source.app
 	<br>
-	Privacy Policy: <a href="https://new-source.app/privacy-policy/"></a>
+	Privacy Policy: <a href="https://new-source.app/privacy-policy/">Policy</a>
 </footer>
-`
+`)
 }

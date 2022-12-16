@@ -1837,13 +1837,13 @@ func APIResetPassword(c *gin.Context) {
 	}
 
 	type Input struct {
-		Password string `json:"password"`
+		Password string `json:"password" form:"password"`
 	}
 	var in Input
 	if e := c.Bind(&in); APIFailed(c, e, "get input for password reset") {
 		return
 	}
-	DBResetPasswordForUser(mainDB, uid, password)
+	DBResetPasswordForUser(mainDB, uid, in.Password)
 
 	APIReturnHTML(c, "reset_password_confirmed.html", gin.H{"Footer": FSFooter()})
 }
