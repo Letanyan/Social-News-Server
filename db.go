@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
 func DBSetup(db *sql.DB) {
@@ -16,8 +15,10 @@ func DBSetup(db *sql.DB) {
 	DBFlagsSetup(db)
 	DBIapSetup(db)
 	DBAgentsSetup(db)
-	DBFunctionSetup(db)
+	DBUserAuthSetup(db)
+	DBPostTagsSetup(db)
 	DBMigrations(db)
+	DBFunctionSetup(db)
 }
 
 func DBUsersSetup(db *sql.DB) {
@@ -31,6 +32,8 @@ func DBUsersSetup(db *sql.DB) {
 		downvotes BIGINT DEFAULT 0,
 		credits INTEGER DEFAULT 25,
 		validationKey BIGINT NOT NULL,
+		loginDate TIMESTAMP DEFAULT (now() at time zone 'utc'),
+		streak INTEGER DEFAULT 0,
 		trashed BOOLEAN DEFAULT false,
 		blocked TIMESTAMP DEFAULT '1970-01-01'::timestamp,
 		Investment BIGINT DEFAULT 0,
@@ -115,10 +118,11 @@ func DBPostsSetup(db *sql.DB) {
 		createdAt TIMESTAMP,
 		upvotes BIGINT DEFAULT 0,
 		downvotes BIGINT DEFAULT 0,
-		location TEXT[],
+		location INT[],
 		trashed BOOLEAN DEFAULT false,
 		commentCount INTEGER DEFAULT 0,
 		edited TIMESTAMP,
+		Language TEXT DEFAULT 'english',
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
@@ -154,6 +158,7 @@ func DBCommentsSetup(db *sql.DB) {
 		replyCount SMALLINT DEFAULT 0,
 		isReview BOOLEAN DEFAULT false,
 		edited TIMESTAMP,
+		Language TEXT DEFAULT 'english',
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`
@@ -338,6 +343,60 @@ func DBAgentsSetup(db *sql.DB) {
 	}
 }
 
+func DBUserAuthSetup(db *sql.DB) {
+	createUserAuth := `CREATE TABLE IF NOT EXISTS UserAuth (
+		userId BIGINT,
+		deviceId TEXT,
+		secret CHAR(8),
+		lastAction TIMESTAMP DEFAULT (now() at time zone 'utc'),
+
+		PRIMARY KEY (userId, deviceId)
+	) PARTITION BY HASH(userId);`
+	_, e := db.Exec(createUserAuth)
+	DidFail(e, "create user auth table")
+	createUserAuthTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS UserAuth%d 
+		PARTITION OF UserAuth
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS UserAuth%d_index 
+		ON UserAuth%d (userId, deviceId)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create user auth partition instance")
+	}
+	mod := 10
+	for i := 0; i < mod; i += 1 {
+		createUserAuthTable(mod, i)
+	}
+}
+
+func DBPostTagsSetup(db *sql.DB) {
+	createPostTags := `CREATE TABLE IF NOT EXISTS PostTags (
+		postId BIGINT,
+		tagId BIGINT,
+
+		PRIMARY KEY (postId, tagId)
+	) PARTITION BY HASH(postId);`
+	_, e := db.Exec(createPostTags)
+	DidFail(e, "create post tags table")
+	createPostTagsTable := func(mod int, rem int) {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS PostTags%d 
+		PARTITION OF PostTags
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS PostTags%d_index 
+		ON PostTags%d (postId, tagId)
+		`, rem, mod, rem, rem, rem)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create posts tags partition instance")
+	}
+	mod := 10
+	for i := 0; i < mod; i += 1 {
+		createPostTagsTable(mod, i)
+	}
+}
+
 func DBMigrations(db *sql.DB) {
 	commands := `
 	ALTER TABLE Users 
@@ -352,19 +411,23 @@ func DBMigrations(db *sql.DB) {
 	ADD COLUMN IF NOT EXISTS Blocked TIMESTAMP
 	DEFAULT '1970-01-01'::timestamp;
 
-	ALTER TABLE Posts 
-	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
-    GENERATED ALWAYS AS (to_tsvector('english',Content)) STORED;
-	CREATE INDEX IF NOT EXISTS posts_idx_content_vector
-	ON Posts 
-	USING gin(ContentVector);
+	ALTER TABLE Posts
+	ADD COLUMN IF NOT EXISTS Language TEXT
+	DEFAULT 'english';
 
-	ALTER TABLE Comments 
-	ADD COLUMN IF NOT EXISTS ContentVector TSVECTOR 
-    GENERATED ALWAYS AS (to_tsvector('english',Content)) STORED;
-	CREATE INDEX IF NOT EXISTS comments_idx_content_vector
-	ON Comments 
-	USING gin(ContentVector);
+	ALTER TABLE Comments
+	ADD COLUMN IF NOT EXISTS Language TEXT
+	DEFAULT 'english';
+
+	ALTER TABLE Posts DROP COLUMN IF EXISTS ContentVector;
+	ALTER TABLE Posts ADD COLUMN IF NOT EXISTS ContentLocaleVector TSVECTOR;
+	UPDATE Posts SET ContentLocaleVector = to_tsvector(language::regconfig, content) WHERE ContentLocaleVector is NULL;
+	CREATE INDEX IF NOT EXISTS posts_idx_content_vector ON Posts USING gin(ContentLocaleVector);
+
+	ALTER TABLE Comments DROP COLUMN IF EXISTS ContentVector;
+	ALTER TABLE Comments ADD COLUMN IF NOT EXISTS ContentLocaleVector TSVECTOR;
+	UPDATE Comments SET ContentLocaleVector = to_tsvector(language::regconfig, content) WHERE ContentLocaleVector is NULL;
+	CREATE INDEX IF NOT EXISTS comments_idx_content_vector ON Comments USING gin(ContentLocaleVector);
 
 	ALTER Table Posts
 	ADD COLUMN IF NOT EXISTS Edited BOOLEAN
@@ -406,9 +469,41 @@ func DBMigrations(db *sql.DB) {
 	ALTER COLUMN Edited DROP default;
 	ALTER TABLE Comments
 	ALTER COLUMN Edited TYPE TIMESTAMP USING createdAt;
+
+	ALTER TABLE Posts
+	ADD COLUMN IF NOT EXISTS FlagCount BIGINT DEFAULT 0;
+	ALTER TABLE Comments
+	ADD COLUMN IF NOT EXISTS FlagCount BIGINT DEFAULT 0;
+
+	DROP AGGREGATE 
+	IF EXISTS scoreValueFactor(DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION);
+	DROP FUNCTION 
+	IF EXISTS scoreValueFactorFinal(DOUBLE PRECISION[]);
+	DROP FUNCTION 
+	IF EXISTS scoreValueFactorAgg(DOUBLE PRECISION[], DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION);
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
+
+	postTagsCount := `SELECT COUNT(*) FROM PostTags;`
+	row := db.QueryRow(postTagsCount)
+	var count int
+	e = row.Scan(&count)
+	if DidFail(e, "scan count of PostTags") {
+		return
+	}
+	if count == 0 {
+		updatePostTags := `
+		INSERT INTO PostTags (postId, tagId)
+		SELECT p.id, tagId
+		FROM Posts p, unnest(p.tags) tagId
+		ON CONFLICT (postId, tagId) 
+		DO NOTHING;
+		`
+		_, e = db.Exec(updatePostTags)
+		DidFail(e, "insert post tag ids")
+	}
+
 }
 
 func DBFunctionSetup(db *sql.DB) {
@@ -476,37 +571,62 @@ func DBFunctionSetup(db *sql.DB) {
 	_, e = db.Exec(createInverse)
 	DidFail(e, "create inverse function")
 
-	createScoreValue := `
-	CREATE OR REPLACE FUNCTION scoreValueAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION)
-	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
-	DECLARE nagg DOUBLE PRECISION[]; 
+	createScoreValueType := `
+	DO
+	$$
 	BEGIN
-		nagg[1] = cagg[1] + tagValue;
-		nagg[2] = cagg[2] + userValue;
-		nagg[3] = cagg[3] + 1;
-		RETURN nagg; 
+		IF NOT EXISTS (
+			SELECT * FROM pg_type typ
+			INNER JOIN pg_namespace nsp ON nsp.oid = typ.typnamespace
+			WHERE 
+			nsp.nspname = current_schema() AND 
+			typ.typname = 'scorevaluetype'
+		) THEN
+			CREATE TYPE ScoreValueType AS (
+				tagV   DOUBLE PRECISION,
+				userV  DOUBLE PRECISION,
+				countV DOUBLE PRECISION,
+				factor DOUBLE PRECISION
+			);
+	END IF;
+	END;
+	$$
+	LANGUAGE plpgsql;
+	`
+	_, e = db.Exec(createScoreValueType)
+	DidFail(e, "create score value type")
+
+	createScoreValue := `
+	CREATE OR REPLACE FUNCTION scoreValueAgg (cagg ScoreValueType, tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION)
+	RETURNS ScoreValueType LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		cagg.tagV = cagg.tagV + tagValue;
+		cagg.userV = cagg.userV + userValue;
+		cagg.countV = cagg.countV + 1;
+		cagg.factor = factor;
+		RETURN cagg; 
 	END; $$; 
 
-	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg DOUBLE PRECISION[])
+	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg ScoreValueType)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
-		RETURN cagg[1] + (cagg[2] / cagg[3]); 
+		RETURN (cagg.tagV + (cagg.userV / cagg.countV)) * cagg.factor; 
 	END; $$;
 
 	-- define user aggregate
 	CREATE OR REPLACE AGGREGATE scoreValue (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION) (
 		sfunc = scoreValueAgg,
-		stype = DOUBLE PRECISION[],
+		stype = ScoreValueType,
 		finalfunc = scoreValueFinal,
-		initcond = '{0, 0, 0}'
+		initcond = '(0, 0, 0, 0)'
 	);`
 	_, e = db.Exec(createScoreValue)
 	DidFail(e, "create scoreValue aggregate function")
 
 	createSumWeightedRatioScoreValue := `
-	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
-	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
-	DECLARE nagg DOUBLE PRECISION[]; 
+	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[4], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION ARRAY[4] LANGUAGE plpgsql STRICT AS $$
+	DECLARE nagg DOUBLE PRECISION ARRAY[4]; 
 	BEGIN
 		nagg[1] = cagg[1] + tagValue;
 		nagg[2] = cagg[2] + userValue;
@@ -515,7 +635,7 @@ func DBFunctionSetup(db *sql.DB) {
 		RETURN nagg; 
 	END; $$; 
 
-	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[])
+	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[4])
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
 		RETURN (cagg[1] + (cagg[2] / cagg[3])) * cagg[4]; 
@@ -524,7 +644,7 @@ func DBFunctionSetup(db *sql.DB) {
 	-- define user aggregate
 	CREATE OR REPLACE AGGREGATE scoreValueFactor (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION) (
 		sfunc = scoreValueFactorAgg,
-		stype = DOUBLE PRECISION[],
+		stype = DOUBLE PRECISION[4],
 		finalfunc = scoreValueFactorFinal,
 		initcond = '{0, 0, 0, 0}'
 	);`
@@ -600,6 +720,7 @@ func DBDeleteAllUsers(db *sql.DB) {
 	DBDeleteTable(db, "Users")
 	DBDeleteTable(db, "UserPref")
 	DBDeleteTable(db, "UserCont")
+	DBDeleteTable(db, "UserAuth")
 }
 
 func DBClearAllTables(db *sql.DB) {
@@ -607,39 +728,18 @@ func DBClearAllTables(db *sql.DB) {
 	DBDeleteAllUsers(db)
 	DBDeleteAllVotes(db)
 	DBDeleteAllComments(db)
-	DBDeleteTable(db, "tags")
+	DBDeleteTable(db, "Tags")
+	DBDeleteTable(db, "Iap")
+	DBDeleteTable(db, "Agents")
 }
 
-func DBGetTableNamesLike(db *sql.DB, query string) []string {
-	cmd := fmt.Sprintf("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE '%s'", query)
-	rows, e := db.Query(cmd)
-	result := []string{}
-	if DidFail(e, "get all table names like ", query) {
-		return result
-	}
-	for rows.Next() {
-		name := ""
-		rows.Scan(&name)
-		result = append(result, name)
-	}
-	return result
-}
-
-func BuildUnionForYears(query string, years []int64) string {
-	names := []string{}
-	for _, y := range years {
-		names = append(names, fmt.Sprint(y))
-	}
-	return BuildUnionForNames(query, "{year}", names)
-}
-
-func BuildUnionForNames(query string, placeholder string, names []string) string {
-	result := ""
-	for i, y := range names {
-		result += "(" + strings.ReplaceAll(query, placeholder, fmt.Sprint(y)) + ")"
-		if i < len(names)-1 {
-			result += "\nunion\n"
-		}
-	}
-	return result
+func DBClearTrashedContent(db *sql.DB) {
+	query := `
+	DELETE FROM Posts WHERE Trashed=True;
+	DELETE FROM Comments WHERE Trashed=True;
+	DELETE FROM Users WHERE Trashed=True;
+	DELETE FROM UserCont WHERE Trashed=True;
+	`
+	_, e := db.Exec(query)
+	DidFail(e, "remove trashed content")
 }

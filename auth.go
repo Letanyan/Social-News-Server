@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -20,14 +21,12 @@ import (
 	"github.com/awa/go-iap/playstore"
 )
 
-var userSecretMutex sync.Mutex
 var AUTHUserSecrets map[int64][]string
 var AUTHUserReset sync.Map
 var googleKeys map[string]string
 var appleTokens sync.Map
 
 func init() {
-	userSecretMutex = sync.Mutex{}
 	AUTHUserSecrets = IndexSetFromFile[[]string]("user_secrets.gob")
 	AUTHUserReset = sync.Map{}
 	googleKeys = map[string]string{}
@@ -38,66 +37,100 @@ func init() {
 // AUTH User Requests
 // -------------------------------------------------------------------------
 
-func AUTHRegister(user int64) string {
+func AUTHRegister(db *sql.DB, user int64, deviceId string) string {
 	tokens := "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
 	result := ""
 	rand.Seed(time.Now().Unix())
-	for i := 0; i < 12; i++ {
+	for i := 0; i < 8; i++ {
 		r := rand.Int31n(int32(len(tokens)))
 		result += string(tokens[r])
 	}
-	userSecretMutex.Lock()
-	if data, hasKey := AUTHUserSecrets[user]; hasKey {
-		if len(data) > 5 {
-			data = data[1:]
-		}
-		data = append(data, result)
-		AUTHUserSecrets[user] = data
-	} else {
-		AUTHUserSecrets[user] = []string{result}
+	updateSecret := `
+	INSERT INTO UserAuth (userId, deviceId, secret)
+	VALUES ($1, $2, $3)
+	ON CONFLICT (userId, deviceId) 
+	DO UPDATE SET secret=$3, lastAction=(now() at time zone 'utc');
+	`
+	_, e := db.Exec(updateSecret, user, deviceId, result)
+	if DidFail(e, "upsert secret ", result, " for user ", user, " on device ", deviceId) {
+		return ""
 	}
-	IndexSetWriteToFile(AUTHUserSecrets, "user_secrets.gob")
-	userSecretMutex.Unlock()
 	return result
 }
 
-func AUTHGetSecret(user int64) []string {
-	return AUTHUserSecrets[user]
+func AUTHRemoveOldSecrets(db *sql.DB, monthsAgo int) {
+	query := fmt.Sprintf(`
+	DELETE FROM UserAuth
+	WHERE lastAction < ((now() at time zone 'utc') - interval '%d month')
+	`, monthsAgo)
+	_, e := db.Exec(query)
+	DidFail(e, "delete old user auth secrets", query)
 }
 
-func AUTHMatchSecret(user int64, secret string) bool {
-	secrets := AUTHUserSecrets[user]
-	for _, s := range secrets {
-		if s == secret {
+func AUTHGetSecret(db sql.DB, user int64, deviceId string) string {
+	getSecret := `
+	SELECT secret
+	FROM UserAuth
+	WHERE userId=$1 AND deviceId=$2
+	`
+	rows, e := db.Query(getSecret, user, deviceId)
+	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
+		return ""
+	}
+	defer rows.Close()
+	var secret string
+	for rows.Next() {
+		e := rows.Scan(&secret)
+		if DidFail(e, "scan user auth secret") {
+			continue
+		}
+		return secret
+	}
+	return ""
+}
+
+func AUTHUpdateLastAction(db *sql.DB, user int64, deviceId string) {
+	update := `
+	UPDATE UserAuth
+	SET lastAction = (now() at time zone 'utc')
+	WHERE userId=$1 AND deviceId=$2
+	`
+	_, e := db.Exec(update, user, deviceId)
+	DidFail(e, "update user ", user, " auth last action on device ", deviceId)
+}
+
+func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) bool {
+	findMatches := `
+	SELECT secret
+	FROM UserAuth
+	WHERE userId=$1 AND deviceId=$2 AND secret=$3
+	`
+	rows, e := db.Query(findMatches, user, deviceId, secret)
+	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
+		return false
+	}
+	defer rows.Close()
+	var s string
+	for rows.Next() {
+		e := rows.Scan(&s)
+		if DidFail(e, "scan user auth secret") {
+			continue
+		}
+		if secret == s {
+			AUTHUpdateLastAction(db, user, deviceId)
 			return true
 		}
 	}
 	return false
 }
 
-func AUTHDeregister(user int64, secret string) {
-	secrets := AUTHGetSecret(user)
-	if len(secrets) == 1 {
-		userSecretMutex.Lock()
-		delete(AUTHUserSecrets, user)
-		IndexSetWriteToFile(AUTHUserSecrets, "user_secrets.gob")
-		userSecretMutex.Unlock()
-	} else if len(secrets) > 1 {
-		j := -1
-		for i, s := range secrets {
-			if s == secret {
-				j = i
-				break
-			}
-		}
-		if j >= 0 {
-			userSecretMutex.Lock()
-			secrets[j] = secrets[len(secrets)-1]
-			AUTHUserSecrets[user] = secrets[:len(secrets)-1]
-			IndexSetWriteToFile(AUTHUserSecrets, "user_secrets.gob")
-			userSecretMutex.Unlock()
-		}
-	}
+func AUTHDeregister(db *sql.DB, user int64, deviceId string) bool {
+	removeUserAuth := `
+	DELETE FROM UserAuth
+	WHERE userId=$1 AND deviceId=$2
+	`
+	_, e := db.Exec(removeUserAuth, user, deviceId)
+	return !DidFail(e, "remove secret for user ", user, " and device ", deviceId)
 }
 
 // -------------------------------------------------------------------------

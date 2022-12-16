@@ -40,10 +40,12 @@ func MailValidationKey(userId int64, to string, key int32) {
 		UserId int64
 		Key    int32
 		Src    string
+		Footer string
 	}{
 		UserId: userId,
 		Key:    key,
 		Src:    serverAddr,
+		Footer: FSFooter(),
 	})
 	MailTemplate(fmt.Sprintf("no-reply@%s", mxDomainName), to, "New Source Email Verification", body)
 }
@@ -55,10 +57,12 @@ func MailPasswordReset(userId int64, to string, key int32) {
 		UserId int64
 		Key    int32
 		Src    string
+		Footer string
 	}{
 		UserId: userId,
 		Key:    key,
 		Src:    serverAddr,
+		Footer: FSFooter(),
 	})
 	MailTemplate(fmt.Sprintf("no-reply@%s", mxDomainName), to, "New Source Password Reset", body)
 }

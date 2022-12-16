@@ -11,10 +11,11 @@ func APICreateAgent(c *gin.Context) {
 	type Input struct {
 		Name   string `json:"name"`
 		Origin string `json:"origin"`
+		Locale string `json:"locale"`
 	}
-	var input Input
+	var in Input
 
-	if e := c.BindJSON(&input); DidFail(e, "get input for create user") {
+	if e := c.BindJSON(&in); DidFail(e, "get input for create user") {
 		APIReturn(c, false, "invalid input values")
 		return
 	}
@@ -23,10 +24,10 @@ func APICreateAgent(c *gin.Context) {
 		return
 	}
 
-	user := DBCreateUser(mainDB, input.Name, "", "")
+	user := DBCreateUser(mainDB, in.Name, "", "")
 	DBValidateUser(mainDB, user.ID, user.ValidationKey)
 	if user.ID > 0 {
-		agent, e := NACreateNewsAgent(user.ID, input.Name, input.Origin)
+		agent, e := NACreateNewsAgent(user.ID, in.Name, in.Origin, in.Locale)
 		if e == nil {
 			APIReturn(c, true, agent)
 		} else {
@@ -58,7 +59,7 @@ func APIEditAgent(c *gin.Context) {
 		return
 	}
 
-	agent := NAEditNewsAgent(aid, in.Name, in.Origin)
+	agent := NAEditNewsAgent(mainDB, aid, in.Name, in.Origin)
 
 	APIReturn(c, true, agent)
 }

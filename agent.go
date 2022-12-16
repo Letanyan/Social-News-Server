@@ -19,6 +19,7 @@ import (
 type NewsAgent struct {
 	ID         int64
 	Name       string
+	Locale     string
 	Origin     string
 	LastUpdate time.Time
 	Subs       []string
@@ -37,18 +38,18 @@ type WebsiteScrapings struct {
 	Date        time.Time
 }
 
-func NACreateNewsAgent(id int64, name string, origin string) (NewsAgent, error) {
+func NACreateNewsAgent(id int64, name string, origin string, locale string) (NewsAgent, error) {
 	e := NAAgentExists(name, origin)
 	if e != nil {
 		return NewsAgent{}, e
 	}
-	agent := NewsAgent{id, name, origin, utc(), []string{}}
+	agent := NewsAgent{id, name, locale, origin, utc(), []string{}}
 	agents = append(agents, agent)
 	NAWriteAllNewsAgents(agents)
 	return agent, nil
 }
 
-func NAEditNewsAgent(id int64, name string, origin string) NewsAgent {
+func NAEditNewsAgent(db *sql.DB, id int64, name string, origin string) NewsAgent {
 	var found = -1
 	for i, a := range agents {
 		if a.ID == id {
@@ -60,7 +61,7 @@ func NAEditNewsAgent(id int64, name string, origin string) NewsAgent {
 		return NewsAgent{}
 	}
 	if name != agents[found].Name {
-		DBUpdateUser(mainDB, id, name)
+		DBUpdateUser(db, id, name)
 	}
 	agents[found].Name = name
 	agents[found].Origin = origin
@@ -147,7 +148,7 @@ func NADeleteNewsAgent(id int64) error {
 	return nil
 }
 
-func NAReadAllNewsAgents() []NewsAgent {
+func NAReadAllNewsAgents(db *sql.DB) []NewsAgent {
 	content, e := ioutil.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return []NewsAgent{}
@@ -159,18 +160,27 @@ func NAReadAllNewsAgents() []NewsAgent {
 		return []NewsAgent{}
 	}
 
-	createdNew := false
+	updated := false
+	agentNames := map[string]bool{}
 	for i := range result {
 		agent := result[i]
-		oldUser, _ := DBGetUser(mainDB, agent.ID, "")
-		if oldUser.ID == 0 || oldUser.Email != "" {
-			createdNew = true
-			user := DBCreateUser(mainDB, agent.Name, "", "")
-			DBValidateUser(mainDB, user.ID, user.ValidationKey)
+		oldUser := DBGetUserAgent(db, agent.Name)
+		if _, found := agentNames[oldUser.Name]; found {
+			fail.Println("duplicate agent name ", oldUser.Name)
+			continue
+		}
+		agentNames[agent.Name] = true
+		if oldUser.ID == 0 {
+			updated = true
+			user := DBCreateUser(db, agent.Name, "", "")
+			DBValidateUser(db, user.ID, user.ValidationKey)
 			result[i].ID = user.ID
+		} else if oldUser.ID != agent.ID {
+			updated = true
+			result[i].ID = oldUser.ID
 		}
 	}
-	if createdNew && len(result) > 0 {
+	if updated && len(result) > 0 {
 		NAWriteAllNewsAgents(result)
 	}
 
@@ -266,6 +276,7 @@ func NAUpdateAllNewsAgent(db *sql.DB, before time.Duration) []WebsiteScrapings {
 	wg := new(sync.WaitGroup)
 	m := sync.Mutex{}
 	for i := range agents {
+		k := i
 		a := agents[i]
 		if a.LastUpdate.Before(utc().Add(before)) {
 			wg.Add(1)
@@ -275,7 +286,7 @@ func NAUpdateAllNewsAgent(db *sql.DB, before time.Duration) []WebsiteScrapings {
 				scrape := NAUpdateNewsAgent(db, a, wg)
 				m.Lock()
 				result = append(result, scrape)
-				agents[i].LastUpdate = utc()
+				agents[k].LastUpdate = utc()
 				m.Unlock()
 			}()
 		}
@@ -293,7 +304,7 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 	scraping := NAScrapeWebsite(agent.Origin)
 
 	if scraping.Type == "article" {
-		NACreatePost(agent.ID, agent.Origin, scraping, true)
+		NACreatePost(db, agent.ID, agent.Origin, agent.Locale, scraping, true)
 	}
 	baseURL, e := nurl.Parse(agent.Origin)
 	if DidFail(e, "invalid origin url") {
@@ -317,7 +328,7 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 				DBAgentPathInsert(db, id, canURLString)
 				subScraping := NAScrapeWebsite(urlString)
 				if subScraping.Type == "article" {
-					NACreatePost(agent.ID, urlString, subScraping, true)
+					NACreatePost(db, agent.ID, urlString, agent.Locale, subScraping, true)
 				}
 			}
 		}
@@ -494,7 +505,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 	return WebsiteScrapings{title, description, links, tags, authors, image, contentType, locale, language, date}
 }
 
-func NACreatePost(userId int64, url string, scrape WebsiteScrapings, store bool) PostResult {
+func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape WebsiteScrapings, store bool) PostResult {
 	body := url + "\n!" + scrape.Title
 
 	if len(scrape.Image) > 0 {
@@ -513,7 +524,7 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings, store bool)
 		}
 	}
 	if scrape.Date.Year() != utc().Year() {
-		createPostsPartitionTable(mainDB, scrape.Date.Year())
+		createPostsPartitionTable(db, scrape.Date.Year())
 	}
 
 	tags := scrape.Tags
@@ -529,22 +540,22 @@ func NACreatePost(userId int64, url string, scrape WebsiteScrapings, store bool)
 
 	var result PostResult
 	if store {
-		result = DBCreatePost(mainDB, userId, body, scrape.Date, tags, []string{})
+		result = DBCreatePost(db, userId, body, scrape.Date, tags, []string{}, locale)
 	} else {
-		user, _ := DBGetUser(mainDB, userId, "")
+		user, _ := DBGetUser(db, userId, "")
 		author := UserProfile{user.ID, user.Name, user.RegisterDate, user.Upvotes, user.Downvotes, int64(user.Investment), false, 0, 0, 0}
-		tagObjs := DBCreateTags(mainDB, tags)
-		tagIds := []int64{}
+		tagObjs := DBCreateTags(db, tags)
+		tagIds := []string{}
 		for _, tag := range tagObjs {
-			tagIds = append(tagIds, tag.ID)
+			tagIds = append(tagIds, fmt.Sprintf("%d", tag.ID))
 		}
 		currentTime := utc()
-		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0}
+		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0}
 	}
 	return result
 }
 
-func NAReadAllTagsOnboarding() map[string]int64 {
+func NAReadAllTagsOnboarding(db *sql.DB) map[string]int64 {
 	raw := []string{
 		"money", "crime", "energy", "health", "ufc",
 		"basketball", "travel", "cricket", "golf",
@@ -560,7 +571,7 @@ func NAReadAllTagsOnboarding() map[string]int64 {
 		"movies", "asia-pacific", "sex", "weird",
 		"technology",
 	}
-	tags := DBCreateTags(mainDB, raw)
+	tags := DBCreateTags(db, raw)
 	result := map[string]int64{}
 	for _, tag := range tags {
 		result[tag.Name] = tag.ID
@@ -575,6 +586,10 @@ func NARegisterHourlyUpdates(db *sql.DB) {
 }
 
 func NARegisterWeeklyCleanUp(db *sql.DB) {
-	time.AfterFunc(0, func() { NATrimOldUrlsFromNewAgentHashSets(db) })
+	time.AfterFunc(0, func() {
+		NATrimOldUrlsFromNewAgentHashSets(db)
+		DBDeleteDuplicateAgentPosts(db)
+		// DBClearTrashedContent(db)
+	})
 	time.AfterFunc(time.Hour*24*7, func() { NARegisterWeeklyCleanUp(db) })
 }

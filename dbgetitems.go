@@ -20,7 +20,7 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 
 	scoreField := fmt.Sprintf("%s(%s.upvotes, %s.upvotes, %s.downvotes)", weightedRatioFunc, voteTable, voteTable, voteTable)
 	if table == "Users p" && !usingVotes {
-		scoreField = "WeightRatio(p.upvotes + p.investment, p.upvotes + p.investment, p.downvotes)"
+		scoreField = "WeightRatio(p.upvotes, p.upvotes + p.investment, p.downvotes + p.investment)"
 	}
 	withTable := ""
 	if forUser > 0 {
@@ -86,7 +86,7 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		Ignored AS (
 			SELECT pid
 			FROM UserConts
-			WHERE kind=3 -- ignored user
+			WHERE kind=4 -- ignored user
 		), Viewed AS (
 			(
 				SELECT pid
@@ -102,7 +102,8 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		)
 		`, forUser, forUser)
 
-		joins += "JOIN TagScores ts ON ts.id = ANY(p.tags)\n"
+		joins += "JOIN PostTags pt ON p.id = pt.postId\n"
+		joins += "JOIN TagScores ts ON ts.id = pt.tagId\n"
 		joins += "JOIN UserScores us ON us.id = p.userId\n"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")

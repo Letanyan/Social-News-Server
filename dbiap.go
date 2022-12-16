@@ -12,6 +12,7 @@ func DBIapExists(db *sql.DB, userId int64, platform string, productId string, da
 	if DidFail(e, "query iap exists", query) {
 		return false
 	}
+	defer rows.Close()
 	var id int64
 	found := false
 	for rows.Next() {

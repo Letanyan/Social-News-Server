@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 
 	"github.com/lib/pq"
 )
@@ -86,7 +87,15 @@ func DBWatchUser(db *sql.DB, uid int64, postId int64, viewTime int64, location [
 	post := DBGetPost(db, postId)
 	locIndex := DBCreateLocation(db, location)
 	locArray := SQLFormattedIndexArray(locIndex)
-	_, result := DBVoteTags(db, uid, post.Tags, viewTime, locArray, false)
+	tags := []int64{}
+	for i := range tags {
+		t, e := strconv.ParseInt(post.Tags[i], 10, 64)
+		if DidFail(e, "convert tag to int", post.Tags[i]) {
+			continue
+		}
+		tags = append(tags, t)
+	}
+	_, result := DBVoteTags(db, uid, tags, viewTime, locArray, false)
 	return result
 }
 
@@ -125,6 +134,7 @@ func ScanUserPrefRows(rows *sql.Rows) []UserPref {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		up := UserPref{}
 		e = rows.Scan(&up.Kind, &up.PID, &up.SID, &up.Upvotes, &up.Downvotes, &cred, &score)
@@ -141,6 +151,7 @@ func ScanUserPrefUsers(rows *sql.Rows) []UserPrefUser {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		u := UserProfile{}
 		var up int64
@@ -161,6 +172,7 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		p := PostResult{}
 		u := UserProfile{}
@@ -186,6 +198,7 @@ func ScanUserPrefComments(rows *sql.Rows) []UserPrefComment {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		c := CommentResult{}
 		u := UserProfile{}
@@ -211,6 +224,7 @@ func ScanUserPrefTags(rows *sql.Rows) []UserPrefTag {
 	var cred float64
 	var score float64
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		tag := Tag{}
 		var up int64
@@ -330,7 +344,7 @@ func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		}
 	}
 
-	getUsers += SQLSortOrder(sortOrder, false)
+	getUsers += SQLSortOrder(sortOrder, true)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getUsers)
@@ -406,7 +420,7 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getPosts += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 
-	getPosts += SQLSortOrder(sortOrder, false)
+	getPosts += SQLSortOrder(sortOrder, true)
 
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -414,7 +428,6 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 	if DidFail(e, "get posts") {
 		return []UserPrefPost{}
 	}
-	defer rows.Close()
 
 	result := ScanUserPrefPosts(rows)
 	return result
@@ -475,7 +488,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 		}
 	}
 
-	getComments += SQLSortOrder(sortOrder, false)
+	getComments += SQLSortOrder(sortOrder, true)
 
 	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -489,19 +502,28 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 	return result
 }
 
-func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int64, downvoteAmount int64,
+func DBGetUserPrefTags(db *sql.DB, isWatched bool, isOwner bool, userId int64, upvoteAmount int64, downvoteAmount int64,
 	tags []string, upvotes int64, downvotes int64,
 	sortOrder SortOrder, search string, limit int64, offset int64, startDate string, endDate string) []UserPrefTag {
+
+	kind := upTag
+	if isWatched {
+		kind = upWatchTag
+	}
 	getTags := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 	FROM UserPref up
 	JOIN tags p ON up.pid = p.id
 	JOIN Users u ON u.id = up.uid
 	JOIN Users x ON up.uid = x.id 
 	WHERE up.kind=%d AND up.uid=%d
-	`, SQLFieldsForUserPrefTag(), upTag, userId)
+	`, SQLFieldsForUserPrefTag(), kind, userId)
 
 	if !isOwner {
-		getTags += "AND x.publicTagVotes "
+		if isWatched {
+			getTags += "AND false "
+		} else {
+			getTags += "AND x.publicTagVotes "
+		}
 	}
 	if len(startDate) > 0 && len(endDate) > 0 {
 		getTags += fmt.Sprintf("AND up.updatedOn BETWEEN (TIMESTAMP '%s') AND (TIMESTAMP '%s') ", startDate, endDate)
@@ -541,14 +563,13 @@ func DBGetUserPrefTags(db *sql.DB, isOwner bool, userId int64, upvoteAmount int6
 		}
 	}
 
-	getTags += SQLSortOrder(sortOrder, false)
+	getTags += SQLSortOrder(sortOrder, true)
 	getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags", getTags) {
 		return []UserPrefTag{}
 	}
-	defer rows.Close()
 
 	result := ScanUserPrefTags(rows)
 
@@ -792,7 +813,6 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	if DidFail(e, "get posts") {
 		return []CommentResult{}
 	}
-	defer rows.Close()
 
 	result := ScanCommentResults(rows, false, false)
 	return result

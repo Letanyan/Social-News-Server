@@ -3,13 +3,14 @@ package main
 import (
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"math/rand"
 	"time"
 )
 
 type User struct {
-	ID            int64
+	ID            int64 `json:"ID,string"`
 	Name          string
 	Email         string
 	Password      string
@@ -36,7 +37,7 @@ type User struct {
 }
 
 type UserProfile struct {
-	ID           int64
+	ID           int64 `json:"ID,string"`
 	Name         string
 	RegisterDate time.Time
 	Upvotes      int64
@@ -85,6 +86,7 @@ func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 func ScanUserProfiles(rows *sql.Rows, includeScore bool, hasVotes bool, hasRank bool) []UserProfile {
 	result := []UserProfile{}
 	var e error
+	defer rows.Close()
 	for rows.Next() {
 		u := UserProfile{}
 		var up int64
@@ -143,13 +145,14 @@ func validateLength(name string, value string, min int, max int) string {
 
 func DBContainsEmail(db *sql.DB, email string) bool {
 	isUsed := `SELECT email FROM users WHERE email = $1`
-	res, e := db.Query(isUsed, email)
+	rows, e := db.Query(isUsed, email)
 	if DidFail(e, "get matching email") {
 		return true
 	}
+	defer rows.Close()
 	var found string
-	for res.Next() {
-		res.Scan(&found)
+	for rows.Next() {
+		rows.Scan(&found)
 	}
 	return len(found) > 0
 }
@@ -157,7 +160,7 @@ func DBContainsEmail(db *sql.DB, email string) bool {
 func DBHashPassword(password string) string {
 	h := sha256.New()
 	h.Write([]byte("{" + password + "_}"))
-	result := fmt.Sprintf("%x", h.Sum(nil))
+	result := base64.StdEncoding.EncodeToString(h.Sum(nil))
 	return result
 }
 
@@ -229,6 +232,19 @@ func DBBlockUser(db *sql.DB, userId int64, duration int) {
 	DidFail(e, "block user ", userId, " for duration ", duration)
 }
 
+func DBGetUserAgent(db *sql.DB, name string) User {
+	getUser := fmt.Sprintf(`
+	SELECT %s 
+	FROM Users p 
+	WHERE email='' AND name=$1`, SQLFieldsForUser())
+	row := db.QueryRow(getUser, name)
+	user, e := ScanUser(row)
+	if DidFail(e, "get user agent ", name) {
+		return User{}
+	}
+	return user
+}
+
 // ignore email if userId > 0
 // FIXME: ensure only one and only one of userId or email
 func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
@@ -243,7 +259,7 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	}
 	row := db.QueryRow(getUser, arg)
 	user, e := ScanUser(row)
-	if DidFail(e, "get user from email/id ", arg) {
+	if DidFail(e, "get user from email/id ", getUser) {
 		return User{}, 0
 	}
 

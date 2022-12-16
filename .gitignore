@@ -2,3 +2,4 @@
 logs.txt
 logs/*.txt
 __debug_bin
+testdata

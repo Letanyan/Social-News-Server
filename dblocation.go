@@ -49,7 +49,7 @@ func DBCreateLocation(db *sql.DB, location []string) []int64 {
 		if DidFail(e, "create tags", query) {
 			return []int64{}
 		}
-
+		defer rows.Close()
 		var id int64
 		for rows.Next() {
 			rows.Scan(&id)
@@ -77,6 +77,7 @@ func DBGetLocation(db *sql.DB, location []string) []Location {
 	if DidFail(e, "create tags") {
 		return []Location{}
 	}
+	defer rows.Close()
 	result := []Location{}
 	var loc Location
 	for rows.Next() {
@@ -90,4 +91,53 @@ func DBGetLocation(db *sql.DB, location []string) []Location {
 func DBGetLocationIndex(db *sql.DB, location []string) string {
 	indices := DBCreateLocation(db, location)
 	return SQLFormattedIndexArray(indices)
+}
+
+func DBLocaleToLanguageConfig(locale string) string {
+	switch locale {
+	case "en":
+		return "english"
+	case "ar":
+		return "arabic"
+	case "da":
+		return "danish"
+	case "nl":
+		return "dutch"
+	case "fi":
+		return "finnish"
+	case "fr":
+		return "french"
+	case "de":
+		return "german"
+	case "hu":
+		return "hungarian"
+	case "id":
+		return "indonesian"
+	case "ga":
+		return "irish"
+	case "it":
+		return "italian"
+	case "lt":
+		return "lithuanian"
+	case "ne":
+		return "nepali"
+	case "no":
+		return "norwegian"
+	case "pt":
+		return "portuguese"
+	case "ro":
+		return "romanian"
+	case "ru":
+		return "russian"
+	case "es":
+		return "spanish"
+	case "sv":
+		return "swedish"
+	case "ta":
+		return "tamil"
+	case "tr":
+		return "turkish"
+	default:
+		return "simple"
+	}
 }

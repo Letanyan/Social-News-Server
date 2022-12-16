@@ -7,6 +7,7 @@
         "cred",
         "dbname",
         "gonic",
+        "mailgun",
         "nlink",
         "nurl",
         "resp",
@@ -16,6 +17,7 @@
         "updatedat",
         "updatedon",
         "websearch",
+        "webserver",
         "wlyoihckobjsbzlv"
     ]
 }
