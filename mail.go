@@ -40,7 +40,7 @@ func MailValidationKey(userId int64, to string, key int32) {
 		UserId int64
 		Key    int32
 		Src    string
-		Footer string
+		Footer template.HTML
 	}{
 		UserId: userId,
 		Key:    key,
@@ -57,7 +57,7 @@ func MailPasswordReset(userId int64, to string, key int32) {
 		UserId int64
 		Key    int32
 		Src    string
-		Footer string
+		Footer template.HTML
 	}{
 		UserId: userId,
 		Key:    key,
