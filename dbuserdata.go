@@ -344,7 +344,7 @@ func DBGetUserPrefUsers(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		}
 	}
 
-	getUsers += SQLSortOrder(sortOrder, false)
+	getUsers += SQLSortOrder(sortOrder, true)
 	getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getUsers)
@@ -420,7 +420,7 @@ func DBGetUserPrefPosts(db *sql.DB, isOwner bool, userId int64, upvoteAmount int
 		getPosts += fmt.Sprintf("AND p.downvotes < %d ", -downvotes)
 	}
 
-	getPosts += SQLSortOrder(sortOrder, false)
+	getPosts += SQLSortOrder(sortOrder, true)
 
 	getPosts += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -488,7 +488,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 		}
 	}
 
-	getComments += SQLSortOrder(sortOrder, false)
+	getComments += SQLSortOrder(sortOrder, true)
 
 	getComments += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
@@ -563,7 +563,7 @@ func DBGetUserPrefTags(db *sql.DB, isWatched bool, isOwner bool, userId int64, u
 		}
 	}
 
-	getTags += SQLSortOrder(sortOrder, false)
+	getTags += SQLSortOrder(sortOrder, true)
 	getTags += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
 
 	rows, e := db.Query(getTags)

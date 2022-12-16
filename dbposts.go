@@ -193,6 +193,9 @@ func DBUpdatePost(db *sql.DB, postId int64, content string) Post {
 }
 
 func DBCreatePostTags(db *sql.DB, postId int64, tags []int64) {
+	if len(tags) == 0 {
+		return
+	}
 	tagRows := ""
 	for i := range tags {
 		comma := ""

@@ -17,8 +17,8 @@ func DBSetup(db *sql.DB) {
 	DBAgentsSetup(db)
 	DBUserAuthSetup(db)
 	DBPostTagsSetup(db)
-	DBFunctionSetup(db)
 	DBMigrations(db)
+	DBFunctionSetup(db)
 }
 
 func DBUsersSetup(db *sql.DB) {
@@ -474,6 +474,13 @@ func DBMigrations(db *sql.DB) {
 	ADD COLUMN IF NOT EXISTS FlagCount BIGINT DEFAULT 0;
 	ALTER TABLE Comments
 	ADD COLUMN IF NOT EXISTS FlagCount BIGINT DEFAULT 0;
+
+	DROP AGGREGATE 
+	IF EXISTS scoreValueFactor(DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION);
+	DROP FUNCTION 
+	IF EXISTS scoreValueFactorFinal(DOUBLE PRECISION[]);
+	DROP FUNCTION 
+	IF EXISTS scoreValueFactorAgg(DOUBLE PRECISION[], DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION);
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
@@ -564,37 +571,62 @@ func DBFunctionSetup(db *sql.DB) {
 	_, e = db.Exec(createInverse)
 	DidFail(e, "create inverse function")
 
-	createScoreValue := `
-	CREATE OR REPLACE FUNCTION scoreValueAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION)
-	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
-	DECLARE nagg DOUBLE PRECISION[]; 
+	createScoreValueType := `
+	DO
+	$$
 	BEGIN
-		nagg[1] = cagg[1] + tagValue;
-		nagg[2] = cagg[2] + userValue;
-		nagg[3] = cagg[3] + 1;
-		RETURN nagg; 
+		IF NOT EXISTS (
+			SELECT * FROM pg_type typ
+			INNER JOIN pg_namespace nsp ON nsp.oid = typ.typnamespace
+			WHERE 
+			nsp.nspname = current_schema() AND 
+			typ.typname = 'scorevaluetype'
+		) THEN
+			CREATE TYPE ScoreValueType AS (
+				tagV   DOUBLE PRECISION,
+				userV  DOUBLE PRECISION,
+				countV DOUBLE PRECISION,
+				factor DOUBLE PRECISION
+			);
+	END IF;
+	END;
+	$$
+	LANGUAGE plpgsql;
+	`
+	_, e = db.Exec(createScoreValueType)
+	DidFail(e, "create score value type")
+
+	createScoreValue := `
+	CREATE OR REPLACE FUNCTION scoreValueAgg (cagg ScoreValueType, tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION)
+	RETURNS ScoreValueType LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		cagg.tagV = cagg.tagV + tagValue;
+		cagg.userV = cagg.userV + userValue;
+		cagg.countV = cagg.countV + 1;
+		cagg.factor = factor;
+		RETURN cagg; 
 	END; $$; 
 
-	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg DOUBLE PRECISION[])
+	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg ScoreValueType)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
-		RETURN cagg[1] + (cagg[2] / cagg[3]); 
+		RETURN (cagg.tagV + (cagg.userV / cagg.countV)) * cagg.factor; 
 	END; $$;
 
 	-- define user aggregate
 	CREATE OR REPLACE AGGREGATE scoreValue (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION) (
 		sfunc = scoreValueAgg,
-		stype = DOUBLE PRECISION[],
+		stype = ScoreValueType,
 		finalfunc = scoreValueFinal,
-		initcond = '{0, 0, 0}'
+		initcond = '(0, 0, 0, 0)'
 	);`
 	_, e = db.Exec(createScoreValue)
 	DidFail(e, "create scoreValue aggregate function")
 
 	createSumWeightedRatioScoreValue := `
-	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
-	RETURNS DOUBLE PRECISION[] LANGUAGE plpgsql STRICT AS $$
-	DECLARE nagg DOUBLE PRECISION[]; 
+	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[4], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION ARRAY[4] LANGUAGE plpgsql STRICT AS $$
+	DECLARE nagg DOUBLE PRECISION ARRAY[4]; 
 	BEGIN
 		nagg[1] = cagg[1] + tagValue;
 		nagg[2] = cagg[2] + userValue;
@@ -603,7 +635,7 @@ func DBFunctionSetup(db *sql.DB) {
 		RETURN nagg; 
 	END; $$; 
 
-	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[])
+	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[4])
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
 		RETURN (cagg[1] + (cagg[2] / cagg[3])) * cagg[4]; 
@@ -612,7 +644,7 @@ func DBFunctionSetup(db *sql.DB) {
 	-- define user aggregate
 	CREATE OR REPLACE AGGREGATE scoreValueFactor (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION) (
 		sfunc = scoreValueFactorAgg,
-		stype = DOUBLE PRECISION[],
+		stype = DOUBLE PRECISION[4],
 		finalfunc = scoreValueFactorFinal,
 		initcond = '{0, 0, 0, 0}'
 	);`
