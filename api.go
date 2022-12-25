@@ -65,6 +65,15 @@ func APIMatchSecret(c *gin.Context, user int64) bool {
 	}
 }
 
+func APIUserIsValidated(c *gin.Context, validationKey int32) bool {
+	if validationKey == 0 {
+		return true
+	} else {
+		APIReturn(c, false, "You must validate your email by clicking the validate link sent to you.")
+		return false
+	}
+}
+
 // ------------------------------------------------------------------------
 // Create
 // ------------------------------------------------------------------------
@@ -142,6 +151,10 @@ func APICreatePost(c *gin.Context) {
 	if !APIMatchSecret(c, in.UserID) {
 		return
 	}
+	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
 
 	if in.IsPreview {
 		// assume the client verified that content is just a url
@@ -152,7 +165,6 @@ func APICreatePost(c *gin.Context) {
 		result := NACreatePost(mainDB, in.UserID, in.Content, in.Locale, scrape, false)
 		APIReturn(c, true, result)
 	} else {
-		user, _ := DBGetUser(mainDB, in.UserID, "")
 		if user.Blocked.After(utc()) {
 			APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
 		} else {
@@ -201,6 +213,10 @@ func APICreateComment(c *gin.Context) {
 	}
 
 	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
+
 	if user.Blocked.After(utc()) {
 		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
 	} else {
@@ -235,6 +251,10 @@ func APIUpdatePost(c *gin.Context) {
 	}
 
 	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
+
 	if user.Blocked.After(utc()) {
 		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
 	} else {
@@ -270,6 +290,10 @@ func APIUpdateComment(c *gin.Context) {
 	}
 
 	user, _ := DBGetUser(mainDB, in.UserID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
+
 	if user.Blocked.After(utc()) {
 		APIReturn(c, false, fmt.Sprintf("you are blocked until %s", formatDate(user.Blocked)))
 	} else {
@@ -713,6 +737,43 @@ func APIGetUserPrefTags(c *gin.Context) {
 	APIReturn(c, true, result)
 }
 
+func APIGetUserPrefsFor(kind UserPrefKind) func(*gin.Context) {
+	return func(c *gin.Context) {
+		pid, e := strconv.ParseInt(c.DefaultQuery("pid", "0"), 10, 64)
+		if APIFailed(c, e, "invalid pid given") {
+			return
+		}
+		sid, e := strconv.ParseInt(c.DefaultQuery("sid", "-1"), 10, 64)
+		if APIFailed(c, e, "invalid pid given") {
+			return
+		}
+		order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+		if APIFailed(c, e, "invalid order given") {
+			return
+		}
+
+		offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+		if APIFailed(c, e, "invalid offset given") {
+			return
+		}
+
+		limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+		if APIFailed(c, e, "invalid limit given") {
+			return
+		}
+
+		search := c.DefaultQuery("search", "")
+		onlyCount := c.DefaultQuery("onlyCount", "0") == "1"
+
+		result := DBGetUserPrefsFor(mainDB, kind, pid, sid, search, order, limit, offset, onlyCount)
+		if onlyCount {
+			APIReturn(c, true, result[0].User.ID)
+		} else {
+			APIReturn(c, true, result)
+		}
+	}
+}
+
 func APIGetUserContPost(kind UserContKind) func(*gin.Context) {
 	return func(c *gin.Context) {
 		uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
@@ -866,6 +927,43 @@ func APIGetUserContTags(ucp UserContKind) func(*gin.Context) {
 
 		tags := DBGetUserContTag(mainDB, isOwner, uid, ucp, limit, offset, startDate, endDate)
 		APIReturn(c, true, tags)
+	}
+}
+
+func APIGetUserContsFor(kind UserContKind) func(*gin.Context) {
+	return func(c *gin.Context) {
+		pid, e := strconv.ParseInt(c.DefaultQuery("pid", "0"), 10, 64)
+		if APIFailed(c, e, "invalid pid given") {
+			return
+		}
+		sid, e := strconv.ParseInt(c.DefaultQuery("sid", "-1"), 10, 64)
+		if APIFailed(c, e, "invalid pid given") {
+			return
+		}
+		order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+		if APIFailed(c, e, "invalid order given") {
+			return
+		}
+
+		offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+		if APIFailed(c, e, "invalid offset given") {
+			return
+		}
+
+		limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+		if APIFailed(c, e, "invalid limit given") {
+			return
+		}
+
+		search := c.DefaultQuery("search", "")
+		onlyCount := c.DefaultQuery("onlyCount", "0") == "1"
+
+		result := DBGetUserContsFor(mainDB, kind, pid, sid, search, order, limit, offset, onlyCount)
+		if onlyCount {
+			APIReturn(c, true, result[0].ID)
+		} else {
+			APIReturn(c, true, result)
+		}
 	}
 }
 
@@ -1197,6 +1295,11 @@ func APIVoteUser(c *gin.Context) {
 		return
 	}
 
+	user, _ := DBGetUser(mainDB, in.UID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
+
 	if !DBCanUpdateCredit(mainDB, in.UID, in.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
 		return
@@ -1230,6 +1333,11 @@ func APIVotePost(c *gin.Context) {
 	}
 
 	if !APIMatchSecret(c, in.UID) {
+		return
+	}
+
+	user, _ := DBGetUser(mainDB, in.UID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
 		return
 	}
 
@@ -1277,6 +1385,11 @@ func APIVoteComment(c *gin.Context) {
 		return
 	}
 
+	user, _ := DBGetUser(mainDB, in.UID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
+
 	if !DBCanUpdateCredit(mainDB, in.UID, in.Amount) {
 		APIFailed(c, errors.New(""), "not enough credits")
 		return
@@ -1303,6 +1416,11 @@ func APIAddUserCont(kind UserContKind) func(*gin.Context) {
 			return
 		}
 		if !APIMatchSecret(c, uid) {
+			return
+		}
+
+		user, _ := DBGetUser(mainDB, uid, "")
+		if !APIUserIsValidated(c, user.ValidationKey) {
 			return
 		}
 
@@ -1386,6 +1504,10 @@ func APIUpdateUser(c *gin.Context) {
 	if !APIMatchSecret(c, uid) {
 		return
 	}
+	user, _ := DBGetUser(mainDB, uid, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
 
 	type Input struct {
 		Name string `json:"name"`
@@ -1467,6 +1589,10 @@ func APIWatchUser(c *gin.Context) {
 	if !APIMatchSecret(c, uid) {
 		return
 	}
+	user, _ := DBGetUser(mainDB, uid, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
+		return
+	}
 
 	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
 	if APIFailed(c, e, "invalid post id") {
@@ -1515,6 +1641,10 @@ func APICreateFlag(c *gin.Context) {
 	}
 
 	if !APIMatchSecret(c, in.UID) {
+		return
+	}
+	user, _ := DBGetUser(mainDB, in.UID, "")
+	if !APIUserIsValidated(c, user.ValidationKey) {
 		return
 	}
 
@@ -1696,8 +1826,9 @@ func APISignInWithApple(c *gin.Context) {
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
-		DBValidateUser(mainDB, user.ID, user.ValidationKey)
-		user.ValidationKey = 0
+		if DBValidateUser(mainDB, user.ID, user.ValidationKey) {
+			user.ValidationKey = 0
+		}
 		user.Password = ""
 		APIReturn(c, true, gin.H{
 			"user":      user,
@@ -1747,8 +1878,9 @@ func APISignInWithGoogle(c *gin.Context) {
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
-		DBValidateUser(mainDB, user.ID, user.ValidationKey)
-		user.ValidationKey = 0
+		if DBValidateUser(mainDB, user.ID, user.ValidationKey) {
+			user.ValidationKey = 0
+		}
 		user.Password = ""
 		APIReturn(c, true, gin.H{
 			"user":      user,

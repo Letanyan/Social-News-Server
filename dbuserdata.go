@@ -576,6 +576,62 @@ func DBGetUserPrefTags(db *sql.DB, isWatched bool, isOwner bool, userId int64, u
 	return result
 }
 
+func DBGetUserPrefsFor(db *sql.DB, kind UserPrefKind, pid int64, sid int64, search string, sortOrder SortOrder, limit int64, offset int64, onlyCount bool) []UserPrefUser {
+	fields := "COUNT(*)"
+	if !onlyCount {
+		fields = fmt.Sprintf("%s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score", SQLFieldsForUserPrefUser())
+	}
+
+	getUsers := fmt.Sprintf(`
+	SELECT %s  
+	FROM UserPref up 
+	JOIN Users p ON up.uid = p.id
+	WHERE kind=%d AND pid=%d AND sid=%d
+	`, fields, kind, pid, sid)
+
+	switch kind {
+	case upUser:
+		getUsers += "AND p.publicUserVotes "
+	case upTag:
+		getUsers += "AND p.publicTagVotes "
+	case upComment:
+		getUsers += "AND p.publicCommentVotes "
+	case upPost:
+		getUsers += "AND p.publicPostVotes "
+	case upWatchTag:
+		getUsers += "AND FALSE "
+	}
+
+	if search != "" {
+		search, _ := DBPrepareSearchString(db, search)
+		getUsers += fmt.Sprintf("AND p.name @@ to_tsquery('%s') ", search)
+	}
+
+	if !onlyCount {
+		getUsers += SQLSortOrder(sortOrder, false)
+		getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+	}
+
+	var result []UserPrefUser
+	if onlyCount {
+		row := db.QueryRow(getUsers)
+		var count int64
+		e := row.Scan(&count)
+		if DidFail(e, "get users") {
+			return []UserPrefUser{}
+		}
+		result = []UserPrefUser{{User: UserProfile{ID: count}}}
+	} else {
+		rows, e := db.Query(getUsers)
+		if DidFail(e, "get users") {
+			return []UserPrefUser{}
+		}
+		result = ScanUserPrefUsers(rows)
+	}
+
+	return result
+}
+
 type UserCont struct {
 	pid int64
 	sid int64
@@ -886,6 +942,62 @@ func DBGetUserContTag(db *sql.DB, isOwner bool, userId int64, kind UserContKind,
 		return result
 	}
 	result = ScanTags(rows, false, false, false)
+
+	return result
+}
+
+func DBGetUserContsFor(db *sql.DB, kind UserContKind, pid int64, sid int64, search string, sortOrder SortOrder, limit int64, offset int64, onlyCount bool) []UserProfile {
+	fields := "COUNT(*)"
+	if !onlyCount {
+		fields = SQLFieldsForUserProfile()
+	}
+
+	getUsers := fmt.Sprintf(`
+	SELECT %s  
+	FROM UserCont up 
+	JOIN Users p ON up.uid = p.id
+	WHERE kind=%d AND pid=%d AND sid=%d
+	`, fields, kind, pid, sid)
+
+	switch kind {
+	case ucpViewed:
+		getUsers += "AND p.publicViews "
+	case ucpReadLater:
+		getUsers += "AND p.publicReadLater "
+	case ucpUserFollow:
+		getUsers += "AND p.publicFollowing "
+	case ucpUserIgnored:
+		getUsers += "AND p.publicIgnored "
+	case ucpTagFollow:
+		getUsers += "AND p.publicTagFollow "
+	}
+
+	if search != "" {
+		search, _ := DBPrepareSearchString(db, search)
+		getUsers += fmt.Sprintf("AND p.name @@ to_tsquery('%s') ", search)
+	}
+
+	if !onlyCount {
+		getUsers += SQLSortOrder(sortOrder, false)
+		getUsers += fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+	}
+
+	var result []UserProfile
+	if onlyCount {
+		row := db.QueryRow(getUsers)
+		var count int64
+		e := row.Scan(&count)
+		if DidFail(e, "get users") {
+			return []UserProfile{}
+		}
+		result = []UserProfile{{ID: count}}
+	} else {
+		rows, e := db.Query(getUsers)
+		if DidFail(e, "get users") {
+			return []UserProfile{}
+		}
+		result = ScanUserProfiles(rows, false, false, false)
+	}
 
 	return result
 }

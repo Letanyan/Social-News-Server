@@ -147,10 +147,10 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 			}
 			if len(search) > 0 {
-				cond = append(cond, fmt.Sprintf("p.contentVector @@ to_tsquery('%s')", search))
+				cond = append(cond, fmt.Sprintf("p.ContentLocaleVector @@ to_tsquery('%s')", search))
 			}
 			if sortOrder == soRank {
-				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(p.contentVector, to_tsquery('%s')) AS rank", search))
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(p.ContentLocaleVector, to_tsquery('%s')) AS rank", search))
 			} else {
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}

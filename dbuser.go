@@ -19,7 +19,7 @@ type User struct {
 	Downvotes     int64
 	Credits       int32
 	Investment    int32
-	ValidationKey int32
+	ValidationKey int32 `json:"ValidationKey,string"`
 	LoginDate     time.Time
 	Streak        int32
 	Blocked       time.Time
@@ -273,13 +273,15 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 func DBGetNextStreakAmount(current int32) int32 {
 	switch current {
 	case 1:
-		return 2
-	case 2:
-		return 3
-	case 3:
-		return 5
-	case 5:
-		return 5
+		return 1
+	/*
+		case 2:
+			return 3
+		case 3:
+			return 5
+		case 5:
+			return 5
+	*/
 	default:
 		return 1
 	}
@@ -473,20 +475,3 @@ func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi 
 		return
 	}
 }
-
-/*
-
-var obj {
-	arg	name type: Identifier
-	arg body type: Expression
-
-	ctx(0).insert
-}
-
-obj Person {
-	var location type: Vector(2) (0, 0)
-	var name type: String
-	var age type: Int
-}
-
-*/

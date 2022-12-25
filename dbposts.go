@@ -143,7 +143,12 @@ func DBCreatePost(db *sql.DB, userId int64, content string, createdAt time.Time,
 
 	tagObjects := DBCreateTags(db, tags)
 	tagIndices := []int64{}
+	limit := 20
 	for _, t := range tagObjects {
+		if limit <= 0 {
+			break
+		}
+		limit -= 1
 		tagIndices = append(tagIndices, t.ID)
 	}
 	locIndex := DBCreateLocation(db, location)

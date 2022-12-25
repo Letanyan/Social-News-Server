@@ -326,7 +326,7 @@ func DBAgentsSetup(db *sql.DB) {
 	) PARTITION BY HASH(agentId);`
 	_, e := db.Exec(createAgents)
 	DidFail(e, "create agents table")
-	createIapTable := func(mod int, rem int) {
+	createAgentsTable := func(mod int, rem int) {
 		makeInstance := fmt.Sprintf(`
 		CREATE TABLE IF NOT EXISTS Agents%d 
 		PARTITION OF Agents
@@ -339,7 +339,7 @@ func DBAgentsSetup(db *sql.DB) {
 	}
 	mod := 10
 	for i := 0; i < mod; i += 1 {
-		createIapTable(mod, i)
+		createAgentsTable(mod, i)
 	}
 }
 
@@ -603,14 +603,13 @@ func DBFunctionSetup(db *sql.DB) {
 		cagg.tagV = cagg.tagV + tagValue;
 		cagg.userV = cagg.userV + userValue;
 		cagg.countV = cagg.countV + 1;
-		cagg.factor = factor;
 		RETURN cagg; 
 	END; $$; 
 
 	CREATE OR REPLACE FUNCTION scoreValueFinal (cagg ScoreValueType)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
-		RETURN (cagg.tagV + (cagg.userV / cagg.countV)) * cagg.factor; 
+		RETURN (cagg.tagV + (cagg.userV / cagg.countV)); 
 	END; $$;
 
 	-- define user aggregate
@@ -624,29 +623,28 @@ func DBFunctionSetup(db *sql.DB) {
 	DidFail(e, "create scoreValue aggregate function")
 
 	createSumWeightedRatioScoreValue := `
-	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg DOUBLE PRECISION[4], tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
-	RETURNS DOUBLE PRECISION ARRAY[4] LANGUAGE plpgsql STRICT AS $$
-	DECLARE nagg DOUBLE PRECISION ARRAY[4]; 
+	CREATE OR REPLACE FUNCTION scoreValueFactorAgg (cagg ScoreValueType, tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION)
+	RETURNS ScoreValueType LANGUAGE plpgsql STRICT AS $$
 	BEGIN
-		nagg[1] = cagg[1] + tagValue;
-		nagg[2] = cagg[2] + userValue;
-		nagg[3] = cagg[3] + 1;
-		nagg[4] = factor;
-		RETURN nagg; 
+		cagg.tagV = cagg.tagV + tagValue;
+		cagg.userV = cagg.userV + userValue;
+		cagg.countV = cagg.countV + 1;
+		cagg.factor = factor;
+		RETURN cagg; 
 	END; $$; 
 
-	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg DOUBLE PRECISION[4])
+	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg ScoreValueType)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
-		RETURN (cagg[1] + (cagg[2] / cagg[3])) * cagg[4]; 
+		RETURN (cagg.tagV + (cagg.userV / cagg.countV)) * cagg.factor; 
 	END; $$;
 
 	-- define user aggregate
 	CREATE OR REPLACE AGGREGATE scoreValueFactor (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION) (
 		sfunc = scoreValueFactorAgg,
-		stype = DOUBLE PRECISION[4],
+		stype = ScoreValueType,
 		finalfunc = scoreValueFactorFinal,
-		initcond = '{0, 0, 0, 0}'
+		initcond = '(0, 0, 0, 0)'
 	);`
 	_, e = db.Exec(createSumWeightedRatioScoreValue)
 	DidFail(e, "create sum weighted ratio score value aggregate function")

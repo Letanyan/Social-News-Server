@@ -52,12 +52,19 @@ func DBDeleteDuplicateAgentPosts(db *sql.DB) {
 	for _, agent := range agents {
 		agentIds = append(agentIds, agent.ID)
 	}
+	if len(agentIds) <= 0 {
+		return
+	}
 	agentArray := SQLFormattedIndexArray(agentIds)
 
 	query := fmt.Sprintf(`
 	DELETE FROM Posts a 
 	USING Posts b 
-	WHERE a.userId=ANY(%s) AND a.userId=b.userId AND a.id < b.id AND a.Content = b.Content; 
+	WHERE 
+		a.userId=ANY(%s) AND 
+		a.userId=b.userId AND 
+		a.id < b.id AND 
+		a.Content = b.Content; 
 	`, agentArray)
 	_, e := db.Exec(query)
 	DidFail(e, "remove duplicate agent posts")

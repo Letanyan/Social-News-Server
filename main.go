@@ -36,19 +36,13 @@ var (
 	tagsOnboarding   map[string]int64
 )
 
-const isTesting = false
-
 func main() {
 	if isDebug {
 		host = "localhost"
 		port = 5432
 		user = "dev"
 		password = "AbstractData00"
-		if isTesting {
-			dbname = "spcialnewsservertest"
-		} else {
-			dbname = "socialnewsserverdev"
-		}
+		dbname = "socialnewsserverdev"
 		serverAddr = "http://localhost:8080"
 	} else {
 		host = os.Getenv("DB_HOSTNAME")
