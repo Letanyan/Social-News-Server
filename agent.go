@@ -334,11 +334,16 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 		}
 	}
 
-	go createPosts(scraping.URLs, agent.ID, agent.Origin)
+	if len(scraping.URLs) > 0 {
+		go createPosts(scraping.URLs, agent.ID, agent.Origin)
+	}
 	for i := range agent.Subs {
 		sub := agent.Subs[i]
 		fullUrl := agent.Origin + sub
 		subScrape := NAScrapeWebsite(fullUrl)
+		if len(subScrape.URLs) == 0 {
+			continue
+		}
 		var offset = time.Second * time.Duration(i+1) * 2
 		anon := func() {
 			defer wg.Done()
@@ -497,7 +502,7 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 		date = parseUnknownTime(pubTime)
 	}
 
-	if len(bodyText) > 0 {
+	if len(bodyText) > 0 && len(tags) < 10 {
 		foundTags := findKeywords(title+" "+description, bodyText)
 		tags = append(tags, foundTags...)
 	}
@@ -528,6 +533,7 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 	}
 
 	tags := scrape.Tags
+	reverse(tags)
 	comps := strings.Split(url, "/")
 	for _, comp := range comps {
 		t := strings.ToLower(comp)
@@ -550,7 +556,7 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 			tagIds = append(tagIds, fmt.Sprintf("%d", tag.ID))
 		}
 		currentTime := utc()
-		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0}
+		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0, 0}
 	}
 	return result
 }

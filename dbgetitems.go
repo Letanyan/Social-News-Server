@@ -140,7 +140,7 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' > v.updatedAt\n", endDate))
 	}
 	if len(search) > 0 {
-		if table == "Posts p" || table == "Comments p" {
+		if table == "Posts p" || table == "PostComments p" {
 			search, altTags := DBPrepareSearchString(db, search)
 			if table == "Posts p" && len(altTags) > 0 {
 				queryTags := SQLFormattedIndexArray(altTags)

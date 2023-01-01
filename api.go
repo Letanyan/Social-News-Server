@@ -52,7 +52,10 @@ func APIFailed(c *gin.Context, e error, reason string) bool {
 
 func ContextMatchSecret(c *gin.Context, user int64) bool {
 	secret := c.DefaultQuery("secret", "")
-	deviceId, _ := url.QueryUnescape(c.DefaultQuery("device", ""))
+	deviceId := c.Request.UserAgent()
+	if len(deviceId) == 0 {
+		return false
+	}
 	return AUTHMatchSecret(mainDB, user, deviceId, secret)
 }
 
@@ -395,6 +398,7 @@ func APIGetUser(c *gin.Context) {
 	}
 
 	user, streak := DBGetUser(mainDB, uid, "")
+	user.Password = ""
 	if user.ID <= 0 {
 		APIReturn(c, false, "no user found with id "+fmt.Sprint(uid))
 	} else {

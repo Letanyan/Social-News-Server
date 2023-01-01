@@ -29,6 +29,7 @@ var (
 	mainDB       *sql.DB
 	agents       []NewsAgent
 	agentsMutex  KeyedMutex
+	usersMutex   KeyedMutex
 	englishWords map[string]bool
 	serverAddr   string
 
@@ -69,6 +70,7 @@ func main() {
 	agentsOnboarding = NAReadAllAgentsOnboarding()
 	tagsOnboarding = NAReadAllTagsOnboarding(mainDB)
 	agentsMutex = KeyedMutex{}
+	usersMutex = KeyedMutex{}
 	NARegisterHourlyUpdates(mainDB)
 	NARegisterWeeklyCleanUp(mainDB)
 

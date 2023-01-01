@@ -8,7 +8,8 @@ import (
 func DBSetup(db *sql.DB) {
 	DBUsersSetup(db)
 	DBPostsSetup(db)
-	DBCommentsSetup(db)
+	// DBCommentsSetup(db)
+	DBPostCommentsSetup(db)
 	DBVotesSetup(db)
 	DBLocationSetup(db)
 	DBTagsSetup(db)
@@ -123,12 +124,16 @@ func DBPostsSetup(db *sql.DB) {
 		commentCount INTEGER DEFAULT 0,
 		edited TIMESTAMP,
 		Language TEXT DEFAULT 'english',
+		ContentLocaleVector TSVECTOR,
+		FlagCount BIGINT DEFAULT 0,
+		Views BIGINT DEFAULT 0,
 
 		PRIMARY KEY (id, createdAt)
 	) PARTITION BY RANGE(createdAt);`
 	_, e := db.Exec(createPosts)
 	DidFail(e, "create posts table")
 
+	createPostsPartitionTable(db, year-1)
 	createPostsPartitionTable(db, year)
 	createPostsPartitionTable(db, year+1)
 }
@@ -144,6 +149,7 @@ func createPostsPartitionTable(db *sql.DB, year int) {
 	DidFail(e, "create posts instance")
 }
 
+// DEPRECATED: Moved to table 'PostComments'
 func DBCommentsSetup(db *sql.DB) {
 	createComments := `CREATE TABLE IF NOT EXISTS Comments (
 		id BIGSERIAL NOT NULL,
@@ -159,6 +165,8 @@ func DBCommentsSetup(db *sql.DB) {
 		isReview BOOLEAN DEFAULT false,
 		edited TIMESTAMP,
 		Language TEXT DEFAULT 'english',
+		ContentLocaleVector TSVECTOR,
+		FlagCount BIGINT DEFAULT 0,
 
 		PRIMARY KEY (id, postId)
 	) PARTITION BY HASH(postId);`
@@ -178,9 +186,66 @@ func DBCommentsSetup(db *sql.DB) {
 	for i := 0; i < mod; i += 1 {
 		createCommentsTable(mod, i)
 	}
-	addCol := `ALTER TABLE Comments ADD COLUMN IF NOT EXISTS replyCount SMALLINT DEFAULT 0`
-	_, e = db.Exec(addCol)
-	DidFail(e, "add replyCount col to comments")
+}
+
+func DBPostCommentsSetup(db *sql.DB) {
+	createComments := `CREATE TABLE IF NOT EXISTS PostComments (
+		id BIGSERIAL NOT NULL,
+		postId BIGINT,
+		userId BIGINT,
+		replyId BIGINT,
+		content TEXT,
+		createdAt TIMESTAMP,
+		upvotes BIGINT DEFAULT 0,
+		downvotes BIGINT DEFAULT 0,
+		trashed BOOLEAN DEFAULT false,
+		replyCount SMALLINT DEFAULT 0,
+		isReview BOOLEAN DEFAULT false,
+		edited TIMESTAMP,
+		Language TEXT DEFAULT 'english',
+		ContentLocaleVector TSVECTOR,
+		FlagCount BIGINT DEFAULT 0,
+
+		PRIMARY KEY (id, postId, createdAt)
+	) PARTITION BY RANGE(createdAt);`
+	_, e := db.Exec(createComments)
+	DidFail(e, "create post comments table")
+
+	year := utc().Year()
+	DBCreatePostCommentsPartitionTable(db, year-1)
+	DBCreatePostCommentsPartitionTable(db, year)
+	DBCreatePostCommentsPartitionTable(db, year+1)
+}
+
+func DBCreatePostCommentsPartitionTable(db *sql.DB, year int) {
+	tableName := fmt.Sprintf("PostComments%d", year)
+	createPostCommentsDatePartition := func() {
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s
+		PARTITION OF PostComments
+		FOR VALUES FROM ('%d-01-01') TO ('%d-01-01')
+		PARTITION BY HASH(postId);
+		CREATE INDEX IF NOT EXISTS %s_index ON %s (id, postId, createdAt)
+		`, tableName, year, year+1, tableName, tableName)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create post comments table partition by range")
+	}
+	createPostCommentsHashPartition := func(mod int, rem int) {
+		kName := fmt.Sprintf("%sk%d", tableName, rem)
+		makeInstance := fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS %s
+		PARTITION OF %s
+		FOR VALUES WITH (modulus %d, remainder %d);
+		CREATE INDEX IF NOT EXISTS %s_index ON %s (id, postId, createdAt)
+		`, kName, tableName, mod, rem, kName, kName)
+		_, e := db.Exec(makeInstance)
+		DidFail(e, "create post comments table partition by hash")
+	}
+	createPostCommentsDatePartition()
+	mod := 16
+	for i := 0; i < mod; i += 1 {
+		createPostCommentsHashPartition(mod, i)
+	}
 }
 
 func DBVotesSetup(db *sql.DB) {
@@ -189,7 +254,7 @@ func DBVotesSetup(db *sql.DB) {
 		kind SMALLINT NOT NULL,
 		pid BIGINT NOT NULL,
 		sid BIGINT NOT NULL,
-		location TEXT[],
+		location INT[],
 		upvotes BIGINT DEFAULT 0,
 		downvotes BIGINT DEFAULT 0,
 		updatedAt DATE DEFAULT (now() at time zone 'utc'),
@@ -223,7 +288,7 @@ func DBCreateVotesPartitionTable(db *sql.DB, year int) {
 		PARTITION OF %s
 		FOR VALUES IN (%d);
 		CREATE INDEX IF NOT EXISTS %s_index ON %s (kind, pid, sid, location, updatedAt)
-		`, kindTableName, tableName, kind, kindTableName, tableName)
+		`, kindTableName, tableName, kind, kindTableName, kindTableName)
 		_, e := db.Exec(makeInstance)
 		DidFail(e, "create votes table instance")
 	}
@@ -399,6 +464,10 @@ func DBPostTagsSetup(db *sql.DB) {
 
 func DBMigrations(db *sql.DB) {
 	commands := `
+	ALTER TABLE Comments 
+	ADD COLUMN IF NOT EXISTS replyCount SMALLINT 
+	DEFAULT 0;
+
 	ALTER TABLE Users 
 	ADD COLUMN IF NOT EXISTS PublicTagFollow BOOLEAN 
 	DEFAULT true;
@@ -481,6 +550,9 @@ func DBMigrations(db *sql.DB) {
 	IF EXISTS scoreValueFactorFinal(DOUBLE PRECISION[]);
 	DROP FUNCTION 
 	IF EXISTS scoreValueFactorAgg(DOUBLE PRECISION[], DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION);
+	
+	ALTER TABLE Posts
+	ADD COLUMN IF NOT EXISTS Views BIGINT DEFAULT 0;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
@@ -489,10 +561,7 @@ func DBMigrations(db *sql.DB) {
 	row := db.QueryRow(postTagsCount)
 	var count int
 	e = row.Scan(&count)
-	if DidFail(e, "scan count of PostTags") {
-		return
-	}
-	if count == 0 {
+	if !DidFail(e, "scan count of PostTags") && count == 0 {
 		updatePostTags := `
 		INSERT INTO PostTags (postId, tagId)
 		SELECT p.id, tagId
@@ -504,6 +573,19 @@ func DBMigrations(db *sql.DB) {
 		DidFail(e, "insert post tag ids")
 	}
 
+	commentsCount := `SELECT COUNT(*) FROM PostComments`
+	row = db.QueryRow(commentsCount)
+	e = row.Scan(&count)
+	if !DidFail(e, "get postComments count") && count == 0 {
+		updatePostTags := `
+		INSERT INTO PostComments 
+		SELECT *
+		FROM Comments
+		ORDER BY id;
+		`
+		_, e = db.Exec(updatePostTags)
+		DidFail(e, "insert comments into new table")
+	}
 }
 
 func DBFunctionSetup(db *sql.DB) {
@@ -631,7 +713,17 @@ func DBFunctionSetup(db *sql.DB) {
 		cagg.countV = cagg.countV + 1;
 		cagg.factor = factor;
 		RETURN cagg; 
-	END; $$; 
+	END; $$;
+
+	CREATE OR REPLACE FUNCTION scoreValueFactorCombine (cagg ScoreValueType, dagg ScoreValueType)
+	RETURNS ScoreValueType LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		cagg.tagV = cagg.tagV + dagg.tagV;
+		cagg.userV = cagg.userV + dagg.userV;
+		cagg.countV = cagg.countV + dagg.countV;
+		cagg.factor = (cagg.factor + dagg.factor) / 2;
+		RETURN cagg;
+	END; $$;
 
 	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg ScoreValueType)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
@@ -643,7 +735,9 @@ func DBFunctionSetup(db *sql.DB) {
 	CREATE OR REPLACE AGGREGATE scoreValueFactor (tagValue DOUBLE PRECISION, userValue DOUBLE PRECISION, factor DOUBLE PRECISION) (
 		sfunc = scoreValueFactorAgg,
 		stype = ScoreValueType,
+		combinefunc = ScoreValueFactorCombine,
 		finalfunc = scoreValueFactorFinal,
+		parallel = safe, 
 		initcond = '(0, 0, 0, 0)'
 	);`
 	_, e = db.Exec(createSumWeightedRatioScoreValue)
@@ -734,7 +828,7 @@ func DBClearAllTables(db *sql.DB) {
 func DBClearTrashedContent(db *sql.DB) {
 	query := `
 	DELETE FROM Posts WHERE Trashed=True;
-	DELETE FROM Comments WHERE Trashed=True;
+	DELETE FROM PostComments WHERE Trashed=True;
 	DELETE FROM Users WHERE Trashed=True;
 	DELETE FROM UserCont WHERE Trashed=True;
 	`

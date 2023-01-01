@@ -112,11 +112,11 @@ func SQLFieldsForUserPrefUser() string {
 }
 
 func SQLFieldsForUserPrefPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, p.trashed, p.edited, p.flagCount, p.views, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefComment() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, p.trashed, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, p.trashed, p.edited, p.flagCount, p.isReview, u.id, u.name, u.registerDate, u.upvotes, u.downvotes, u.email, up.upvotes AS sec_up, up.downvotes AS sec_down"
 }
 
 func SQLFieldsForUserPrefTag() string {
@@ -181,7 +181,8 @@ func ScanUserPrefPosts(rows *sql.Rows) []UserPrefPost {
 		var userId int64
 		var email string
 		e = rows.Scan(&p.ID, &userId, &p.Content, pq.Array(&p.Tags), &p.CreatedAt,
-			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.Trashed, &u.ID, &u.Name, &u.RegisterDate,
+			pq.Array(&p.Location), &p.Upvotes, &p.Downvotes, &p.CommentCount, &p.Trashed,
+			&p.Edited, &p.FlagCount, &p.Views, &u.ID, &u.Name, &u.RegisterDate,
 			&u.Upvotes, &u.Downvotes, &email, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
 			continue
@@ -207,7 +208,9 @@ func ScanUserPrefComments(rows *sql.Rows) []UserPrefComment {
 		var userId int64
 		var email string
 		e = rows.Scan(&c.ID, &c.PostID, &userId, &c.ReplyID, &c.Content, &c.CreatedAt,
-			&c.ReplyCount, &c.Upvotes, &c.Downvotes, &c.Trashed, &u.ID, &u.Name, &u.RegisterDate,
+			&c.ReplyCount, &c.Upvotes, &c.Downvotes, &c.Trashed,
+			&c.Edited, &c.FlagCount, &c.IsReview,
+			&u.ID, &u.Name, &u.RegisterDate,
 			&u.Upvotes, &u.Downvotes, &email, &up, &down, &cred, &score)
 		if DidFail(e, "scan user pref post") {
 			continue
@@ -439,7 +442,7 @@ func DBGetUserPrefComments(db *sql.DB, isOwner bool, userId int64, upvoteAmount 
 	limit int64, offset int64, startDate string, endDate string) []UserPrefComment {
 	getComments := fmt.Sprintf(`SELECT %s, RATIO(up.upvotes, up.downvotes) AS cred, up.upvotes * RATIO(up.upvotes, up.downvotes) AS score 
 		FROM UserPref up 
-		JOIN Comments p ON up.pid = p.postId AND up.sid = p.id
+		JOIN PostComments p ON up.pid = p.postId AND up.sid = p.id
 		JOIN Users u ON p.userId = u.id
 		JOIN Users x ON up.uid = x.id 
 		WHERE up.kind = %d AND up.uid = %d AND p.trashed=false 
@@ -642,12 +645,12 @@ func SQLFieldsForUserCont() string {
 }
 
 func SQLFieldsForUserContPost() string {
-	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, p.trashed, " +
+	return "p.id, p.userId, p.content, p.tags, p.createdAt, p.location, p.upvotes AS item_up, p.downvotes AS item_down, p.CommentCount, p.trashed, p.edited, p.flagCount, p.views," +
 		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
 func SQLFieldsForUserContComment() string {
-	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, p.trashed, " +
+	return "p.id, p.postId, p.userId, p.replyId, p.content, p.createdAt, p.replyCount, p.upvotes AS item_up, p.downvotes AS item_down, p.trashed, p.edited, p.flagCount, p.isReview," +
 		"u.id, u.name, u.registerDate, u.upvotes, u.downvotes"
 }
 
@@ -684,12 +687,21 @@ const (
 )
 
 func DBCreateUserCont(db *sql.DB, kind UserContKind, userId int64, postId int64, commentId int64) UserCont {
+	incrementViews := ""
+	if kind == ucpViewed {
+		incrementViews = fmt.Sprintf(`
+		UPDATE Posts
+		SET Views = Views + 1
+		WHERE id=%d;
+		`, postId)
+	}
 	query := fmt.Sprintf(`
+	%s
 	INSERT INTO UserCont(uid, pid, sid, kind)
 	VALUES(%d, %d, %d, %d)
 	ON CONFLICT (uid, pid, sid, kind) DO NOTHING
 	RETURNING %s;
-	`, userId, postId, commentId, kind, SQLFieldsForUserCont())
+	`, incrementViews, userId, postId, commentId, kind, SQLFieldsForUserCont())
 	rows, e := db.Query(query)
 	if DidFail(e, "insert into user cont") {
 		return UserCont{}
@@ -821,7 +833,7 @@ func DBGetUserContComments(db *sql.DB, userId int64, authorId int64, replyId int
 	limit int64, offset int64, startDate string, endDate string) []CommentResult {
 	getComments := fmt.Sprintf(`SELECT %s, RATIO(p.upvotes, p.downvotes) AS cred, p.upvotes * RATIO(p.upvotes, p.downvotes) AS score 
 		FROM UserCont up 
-		JOIN Comments p ON up.pid = p.postId AND up.sid = p.id
+		JOIN PostComments p ON up.pid = p.postId AND up.sid = p.id
 		JOIN Users u ON p.userId = u.id
 		WHERE up.sid > 0 AND up.uid = %d AND p.trashed=false 
 		`, SQLFieldsForCommentResultAlias(), userId)

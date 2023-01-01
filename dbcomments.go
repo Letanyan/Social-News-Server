@@ -129,7 +129,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	nowTime := formatTime(t)
 	lang := DBLocaleToLanguageConfig(locale)
 	insertComment := fmt.Sprintf(`
-	INSERT INTO Comments(userId, postId, replyId, content, createdAt, edited, isReview, language, contentLocaleVector) 
+	INSERT INTO PostComments(userId, postId, replyId, content, createdAt, edited, isReview, language, contentLocaleVector) 
 	VALUES(%d, %d, %d, $1, $2, $3, $4, $5, to_tsvector('%s', $1)) 
 	RETURNING %s`, userId, postId, replyId, lang, SQLFieldsForComment())
 	row := db.QueryRow(insertComment, content, nowTime, nowTime, isReview, lang)
@@ -141,7 +141,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 	updateReplyCount := ""
 	if replyId > 0 {
 		updateReplyCount = fmt.Sprintf(`
-		UPDATE Comments 
+		UPDATE PostComments 
 		SET replyCount = replyCount + 1 
 		WHERE id = %d;
 		`, replyId)
@@ -169,7 +169,7 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 
 func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 	deleteFromPostComments := `
-	UPDATE Comments 
+	UPDATE PostComments 
 	SET trashed=true 
 	WHERE id=$1 
 	RETURNING userId, replyId`
@@ -183,7 +183,7 @@ func DBDeleteComment(db *sql.DB, postId int64, commentId int64) {
 
 	if replyId > 0 {
 		updateReplyCount := fmt.Sprintf(`
-		UPDATE Comments
+		UPDATE PostComments
 		SET replyCount = replyCount - 1
 		WHERE id = %d;
 		`, replyId)
@@ -197,7 +197,7 @@ func DBUpdateComment(db *sql.DB, postId int64, commentId int64, content string) 
 	nowTime := formatTime(t)
 
 	updateFromPostComments := fmt.Sprintf(`
-	UPDATE comments 
+	UPDATE PostComments 
 	SET content=$1, Edited='%s', flagCount=0, contentLocaleVector=to_tsvector(language::regconfig, $1)
 	WHERE id=$2 AND postId=$3
 	RETURNING %s`, nowTime, SQLFieldsForComment())
@@ -222,7 +222,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 	voteQuery := SQLMakeVote(upComment, postId, commentId, locIndex, upvoteAmount, isUpvote)
 	updateVoteForPost := fmt.Sprintf(`
 		%s
-		UPDATE Comments SET 
+		UPDATE PostComments SET 
 		%s = %s + %d
 		WHERE id = %d
 		RETURNING %s
@@ -243,7 +243,7 @@ func DBVoteComment(db *sql.DB, userId int64, postId int64, commentId int64, upvo
 }
 
 func DBGetComment(db *sql.DB, postId int64, commentId int64) CommentResult {
-	getComment := fmt.Sprintf(`SELECT %s FROM Comments p JOIN users u ON p.userId = u.id WHERE p.id = %d`, SQLFieldsForCommentResult(), commentId)
+	getComment := fmt.Sprintf(`SELECT %s FROM PostComments p JOIN users u ON p.userId = u.id WHERE p.id = %d`, SQLFieldsForCommentResult(), commentId)
 	row := db.QueryRow(getComment)
 	comment, e := ScanCommentResult(row)
 	if DidFail(e, "get comment ", commentId, " for post ", postId) {
@@ -296,7 +296,7 @@ func DBGetComments(db *sql.DB, postId int64, userId int64, replyId int64, isRevi
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getComments := SQLGetItems(db, "Comments p", voteTable, SQLFieldsForCommentResultAlias(),
+	getComments := SQLGetItems(db, "PostComments p", voteTable, SQLFieldsForCommentResultAlias(),
 		SQLFieldsForCommentResult(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
 		sortOrder, limit, offset, start, end, forUser, search)

@@ -109,7 +109,7 @@ func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, 
 	} else {
 		comment := DBGetComment(db, pid, sid)
 		updateFlag = fmt.Sprintf(`
-		UPDATE Comments
+		UPDATE PostComments
 		SET flagCount = flagCount + 1
 		WHERE postId=%d AND id=%d
 		`, comment.PostID, comment.ID)
@@ -152,7 +152,7 @@ func DBGetFlaggedComments(db *sql.DB, kind FlagReason, limit int64, offset int64
 	getComments := fmt.Sprintf(`
 	SELECT %s
 	FROM Flags f 
-	JOIN Comments p ON f.pid=p.postId AND f.sid=p.id
+	JOIN PostComments p ON f.pid=p.postId AND f.sid=p.id
 	JOIN Users u ON p.userId=u.id
 	WHERE f.kind = %d
 	ORDER BY p.flagCount DESC
@@ -215,7 +215,7 @@ func DBIgnoreFlagContent(db *sql.DB, pid int64, sid int64) {
 		`, -1000, pid)
 	} else {
 		updateFlag = fmt.Sprintf(`
-		UPDATE Comments SET flagCount=%d WHERE postId=%d AND id=%d 
+		UPDATE PostComments SET flagCount=%d WHERE postId=%d AND id=%d 
 		`, -1000, pid, sid)
 	}
 
