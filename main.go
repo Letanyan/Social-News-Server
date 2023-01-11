@@ -57,8 +57,12 @@ func main() {
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
-	mainDB, _ = sql.Open("postgres", conn)
-	e := mainDB.Ping()
+	tempDB, e := sql.Open("postgres", conn)
+	mainDB = tempDB
+	if DidFail(e, "connect to database") {
+		return
+	}
+	e = mainDB.Ping()
 	if DidFail(e, "failed connect to db") {
 		fmt.Println(conn)
 	}

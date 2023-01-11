@@ -231,6 +231,16 @@ func DBPrepareSearchString(db *sql.DB, query string) (string, []int64) {
 	return text, tags
 }
 
+func DBAlphaNumeric(text string) string {
+	return filterMapUnicode(text,
+		func(c rune) bool {
+			return !(unicode.IsLetter(c) || unicode.IsNumber(c))
+		},
+		func(c rune) rune {
+			return c
+		})
+}
+
 // func AUTHLoadFromFile(fileName string) map[int64][]string {
 // 	result := map[int64][]string{}
 // 	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
@@ -290,6 +300,9 @@ func makeUnique(words []string) []string {
 }
 
 func reverse[T any](slice []T) {
+	if len(slice) <= 1 {
+		return
+	}
 	inputLen := len(slice)
 	inputMid := inputLen / 2
 

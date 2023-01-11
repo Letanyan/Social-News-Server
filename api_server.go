@@ -101,6 +101,7 @@ func ServeAPI(router *gin.Engine) {
 		v1.POST("/flags", APICreateFlag)
 		v1.GET("/flags/posts", APIGetFlaggedPosts)
 		v1.GET("/flags/comments", APIGetFlaggedComments)
+		v1.GET("/flags/content/:pid/:sid", APIGetFlagsForContent)
 		v1.POST("/trash/flags/:id", APIHandleFlag)
 
 		// Agents

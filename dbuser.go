@@ -246,7 +246,6 @@ func DBGetUserAgent(db *sql.DB, name string) User {
 }
 
 // ignore email if userId > 0
-// FIXME: ensure only one and only one of userId or email
 func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
@@ -256,6 +255,8 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	} else if len(email) > 0 {
 		arg = email
 		getUser += "email = $1"
+	} else {
+		getUser += "FALSE"
 	}
 	row := db.QueryRow(getUser, arg)
 	user, e := ScanUser(row)

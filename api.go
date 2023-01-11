@@ -399,7 +399,7 @@ func APIGetUser(c *gin.Context) {
 
 	user, streak := DBGetUser(mainDB, uid, "")
 	user.Password = ""
-	if user.ID <= 0 {
+	if user.ID <= 0 && user.ID != -1 {
 		APIReturn(c, false, "no user found with id "+fmt.Sprint(uid))
 	} else {
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
@@ -1705,6 +1705,21 @@ func APIGetFlaggedComments(c *gin.Context) {
 	content := DBGetFlaggedComments(mainDB, FlagReason(kind), limit, offset)
 
 	APIReturn(c, true, content)
+}
+
+func APIGetFlagsForContent(c *gin.Context) {
+	pid, e := strconv.ParseInt(c.Param("pid"), 10, 64)
+	if APIFailed(c, e, "invalid flag pid") {
+		return
+	}
+
+	sid, e := strconv.ParseInt(c.Param("sid"), 10, 64)
+	if APIFailed(c, e, "invalid flag sid") {
+		return
+	}
+
+	result := DBGetFlagsForContent(mainDB, pid, sid)
+	APIReturn(c, true, result)
 }
 
 func APIHandleFlag(c *gin.Context) {

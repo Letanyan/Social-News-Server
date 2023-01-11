@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -149,7 +149,7 @@ func NADeleteNewsAgent(id int64) error {
 }
 
 func NAReadAllNewsAgents(db *sql.DB) []NewsAgent {
-	content, e := ioutil.ReadFile("./agents/agents.json")
+	content, e := os.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return []NewsAgent{}
 	}
@@ -196,7 +196,7 @@ func NAReadAllAgentsOnboarding() map[string]int64 {
 }
 
 func ConvertAllAgentsFromBoolToUnix() {
-	content, e := ioutil.ReadFile("./agents/agents.json")
+	content, e := os.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return
 	}
@@ -220,7 +220,7 @@ func ConvertAllAgentsFromBoolToUnix() {
 }
 
 func ConvertAllAgentsFromFileToDB(db *sql.DB) {
-	content, e := ioutil.ReadFile("./agents/agents.json")
+	content, e := os.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return
 	}
@@ -253,7 +253,7 @@ func NAWriteAllNewsAgents(agents []NewsAgent) {
 		return
 	}
 
-	e = ioutil.WriteFile("./agents/agents.json", file, 0644)
+	e = os.WriteFile("./agents/agents.json", file, 0644)
 	if DidFail(e, "write agents to file") {
 		return
 	}

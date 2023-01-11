@@ -6,9 +6,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -45,13 +46,13 @@ func AUTHRegister(db *sql.DB, user int64, deviceId string) string {
 		r := rand.Int31n(int32(len(tokens)))
 		result += string(tokens[r])
 	}
-	updateSecret := `
+	updateSecret := fmt.Sprintf(`
 	INSERT INTO UserAuth (userId, deviceId, secret)
-	VALUES ($1, $2, $3)
+	VALUES (%d, '%s', '%s')
 	ON CONFLICT (userId, deviceId) 
-	DO UPDATE SET secret=$3, lastAction=(now() at time zone 'utc');
-	`
-	_, e := db.Exec(updateSecret, user, deviceId, result)
+	DO UPDATE SET secret='%s', lastAction=(now() at time zone 'utc');
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(result), DBAlphaNumeric(result))
+	_, e := db.Exec(updateSecret)
 	if DidFail(e, "upsert secret ", result, " for user ", user, " on device ", deviceId) {
 		return ""
 	}
@@ -68,12 +69,12 @@ func AUTHRemoveOldSecrets(db *sql.DB, monthsAgo int) {
 }
 
 func AUTHGetSecret(db sql.DB, user int64, deviceId string) string {
-	getSecret := `
+	getSecret := fmt.Sprintf(`
 	SELECT secret
 	FROM UserAuth
-	WHERE userId=$1 AND deviceId=$2
-	`
-	rows, e := db.Query(getSecret, user, deviceId)
+	WHERE userId=%d AND deviceId='%s'
+	`, user, DBAlphaNumeric(deviceId))
+	rows, e := db.Query(getSecret)
 	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
 		return ""
 	}
@@ -90,22 +91,23 @@ func AUTHGetSecret(db sql.DB, user int64, deviceId string) string {
 }
 
 func AUTHUpdateLastAction(db *sql.DB, user int64, deviceId string) {
-	update := `
+	update := fmt.Sprintf(`
 	UPDATE UserAuth
 	SET lastAction = (now() at time zone 'utc')
-	WHERE userId=$1 AND deviceId=$2
-	`
-	_, e := db.Exec(update, user, deviceId)
+	WHERE userId=%d AND deviceId='%s'
+	`, user, DBAlphaNumeric(deviceId))
+	_, e := db.Exec(update)
 	DidFail(e, "update user ", user, " auth last action on device ", deviceId)
 }
 
 func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) bool {
-	findMatches := `
+	findMatches := fmt.Sprintf(`
 	SELECT secret
 	FROM UserAuth
-	WHERE userId=$1 AND deviceId=$2 AND secret=$3
-	`
-	rows, e := db.Query(findMatches, user, deviceId, secret)
+	WHERE userId=%d AND deviceId='%s' AND secret='%s'
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(secret))
+
+	rows, e := db.Query(findMatches)
 	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
 		return false
 	}
@@ -121,15 +123,17 @@ func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) boo
 			return true
 		}
 	}
+	// Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36
+	// A1lQ60vQ
 	return false
 }
 
 func AUTHDeregister(db *sql.DB, user int64, deviceId string) bool {
-	removeUserAuth := `
+	removeUserAuth := fmt.Sprintf(`
 	DELETE FROM UserAuth
-	WHERE userId=$1 AND deviceId=$2
-	`
-	_, e := db.Exec(removeUserAuth, user, deviceId)
+	WHERE userId=%d AND deviceId='%s'
+	`, user, DBAlphaNumeric(deviceId))
+	_, e := db.Exec(removeUserAuth)
 	return !DidFail(e, "remove secret for user ", user, " and device ", deviceId)
 }
 
@@ -149,7 +153,7 @@ func AUTHAppleIAP_URL(url string, receipt string) int {
 		return -1
 	}
 	defer res.Body.Close()
-	body, e := ioutil.ReadAll(res.Body)
+	body, e := io.ReadAll(res.Body)
 	if DidFail(e, "read apple iap body") {
 		return -1
 	}
@@ -182,7 +186,7 @@ func AUTHAppleIAP(receipt string) bool {
 }
 
 func AUTHGoogleIAP(receipt string, productId string) bool {
-	jsonKey, e := ioutil.ReadFile("gapi.json")
+	jsonKey, e := os.ReadFile("gapi.json")
 	if DidFail(e, "read google api json") {
 		return false
 	}
@@ -237,7 +241,7 @@ func getGooglePublicKey(keyId string) (string, error) {
 	if DidFail(e, "get google public key") {
 		return "", e
 	}
-	dat, e := ioutil.ReadAll(resp.Body)
+	dat, e := io.ReadAll(resp.Body)
 	if DidFail(e, "read response body") {
 		return "", e
 	}

@@ -55,7 +55,6 @@ func DBUsersSetup(db *sql.DB) {
 	_, e := db.Exec(createUsers)
 	DidFail(e, "create users table")
 
-	// FIXME: add created at and updated at dates for UserCont and UserPref tables
 	createUserContentTable := `CREATE TABLE IF NOT EXISTS UserCont (
 		uid BIGINT NOT NULL,
 		pid BIGINT NOT NULL,
@@ -464,10 +463,7 @@ func DBPostTagsSetup(db *sql.DB) {
 
 func DBMigrations(db *sql.DB) {
 	commands := `
-	ALTER TABLE Comments 
-	ADD COLUMN IF NOT EXISTS replyCount SMALLINT 
-	DEFAULT 0;
-
+	/*
 	ALTER TABLE Users 
 	ADD COLUMN IF NOT EXISTS PublicTagFollow BOOLEAN 
 	DEFAULT true;
@@ -550,7 +546,7 @@ func DBMigrations(db *sql.DB) {
 	IF EXISTS scoreValueFactorFinal(DOUBLE PRECISION[]);
 	DROP FUNCTION 
 	IF EXISTS scoreValueFactorAgg(DOUBLE PRECISION[], DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION);
-	
+	*/
 	ALTER TABLE Posts
 	ADD COLUMN IF NOT EXISTS Views BIGINT DEFAULT 0;
 	`
