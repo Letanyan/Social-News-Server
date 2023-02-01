@@ -38,7 +38,7 @@ func init() {
 // AUTH User Requests
 // -------------------------------------------------------------------------
 
-func AUTHRegister(db *sql.DB, user int64, deviceId string) string {
+func AUTHRegister(db *sql.DB, user int64, deviceId string, ip string) string {
 	tokens := "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
 	result := ""
 	rand.Seed(time.Now().Unix())
@@ -47,11 +47,11 @@ func AUTHRegister(db *sql.DB, user int64, deviceId string) string {
 		result += string(tokens[r])
 	}
 	updateSecret := fmt.Sprintf(`
-	INSERT INTO UserAuth (userId, deviceId, secret)
-	VALUES (%d, '%s', '%s')
+	INSERT INTO UserAuth (userId, deviceId, secret, key)
+	VALUES (%d, '%s', '%s', '%s')
 	ON CONFLICT (userId, deviceId) 
 	DO UPDATE SET secret='%s', lastAction=(now() at time zone 'utc');
-	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(result), DBAlphaNumeric(result))
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(result), DBAlphaNumeric(ip), DBAlphaNumeric(result))
 	_, e := db.Exec(updateSecret)
 	if DidFail(e, "upsert secret ", result, " for user ", user, " on device ", deviceId) {
 		return ""
@@ -68,12 +68,12 @@ func AUTHRemoveOldSecrets(db *sql.DB, monthsAgo int) {
 	DidFail(e, "delete old user auth secrets", query)
 }
 
-func AUTHGetSecret(db sql.DB, user int64, deviceId string) string {
+func AUTHGetSecret(db sql.DB, user int64, deviceId string, ip string) string {
 	getSecret := fmt.Sprintf(`
 	SELECT secret
 	FROM UserAuth
-	WHERE userId=%d AND deviceId='%s'
-	`, user, DBAlphaNumeric(deviceId))
+	WHERE userId=%d AND deviceId='%s' AND key='%s'
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(ip))
 	rows, e := db.Query(getSecret)
 	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
 		return ""
@@ -90,22 +90,22 @@ func AUTHGetSecret(db sql.DB, user int64, deviceId string) string {
 	return ""
 }
 
-func AUTHUpdateLastAction(db *sql.DB, user int64, deviceId string) {
+func AUTHUpdateLastAction(db *sql.DB, user int64, deviceId string, ip string) {
 	update := fmt.Sprintf(`
 	UPDATE UserAuth
 	SET lastAction = (now() at time zone 'utc')
-	WHERE userId=%d AND deviceId='%s'
-	`, user, DBAlphaNumeric(deviceId))
+	WHERE userId=%d AND deviceId='%s' AND key='%s'
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(ip))
 	_, e := db.Exec(update)
 	DidFail(e, "update user ", user, " auth last action on device ", deviceId)
 }
 
-func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) bool {
+func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string, ip string) bool {
 	findMatches := fmt.Sprintf(`
 	SELECT secret
 	FROM UserAuth
-	WHERE userId=%d AND deviceId='%s' AND secret='%s'
-	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(secret))
+	WHERE userId=%d AND deviceId='%s' AND secret='%s' AND key='%s'
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(secret), DBAlphaNumeric(ip))
 
 	rows, e := db.Query(findMatches)
 	if DidFail(e, "get secret for user ", user, " deviceId ", deviceId) {
@@ -119,7 +119,7 @@ func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) boo
 			continue
 		}
 		if secret == s {
-			AUTHUpdateLastAction(db, user, deviceId)
+			AUTHUpdateLastAction(db, user, deviceId, ip)
 			return true
 		}
 	}
@@ -128,11 +128,11 @@ func AUTHMatchSecret(db *sql.DB, user int64, deviceId string, secret string) boo
 	return false
 }
 
-func AUTHDeregister(db *sql.DB, user int64, deviceId string) bool {
+func AUTHDeregister(db *sql.DB, user int64, deviceId string, ip string) bool {
 	removeUserAuth := fmt.Sprintf(`
 	DELETE FROM UserAuth
-	WHERE userId=%d AND deviceId='%s'
-	`, user, DBAlphaNumeric(deviceId))
+	WHERE userId=%d AND deviceId='%s' AND key='%s'
+	`, user, DBAlphaNumeric(deviceId), DBAlphaNumeric(ip))
 	_, e := db.Exec(removeUserAuth)
 	return !DidFail(e, "remove secret for user ", user, " and device ", deviceId)
 }

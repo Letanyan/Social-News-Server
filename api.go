@@ -56,7 +56,7 @@ func ContextMatchSecret(c *gin.Context, user int64) bool {
 	if len(deviceId) == 0 {
 		return false
 	}
-	return AUTHMatchSecret(mainDB, user, deviceId, secret)
+	return AUTHMatchSecret(mainDB, user, deviceId, secret, APIClientIP(c))
 }
 
 func APIMatchSecret(c *gin.Context, user int64) bool {
@@ -75,6 +75,14 @@ func APIUserIsValidated(c *gin.Context, validationKey int32) bool {
 		APIReturn(c, false, "You must validate your email by clicking the validate link sent to you.")
 		return false
 	}
+}
+
+func APIClientIP(c *gin.Context) string {
+	return ""
+	// uncomment below to force users secrets to be tied
+	// with the ip address used to sign in on. This however means
+	// users must re-login whenever they change networks though.
+	// return c.ClientIP()
 }
 
 // ------------------------------------------------------------------------
@@ -118,7 +126,7 @@ func APICreateUser(c *gin.Context) {
 	user := DBCreateUser(mainDB, input.Name, input.Email, input.Password)
 	if user.ID > 0 {
 		MailValidationKey(user.ID, user.Email, user.ValidationKey)
-		secret := AUTHRegister(mainDB, user.ID, input.Device)
+		secret := AUTHRegister(mainDB, user.ID, input.Device, APIClientIP(c))
 		APIReturn(c, true, gin.H{
 			"user":      user,
 			"token":     secret,
@@ -1765,7 +1773,7 @@ func APISignIn(c *gin.Context) {
 
 	user, streak := DBSignIn(mainDB, in.Email, in.Password)
 	if user.ID > 0 || user.ID == -1 {
-		secret := AUTHRegister(mainDB, user.ID, in.DeviceId)
+		secret := AUTHRegister(mainDB, user.ID, in.DeviceId, APIClientIP(c))
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
@@ -1828,7 +1836,7 @@ func APISignInWithApple(c *gin.Context) {
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
 		if newUser.ID > 0 {
-			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId)
+			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId, APIClientIP(c))
 			APIReturn(c, true, gin.H{
 				"user":      newUser,
 				"token":     secret,
@@ -1841,7 +1849,7 @@ func APISignInWithApple(c *gin.Context) {
 			APIReturn(c, false, "could not create user")
 		}
 	} else {
-		secret := AUTHRegister(mainDB, user.ID, in.DeviceId)
+		secret := AUTHRegister(mainDB, user.ID, in.DeviceId, APIClientIP(c))
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
@@ -1880,7 +1888,7 @@ func APISignInWithGoogle(c *gin.Context) {
 	if user.ID == 0 {
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
 		if newUser.ID > 0 {
-			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId)
+			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId, APIClientIP(c))
 			APIReturn(c, true, gin.H{
 				"user":      newUser,
 				"token":     secret,
@@ -1893,7 +1901,7 @@ func APISignInWithGoogle(c *gin.Context) {
 			APIReturn(c, false, "could not create user")
 		}
 	} else {
-		secret := AUTHRegister(mainDB, user.ID, in.DeviceId)
+		secret := AUTHRegister(mainDB, user.ID, in.DeviceId, APIClientIP(c))
 		following := DBGetUserContUsers(mainDB, true, user.ID, ucpUserFollow, 0, 0, "", "")
 		ignored := DBGetUserContUsers(mainDB, true, user.ID, ucpUserIgnored, 0, 0, "", "")
 		tagFollowing := DBGetUserContTag(mainDB, true, user.ID, ucpTagFollow, 0, 0, "", "")
@@ -1922,7 +1930,7 @@ func APISignOut(c *gin.Context) {
 		return
 	}
 
-	AUTHDeregister(mainDB, in.UserId, in.DeviceId)
+	AUTHDeregister(mainDB, in.UserId, in.DeviceId, c.ClientIP())
 
 	APIReturn(c, true, "")
 }
