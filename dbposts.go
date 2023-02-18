@@ -429,14 +429,6 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 		}
 	}
 
-	n := time.Now().UTC()
-	for _, p := range result {
-		fmt.Printf("%d %#v \n", p.CreatedAt.Unix(), p.CreatedAt)
-		fmt.Printf("%d %#v \n", n.Unix(), n)
-		fmt.Printf("%v \n", p.CreatedAt.Before(n))
-		fmt.Printf("1.5 - (%d - %d) / (60*60*12) = %f = %f\n", n.Unix(), p.CreatedAt.Unix(), 1.5-float64(n.Unix()-p.CreatedAt.Unix())/(60*60*12), p.Score)
-	}
-
 	return result
 }
 
