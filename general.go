@@ -83,6 +83,10 @@ func DBPrepareTaggedString(text string, removeOnlyHash bool) (string, []string) 
 	return text, tagNames
 }
 
+func isQuote(c rune) bool {
+	return c == '"' || c == '\u201C' || c == '\u201D'
+}
+
 func DBParseSearchString(query string) string {
 	tokens := []string{}
 	current := ""
@@ -101,7 +105,8 @@ func DBParseSearchString(query string) string {
 			if isAlphaNum {
 				current += string(c)
 				state = kWord
-			} else if c == '"' {
+			} else if isQuote(c) {
+				current = "\""
 				state = kQuote
 			} else if c == '-' || c == '!' {
 				tokens = append(tokens, "!")
@@ -128,7 +133,7 @@ func DBParseSearchString(query string) string {
 		case kQuote:
 			if isAlphaNum || unicode.IsSpace(c) || c == '-' {
 				current += string(c)
-			} else if c == '"' {
+			} else if isQuote(c) {
 				tokens = append(tokens, current+"\"")
 				current = ""
 				state = kSpace

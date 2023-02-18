@@ -585,10 +585,16 @@ func DBMigrations(db *sql.DB) {
 }
 
 func DBFunctionSetup(db *sql.DB) {
+	// createDateFraction := `
+	// CREATE OR REPLACE FUNCTION dateFrac(beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
+	// BEGIN
+	// 	RETURN LEAST(TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate)), period) / period;
+	// END;
+	// $$ LANGUAGE plpgsql`
 	createDateFraction := `
 	CREATE OR REPLACE FUNCTION dateFrac(beginDate TIMESTAMP, endDate TIMESTAMP, period DOUBLE PRECISION) RETURNS DOUBLE PRECISION AS $$
 	BEGIN
-		RETURN LEAST(TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate)), period) / period;
+		RETURN (TRUNC(EXTRACT(EPOCH FROM endDate)) - TRUNC(EXTRACT(EPOCH FROM beginDate))) / period;
 	END;
 	$$ LANGUAGE plpgsql`
 	_, e := db.Exec(createDateFraction)
@@ -724,7 +730,7 @@ func DBFunctionSetup(db *sql.DB) {
 	CREATE OR REPLACE FUNCTION scoreValueFactorFinal (cagg ScoreValueType)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
-		RETURN (cagg.tagV + (cagg.userV / cagg.countV)) * cagg.factor; 
+		RETURN GREATEST(cagg.tagV + (cagg.userV / cagg.countV), 0) * cagg.factor; 
 	END; $$;
 
 	-- define user aggregate
