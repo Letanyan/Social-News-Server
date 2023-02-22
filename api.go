@@ -17,7 +17,7 @@ func APIReturn(c *gin.Context, success bool, payload interface{}) {
 	c.Header("Access-Control-Allow-Origin", "*")         // Required for CORS support to work
 	c.Header("Access-Control-Allow-Credentials", "true") // Required for cookies, authorization headers with HTTPS
 	c.Header("Access-Control-Allow-Headers", "Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,locale")
-	c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE")
+	c.Header("Access-Control-Allow-Methods", "GET, POST")
 	if isDebug {
 		if success {
 			c.IndentedJSON(http.StatusOK, gin.H{"success": true, "payload": payload})
@@ -37,7 +37,7 @@ func APIReturnHTML(c *gin.Context, file string, obj any) {
 	c.Header("Access-Control-Allow-Origin", "*")         // Required for CORS support to work
 	c.Header("Access-Control-Allow-Credentials", "true") // Required for cookies, authorization headers with HTTPS
 	c.Header("Access-Control-Allow-Headers", "Origin,Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,locale")
-	c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE")
+	c.Header("Access-Control-Allow-Methods", "GET, POST")
 	c.HTML(http.StatusOK, file, obj)
 }
 
@@ -1837,7 +1837,8 @@ func APISignInWithApple(c *gin.Context) {
 
 	user, streak := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
-		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Code)
+		generatedPassword := in.Code + claims.Email + fmt.Sprintf("%d", time.Now().Unix())
+		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, generatedPassword)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId, APIClientIP(c))
 			APIReturn(c, true, gin.H{
@@ -1889,7 +1890,8 @@ func APISignInWithGoogle(c *gin.Context) {
 
 	user, streak := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
-		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, in.Access)
+		generatedPassword := in.Access + claims.Email + fmt.Sprintf("%d", time.Now().Unix())
+		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, generatedPassword)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId, APIClientIP(c))
 			APIReturn(c, true, gin.H{
