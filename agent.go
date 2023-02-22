@@ -502,8 +502,15 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 		date = parseUnknownTime(pubTime)
 	}
 
+	if len(tags) > 5 {
+		tags = tags[:5]
+	}
+
 	if len(bodyText) > 0 {
 		foundTags := findKeywords(title+" "+description, bodyText)
+		if len(foundTags) > 5 {
+			foundTags = foundTags[:5]
+		}
 		tags = append(tags, foundTags...)
 	}
 
@@ -534,10 +541,15 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 
 	tags := scrape.Tags
 	comps := strings.Split(url, "/")
+	limit := 5 // limit url tags to max `limit` categories
 	for _, comp := range comps {
 		t := strings.ToLower(comp)
 		if _, found := tagsOnboarding[t]; found {
 			tags = append(tags, t)
+		}
+		limit -= 1
+		if limit <= 0 {
+			break
 		}
 	}
 	tags = makeUnique(tags)
@@ -551,12 +563,7 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 		author := UserProfile{user.ID, user.Name, user.RegisterDate, user.Upvotes, user.Downvotes, int64(user.Investment), false, 0, 0, 0}
 		tagObjs := DBCreateTags(db, tags)
 		tagIds := []string{}
-		limit := 5
 		for _, tag := range tagObjs {
-			if limit <= 0 {
-				break
-			}
-			limit -= 1
 			tagIds = append(tagIds, fmt.Sprintf("%d", tag.ID))
 		}
 		currentTime := utc()

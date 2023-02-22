@@ -181,6 +181,9 @@ func APICreatePost(c *gin.Context) {
 		} else {
 			date := time.Time{}
 			text, tags := DBPrepareTaggedString(in.Content, true)
+			if len(tags) > 5 {
+				tags = tags[:5]
+			}
 			post := DBCreatePost(mainDB, in.UserID, text, date, tags, in.Location, in.Locale)
 			if post.ID > 0 {
 				APIReturn(c, true, post)

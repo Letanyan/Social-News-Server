@@ -116,7 +116,9 @@ type KeyValue struct {
 func orderedMapByValue(keyValues map[string]int) []KeyValue {
 	result := []KeyValue{}
 	for k, v := range keyValues {
-		result = append(result, KeyValue{k, v})
+		if v >= 3 {
+			result = append(result, KeyValue{k, v})
+		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].value > result[j].value })
 	return result
@@ -133,28 +135,28 @@ func findKeywords(title string, text string) []string {
 	for _, kv := range topBody {
 		if _, hasKey := titleBag[kv.key]; hasKey {
 			delete(titleBag, kv.key)
+			a := strings.SplitN(kv.key, " ", 3)
 			for k := range titleBag {
 				if strings.Contains(k, kv.key) {
 					delete(titleBag, k)
 				}
-			}
-			a := strings.SplitN(kv.key, " ", 3)
-			if len(a) > 0 {
-				w := strings.TrimSpace(a[0])
-				if len(w) > 0 {
-					delete(titleBag, w)
-				}
-			}
-			if len(a) > 1 {
-				w := strings.TrimSpace(a[1])
-				if len(w) > 0 {
-					delete(titleBag, w)
-				}
-			}
-			if len(a) > 2 {
-				w := strings.TrimSpace(a[2])
-				if len(w) > 0 {
-					delete(titleBag, w)
+				if len(a) > 0 {
+					w := strings.TrimSpace(a[0])
+					if len(w) > 0 && strings.Contains(k, a[0]) {
+						delete(titleBag, k)
+					}
+					if len(a) > 1 {
+						w := strings.TrimSpace(a[1])
+						if len(w) > 0 && strings.Contains(k, a[1]) {
+							delete(titleBag, k)
+						}
+						if len(a) > 2 {
+							w := strings.TrimSpace(a[2])
+							if len(w) > 0 && strings.Contains(k, a[2]) {
+								delete(titleBag, k)
+							}
+						}
+					}
 				}
 			}
 			result = append(result, kv.key)
