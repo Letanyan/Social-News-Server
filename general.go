@@ -83,6 +83,10 @@ func DBPrepareTaggedString(text string, removeOnlyHash bool) (string, []string) 
 	return text, tagNames
 }
 
+func isQuote(c rune) bool {
+	return c == '"' || c == '\u201C' || c == '\u201D'
+}
+
 func DBParseSearchString(query string) string {
 	tokens := []string{}
 	current := ""
@@ -101,7 +105,8 @@ func DBParseSearchString(query string) string {
 			if isAlphaNum {
 				current += string(c)
 				state = kWord
-			} else if c == '"' {
+			} else if isQuote(c) {
+				current = "\""
 				state = kQuote
 			} else if c == '-' || c == '!' {
 				tokens = append(tokens, "!")
@@ -128,7 +133,7 @@ func DBParseSearchString(query string) string {
 		case kQuote:
 			if isAlphaNum || unicode.IsSpace(c) || c == '-' {
 				current += string(c)
-			} else if c == '"' {
+			} else if isQuote(c) {
 				tokens = append(tokens, current+"\"")
 				current = ""
 				state = kSpace
@@ -231,6 +236,16 @@ func DBPrepareSearchString(db *sql.DB, query string) (string, []int64) {
 	return text, tags
 }
 
+func DBAlphaNumeric(text string) string {
+	return filterMapUnicode(text,
+		func(c rune) bool {
+			return !(unicode.IsLetter(c) || unicode.IsNumber(c))
+		},
+		func(c rune) rune {
+			return c
+		})
+}
+
 // func AUTHLoadFromFile(fileName string) map[int64][]string {
 // 	result := map[int64][]string{}
 // 	file, e := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0644)
@@ -290,6 +305,9 @@ func makeUnique(words []string) []string {
 }
 
 func reverse[T any](slice []T) {
+	if len(slice) <= 1 {
+		return
+	}
 	inputLen := len(slice)
 	inputMid := inputLen / 2
 

@@ -29,6 +29,7 @@ var (
 	mainDB       *sql.DB
 	agents       []NewsAgent
 	agentsMutex  KeyedMutex
+	usersMutex   KeyedMutex
 	englishWords map[string]bool
 	serverAddr   string
 
@@ -36,19 +37,13 @@ var (
 	tagsOnboarding   map[string]int64
 )
 
-const isTesting = false
-
 func main() {
 	if isDebug {
 		host = "localhost"
 		port = 5432
 		user = "dev"
 		password = "AbstractData00"
-		if isTesting {
-			dbname = "spcialnewsservertest"
-		} else {
-			dbname = "socialnewsserverdev"
-		}
+		dbname = "socialnewsserverdev"
 		serverAddr = "http://localhost:8080"
 	} else {
 		host = os.Getenv("DB_HOSTNAME")
@@ -62,8 +57,12 @@ func main() {
 
 	conn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
-	mainDB, _ = sql.Open("postgres", conn)
-	e := mainDB.Ping()
+	tempDB, e := sql.Open("postgres", conn)
+	mainDB = tempDB
+	if DidFail(e, "connect to database") {
+		return
+	}
+	e = mainDB.Ping()
 	if DidFail(e, "failed connect to db") {
 		fmt.Println(conn)
 	}
@@ -75,6 +74,7 @@ func main() {
 	agentsOnboarding = NAReadAllAgentsOnboarding()
 	tagsOnboarding = NAReadAllTagsOnboarding(mainDB)
 	agentsMutex = KeyedMutex{}
+	usersMutex = KeyedMutex{}
 	NARegisterHourlyUpdates(mainDB)
 	NARegisterWeeklyCleanUp(mainDB)
 

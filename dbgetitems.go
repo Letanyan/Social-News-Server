@@ -107,7 +107,7 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		joins += "JOIN UserScores us ON us.id = p.userId\n"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
-		scoreField = "scoreValueFactor(ts.value, us.value, 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*12))"
+		scoreField = "scoreValueFactor(ts.value, us.value, 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*24))"
 	}
 
 	result := fmt.Sprintf(`%s
@@ -140,17 +140,17 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		cond = append(cond, fmt.Sprintf("TIMESTAMP '%s' > v.updatedAt\n", endDate))
 	}
 	if len(search) > 0 {
-		if table == "Posts p" || table == "Comments p" {
+		if table == "Posts p" || table == "PostComments p" {
 			search, altTags := DBPrepareSearchString(db, search)
 			if table == "Posts p" && len(altTags) > 0 {
 				queryTags := SQLFormattedIndexArray(altTags)
 				cond = append(cond, fmt.Sprintf("%s && p.tags", queryTags))
 			}
 			if len(search) > 0 {
-				cond = append(cond, fmt.Sprintf("p.contentVector @@ to_tsquery('%s')", search))
+				cond = append(cond, fmt.Sprintf("p.ContentLocaleVector @@ to_tsquery('%s')", search))
 			}
 			if sortOrder == soRank {
-				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(p.contentVector, to_tsquery('%s')) AS rank", search))
+				result = strings.ReplaceAll(result, "{rank}", fmt.Sprintf(", ts_rank(p.ContentLocaleVector, to_tsquery('%s')) AS rank", search))
 			} else {
 				result = strings.ReplaceAll(result, "{rank}", "")
 			}

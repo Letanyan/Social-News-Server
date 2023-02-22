@@ -98,21 +98,36 @@ func ScanFlaggedComments(rows *sql.Rows) []FlaggedComment {
 }
 
 func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, reason string) {
+	existingFlags := `
+	SELECT COUNT(*)
+	FROM Flags
+	WHERE uid=$1 AND pid=$2 AND sid=$3
+	`
+	row := db.QueryRow(existingFlags, uid, pid, sid)
+	var flagCount int64
+	e := row.Scan(&flagCount)
+	if DidFail(e, "get flag count for", uid, pid, sid) {
+		flagCount = 0
+	}
+
 	updateFlag := ""
-	if sid <= 0 {
-		post := DBGetPost(db, pid)
-		updateFlag = fmt.Sprintf(`
-		UPDATE Posts
-		SET flagCount = flagCount + 1
-		WHERE id=%d
-		`, post.ID)
-	} else {
-		comment := DBGetComment(db, pid, sid)
-		updateFlag = fmt.Sprintf(`
-		UPDATE Comments
-		SET flagCount = flagCount + 1
-		WHERE postId=%d AND id=%d
-		`, comment.PostID, comment.ID)
+	// increment flag count only for unique user
+	if flagCount <= 0 {
+		if sid <= 0 {
+			post := DBGetPost(db, pid)
+			updateFlag = fmt.Sprintf(`
+			UPDATE Posts
+			SET flagCount = flagCount + 1
+			WHERE id=%d
+			`, post.ID)
+		} else {
+			comment := DBGetComment(db, pid, sid)
+			updateFlag = fmt.Sprintf(`
+			UPDATE PostComments
+			SET flagCount = flagCount + 1
+			WHERE postId=%d AND id=%d
+			`, comment.PostID, comment.ID)
+		}
 	}
 
 	insertFlag := fmt.Sprintf(`
@@ -120,7 +135,7 @@ func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, 
 	VALUES(%d, %d, %d, %d, '%s');
 	%s
 	`, uid, pid, sid, kind, reason, updateFlag)
-	_, e := db.Exec(insertFlag)
+	_, e = db.Exec(insertFlag)
 
 	if DidFail(e, "create flag", insertFlag) {
 		return
@@ -152,7 +167,7 @@ func DBGetFlaggedComments(db *sql.DB, kind FlagReason, limit int64, offset int64
 	getComments := fmt.Sprintf(`
 	SELECT %s
 	FROM Flags f 
-	JOIN Comments p ON f.pid=p.postId AND f.sid=p.id
+	JOIN PostComments p ON f.pid=p.postId AND f.sid=p.id
 	JOIN Users u ON p.userId=u.id
 	WHERE f.kind = %d
 	ORDER BY p.flagCount DESC
@@ -166,6 +181,30 @@ func DBGetFlaggedComments(db *sql.DB, kind FlagReason, limit int64, offset int64
 	}
 
 	result := ScanFlaggedComments(rows)
+	return result
+}
+
+func DBGetFlagsForContent(db *sql.DB, pid int64, sid int64) map[FlagReason]int {
+	result := map[FlagReason]int{}
+
+	query := `
+	SELECT f.kind, COUNT(*)
+	FROM Flags f
+	WHERE pid=$1 AND sid=$2
+	GROUP BY f.kind
+	`
+	rows, e := db.Query(query, pid, sid)
+	if DidFail(e, "get flags for post") {
+		return result
+	}
+	defer rows.Close()
+	var kind FlagReason
+	var count int
+	for rows.Next() {
+		rows.Scan(&kind, &count)
+		result[kind] = count
+	}
+
 	return result
 }
 
@@ -215,7 +254,7 @@ func DBIgnoreFlagContent(db *sql.DB, pid int64, sid int64) {
 		`, -1000, pid)
 	} else {
 		updateFlag = fmt.Sprintf(`
-		UPDATE Comments SET flagCount=%d WHERE postId=%d AND id=%d 
+		UPDATE PostComments SET flagCount=%d WHERE postId=%d AND id=%d 
 		`, -1000, pid, sid)
 	}
 

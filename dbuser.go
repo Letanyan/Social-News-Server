@@ -19,7 +19,7 @@ type User struct {
 	Downvotes     int64
 	Credits       int32
 	Investment    int32
-	ValidationKey int32
+	ValidationKey int32 `json:"ValidationKey,string"`
 	LoginDate     time.Time
 	Streak        int32
 	Blocked       time.Time
@@ -246,7 +246,6 @@ func DBGetUserAgent(db *sql.DB, name string) User {
 }
 
 // ignore email if userId > 0
-// FIXME: ensure only one and only one of userId or email
 func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	getUser := fmt.Sprintf(`SELECT %s FROM users p WHERE `, SQLFieldsForUser())
 	arg := ""
@@ -256,6 +255,8 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	} else if len(email) > 0 {
 		arg = email
 		getUser += "email = $1"
+	} else {
+		getUser += "FALSE"
 	}
 	row := db.QueryRow(getUser, arg)
 	user, e := ScanUser(row)
@@ -263,48 +264,56 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 		return User{}, 0
 	}
 
-	streak := DBUpdateUserLogin(db, user)
-	user.Credits += streak
-	user.Streak = DBGetNextStreakAmount(streak)
+	update, streak := DBUpdateUserLogin(db, user)
+	user.Credits += update
+	user.Streak = streak
 
-	return user, streak
+	return user, update
 }
 
 func DBGetNextStreakAmount(current int32) int32 {
-	switch current {
-	case 1:
-		return 2
-	case 2:
-		return 3
-	case 3:
-		return 5
-	case 5:
-		return 5
-	default:
-		return 1
+	sample := []int32{
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+		4, 4, 4,
+		5, 5, 5,
+		6, 6,
+		7, 7,
+		8, 8,
+		9,
+		10,
 	}
+	i := len(sample)
+	r := rand.Intn(i)
+	result := sample[r]
+	if result == current {
+		result += 1
+	}
+	return result
 }
 
-func DBUpdateUserLogin(db *sql.DB, user User) int32 {
+func DBUpdateUserLogin(db *sql.DB, user User) (int32, int32) {
 	if len(user.Email) == 0 {
-		return 0
+		return 0, 0
 	}
 	now := utc()
 	login := user.LoginDate
 	ny, nm, nd := now.Date()
 	ly, lm, ld := login.Date()
 	streak := user.Streak
+	unlock := usersMutex.Lock(fmt.Sprintf("%d", user.ID))
+	defer unlock()
 	var result int32 = 0
 	if ly != ny || lm != nm || ld != nd {
 		nextDay := login.AddDate(0, 0, 1)
 		if nextDay.Day() == nd && nextDay.Month() == nm && nextDay.Year() == ny {
-			streak = DBGetNextStreakAmount(streak)
 			result = streak
+			streak = DBGetNextStreakAmount(streak)
 		} else {
-			streak = 1
+			streak = DBGetNextStreakAmount(streak)
 			result = 1
 		}
-
 	}
 	query := fmt.Sprintf(`
 	UPDATE Users
@@ -317,9 +326,9 @@ func DBUpdateUserLogin(db *sql.DB, user User) int32 {
 	`, streak, result, user.ID)
 	_, e := db.Exec(query)
 	if DidFail(e, "update user streak and login date") {
-		return 0
+		return 0, 0
 	}
-	return result
+	return result, streak
 }
 
 func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
@@ -473,20 +482,3 @@ func DBUpdateUserPublicPermissions(db *sql.DB, uid int64, pv bool, prl bool, pi 
 		return
 	}
 }
-
-/*
-
-var obj {
-	arg	name type: Identifier
-	arg body type: Expression
-
-	ctx(0).insert
-}
-
-obj Person {
-	var location type: Vector(2) (0, 0)
-	var name type: String
-	var age type: Int
-}
-
-*/

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -149,7 +149,7 @@ func NADeleteNewsAgent(id int64) error {
 }
 
 func NAReadAllNewsAgents(db *sql.DB) []NewsAgent {
-	content, e := ioutil.ReadFile("./agents/agents.json")
+	content, e := os.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return []NewsAgent{}
 	}
@@ -196,7 +196,7 @@ func NAReadAllAgentsOnboarding() map[string]int64 {
 }
 
 func ConvertAllAgentsFromBoolToUnix() {
-	content, e := ioutil.ReadFile("./agents/agents.json")
+	content, e := os.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return
 	}
@@ -220,7 +220,7 @@ func ConvertAllAgentsFromBoolToUnix() {
 }
 
 func ConvertAllAgentsFromFileToDB(db *sql.DB) {
-	content, e := ioutil.ReadFile("./agents/agents.json")
+	content, e := os.ReadFile("./agents/agents.json")
 	if DidFail(e, "read agents.json file") {
 		return
 	}
@@ -253,7 +253,7 @@ func NAWriteAllNewsAgents(agents []NewsAgent) {
 		return
 	}
 
-	e = ioutil.WriteFile("./agents/agents.json", file, 0644)
+	e = os.WriteFile("./agents/agents.json", file, 0644)
 	if DidFail(e, "write agents to file") {
 		return
 	}
@@ -334,11 +334,16 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 		}
 	}
 
-	go createPosts(scraping.URLs, agent.ID, agent.Origin)
+	if len(scraping.URLs) > 0 {
+		go createPosts(scraping.URLs, agent.ID, agent.Origin)
+	}
 	for i := range agent.Subs {
 		sub := agent.Subs[i]
 		fullUrl := agent.Origin + sub
 		subScrape := NAScrapeWebsite(fullUrl)
+		if len(subScrape.URLs) == 0 {
+			continue
+		}
 		var offset = time.Second * time.Duration(i+1) * 2
 		anon := func() {
 			defer wg.Done()
@@ -497,8 +502,15 @@ func NAReadData(node *html.Node) WebsiteScrapings {
 		date = parseUnknownTime(pubTime)
 	}
 
+	if len(tags) > 5 {
+		tags = tags[:5]
+	}
+
 	if len(bodyText) > 0 {
 		foundTags := findKeywords(title+" "+description, bodyText)
+		if len(foundTags) > 5 {
+			foundTags = foundTags[:5]
+		}
 		tags = append(tags, foundTags...)
 	}
 
@@ -529,10 +541,15 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 
 	tags := scrape.Tags
 	comps := strings.Split(url, "/")
+	limit := 5 // limit url tags to max `limit` categories
 	for _, comp := range comps {
 		t := strings.ToLower(comp)
 		if _, found := tagsOnboarding[t]; found {
 			tags = append(tags, t)
+		}
+		limit -= 1
+		if limit <= 0 {
+			break
 		}
 	}
 	tags = makeUnique(tags)
@@ -550,7 +567,7 @@ func NACreatePost(db *sql.DB, userId int64, url string, locale string, scrape We
 			tagIds = append(tagIds, fmt.Sprintf("%d", tag.ID))
 		}
 		currentTime := utc()
-		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0}
+		result = PostResult{0, author, body, tagIds, currentTime, []string{}, 0, 0, 0, false, currentTime, 0, 0, 0, 0, 0}
 	}
 	return result
 }

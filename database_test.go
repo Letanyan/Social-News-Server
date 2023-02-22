@@ -372,14 +372,7 @@ func TestUserFlow(t *testing.T) {
 	if user.Get("payload", "user", "Name") != "patient x" {
 		t.Errorf("incorrect name")
 	}
-	secret := user.Get("payload", "token").(string)
 	device := "blankStare"
-
-	pid, _ := strconv.ParseInt(user.Get("payload", "user", "ID").(string), 10, 64)
-	posts := CallAPI(r, "GET", fmt.Sprintf("/api/v1/posts?uid=%d", pid), gin.H{})
-	if len(posts.Get("payload").([]interface{})) != 0 {
-		t.Errorf("posts from new user must be empty")
-	}
 
 	user = CallAPI(r, "POST", "/api/v1/auth/sign-in", gin.H{
 		"email":    "patientX@new-source.app",
@@ -406,6 +399,44 @@ func TestUserFlow(t *testing.T) {
 		t.Errorf("expected incorrect password")
 	}
 
+	signOut := CallAPI(r, "POST", "/api/v1/auth/sign-out", gin.H{
+		"userId": 1,
+		"device": device,
+	})
+	if signOut.Get("success").(bool) != true {
+		t.Errorf("expected sign out")
+	}
+}
+
+func TestCreation(t *testing.T) {
+	mainDB = getTestDatabase()
+	defer mainDB.Close()
+	DBClearAllTables(mainDB)
+	DBSetup(mainDB)
+	r := getTestRouter()
+
+	user := CallAPI(r, "POST", "/api/v1/users", gin.H{
+		"name":     "patient x",
+		"email":    "patientX@new-source.app",
+		"password": "h1z1init",
+		"device":   "blankStare",
+	})
+	validationKey := user.Get("payload", "user", "ValidationKey").(string)
+	secret := user.Get("payload", "token").(string)
+	device := "blankStare"
+
+	pid, _ := strconv.ParseInt(user.Get("payload", "user", "ID").(string), 10, 64)
+	posts := CallAPI(r, "GET", fmt.Sprintf("/api/v1/posts?uid=%d", pid), gin.H{})
+	if len(posts.Get("payload").([]interface{})) != 0 {
+		t.Errorf("posts from new user must be empty")
+	}
+
+	CallAPI(
+		r, "GET",
+		fmt.Sprintf("/api/v1/users/1/verification/%s", validationKey),
+		gin.H{},
+	)
+
 	post := CallAPI(r, "POST", fmt.Sprintf("/api/v1/posts?secret=%s&device=%s", secret, device), gin.H{
 		"userId":    "1",
 		"content":   "this is a post",
@@ -414,7 +445,7 @@ func TestUserFlow(t *testing.T) {
 		"locale":    "en",
 	})
 	if post.Get("payload", "ID").(string) != "1" {
-		t.Errorf("expected to create post")
+		t.Errorf("expected to create post, but found: %#v", post)
 	}
 
 	posts = CallAPI(r, "GET", fmt.Sprintf("/api/v1/posts?uid=%d", pid), gin.H{})

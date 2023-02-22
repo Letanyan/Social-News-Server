@@ -43,10 +43,12 @@ func ServeAPI(router *gin.Engine) {
 
 		// Get
 		v1.GET("/users/:uid", APIGetUser)
+
 		v1.GET("/users/:uid/prefs/users", APIGetUserPrefUsers)
 		v1.GET("/users/:uid/prefs/posts", APIGetUserPrefPosts)
 		v1.GET("/users/:uid/prefs/comments", APIGetUserPrefComments)
 		v1.GET("/users/:uid/prefs/tags", APIGetUserPrefTags)
+
 		v1.GET("/users/:uid/content/posts", APIGetUserContPost(ucpCreated))
 		v1.GET("/users/:uid/content/posts/read-later", APIGetUserContPost(ucpReadLater))
 		v1.GET("/users/:uid/content/posts/viewed", APIGetUserContPost(ucpViewed))
@@ -54,7 +56,20 @@ func ServeAPI(router *gin.Engine) {
 		v1.GET("/users/:uid/content/user-follows", APIGetUserContUsers(ucpUserFollow))
 		v1.GET("/users/:uid/content/ignored", APIGetUserContUsers(ucpUserIgnored))
 		v1.GET("/users/:uid/content/tag-follows", APIGetUserContTags(ucpTagFollow))
+
 		v1.GET("/users/:uid/recommend", APIGetSimilarPosts)
+
+		v1.GET("/users/prefs/users", APIGetUserPrefsFor(upUser))
+		v1.GET("/users/prefs/posts", APIGetUserPrefsFor(upPost))
+		v1.GET("/users/prefs/comments", APIGetUserPrefsFor(upComment))
+		v1.GET("/users/prefs/tags", APIGetUserPrefsFor(upTag))
+
+		v1.GET("/users/content/read-later", APIGetUserContsFor(ucpReadLater))
+		v1.GET("/users/content/viewed", APIGetUserContsFor(ucpViewed))
+		v1.GET("/users/content/user-follows", APIGetUserContsFor(ucpUserFollow))
+		v1.GET("/users/content/ignored", APIGetUserContsFor(ucpUserIgnored))
+		v1.GET("/users/content/tag-follows", APIGetUserContsFor(ucpTagFollow))
+
 		v1.GET("/users", APIGetUsers)
 		v1.GET("/posts/:pid", APIGetPost)
 		v1.GET("/posts", APIGetPosts)
@@ -86,6 +101,7 @@ func ServeAPI(router *gin.Engine) {
 		v1.POST("/flags", APICreateFlag)
 		v1.GET("/flags/posts", APIGetFlaggedPosts)
 		v1.GET("/flags/comments", APIGetFlaggedComments)
+		v1.GET("/flags/content/:pid/:sid", APIGetFlagsForContent)
 		v1.POST("/trash/flags/:id", APIHandleFlag)
 
 		// Agents
