@@ -26,16 +26,11 @@ func ServeFiles(router *gin.Engine) {
 		"./templates/reset_password_failed.html",
 		"./templates/privacy.html",
 	)
-	router.GET("/", serveIndex)
 	router.GET("/privacy", servePrivacy)
 }
 
 func servePrivacy(c *gin.Context) {
 	serveHTML(c, "privacy.html", gin.H{})
-}
-
-func serveIndex(c *gin.Context) {
-	c.String(http.StatusOK, "Index")
 }
 
 func FSFooter() template.HTML {
