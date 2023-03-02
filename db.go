@@ -549,6 +549,29 @@ func DBMigrations(db *sql.DB) {
 	*/
 	ALTER TABLE Posts
 	ADD COLUMN IF NOT EXISTS Views BIGINT DEFAULT 0;
+
+	ALTER TABLE Iap DROP CONSTRAINT IF EXISTS iap_pkey;
+	DROP INDEX IF EXISTS iap0_index;
+	DROP INDEX IF EXISTS iap1_index;
+	DROP INDEX IF EXISTS iap2_index;
+	DROP INDEX IF EXISTS iap3_index;
+	DROP INDEX IF EXISTS iap4_index;
+	DROP INDEX IF EXISTS iap5_index;
+	DROP INDEX IF EXISTS iap6_index;
+	DROP INDEX IF EXISTS iap7_index;
+	DROP INDEX IF EXISTS iap8_index;
+	DROP INDEX IF EXISTS iap9_index;
+	DROP INDEX IF EXISTS iap10_index;
+	DROP INDEX IF EXISTS iap11_index;
+	DROP INDEX IF EXISTS iap12_index;
+	DROP INDEX IF EXISTS iap13_index;
+	DROP INDEX IF EXISTS iap14_index;
+	DROP INDEX IF EXISTS iap15_index;
+	DROP INDEX IF EXISTS iap16_index;
+	DROP INDEX IF EXISTS iap17_index;
+	DROP INDEX IF EXISTS iap18_index;
+	DROP INDEX IF EXISTS iap19_index;
+
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
