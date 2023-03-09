@@ -25,12 +25,18 @@ func ServeFiles(router *gin.Engine) {
 		"./templates/reset_password_confirmed.html",
 		"./templates/reset_password_failed.html",
 		"./templates/privacy.html",
+		"./templates/support.html",
 	)
 	router.GET("/privacy", servePrivacy)
+	router.GET("/support", serveSupport)
 }
 
 func servePrivacy(c *gin.Context) {
 	serveHTML(c, "privacy.html", gin.H{})
+}
+
+func serveSupport(c *gin.Context) {
+	serveHTML(c, "support.html", gin.H{})
 }
 
 func FSFooter() template.HTML {

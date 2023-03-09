@@ -357,9 +357,7 @@ func DBIapSetup(db *sql.DB) {
 		userId BIGINT,
 		platform CHAR(1),
 		productId TEXT,
-		data TEXT,
-
-		PRIMARY KEY (userId, platform, productId, data)
+		data TEXT
 	) PARTITION BY HASH(userId);`
 	_, e := db.Exec(createIap)
 	DidFail(e, "create iap table")
@@ -368,9 +366,7 @@ func DBIapSetup(db *sql.DB) {
 		CREATE TABLE IF NOT EXISTS Iap%d 
 		PARTITION OF Iap
 		FOR VALUES WITH (modulus %d, remainder %d);
-		CREATE INDEX IF NOT EXISTS Iap%d_index 
-		ON Iap%d (userId, platform, productId, data)
-		`, rem, mod, rem, rem, rem)
+		`, rem, mod, rem)
 		_, e := db.Exec(makeInstance)
 		DidFail(e, "create iap partition instance")
 	}
