@@ -23,6 +23,10 @@ func DBIapExists(db *sql.DB, userId int64, platform string, productId string, da
 }
 
 func DBIapInsert(db *sql.DB, userId int64, platform string, productId string, data string) bool {
+	if DBIapExists(db, userId, platform, productId, data) {
+		return false
+	}
+
 	query := `
 	INSERT INTO Iap(userId, platform, productId, data)
 	VALUES ($1, $2, $3, $4)
