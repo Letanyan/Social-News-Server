@@ -606,6 +606,7 @@ func NARegisterWeeklyCleanUp(db *sql.DB) {
 	time.AfterFunc(0, func() {
 		NATrimOldUrlsFromNewAgentHashSets(db)
 		DBDeleteDuplicateAgentPosts(db)
+		AUTHRemoveOldSecrets(db, 1)
 		// DBClearTrashedContent(db)
 	})
 	time.AfterFunc(time.Hour*24*7, func() { NARegisterWeeklyCleanUp(db) })

@@ -568,6 +568,7 @@ func DBMigrations(db *sql.DB) {
 	DROP INDEX IF EXISTS iap18_index;
 	DROP INDEX IF EXISTS iap19_index;
 
+	ALTER TABLE UserAuth ALTER COLUMN secret TYPE CHAR(64);
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
