@@ -407,7 +407,8 @@ func DBUserAuthSetup(db *sql.DB) {
 	createUserAuth := `CREATE TABLE IF NOT EXISTS UserAuth (
 		userId BIGINT,
 		deviceId TEXT,
-		secret CHAR(8),
+		secret CHAR(64),
+		key TEXT,
 		lastAction TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (userId, deviceId)
