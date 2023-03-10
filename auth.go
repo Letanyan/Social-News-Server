@@ -42,7 +42,7 @@ func AUTHRegister(db *sql.DB, user int64, deviceId string, ip string) string {
 	tokens := "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
 	result := ""
 	rand.Seed(time.Now().Unix())
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 64; i++ {
 		r := rand.Int31n(int32(len(tokens)))
 		result += string(tokens[r])
 	}
