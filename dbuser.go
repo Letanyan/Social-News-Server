@@ -75,6 +75,24 @@ func ScanUser(row *sql.Row) (User, error) {
 	return u, e
 }
 
+func ScanUsers(rows *sql.Rows) ([]User, error) {
+	result := []User{}
+	for rows.Next() {
+		u := User{}
+		e := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Password, &u.RegisterDate, &u.Upvotes,
+			&u.Downvotes, &u.Credits, &u.Investment, &u.ValidationKey,
+			&u.LoginDate, &u.Streak, &u.Blocked,
+			&u.PublicViews, &u.PublicReadLater, &u.PublicFollowing, &u.PublicIgnored, &u.PublicTagFollow,
+			&u.PublicPostVotes, &u.PublicCommentVotes, &u.PublicTagVotes, &u.PublicTagVotes)
+		if DidFail(e, "scan user") {
+			return result, e
+		}
+		result = append(result, u)
+	}
+
+	return result, nil
+}
+
 func ScanUserProfile(row *sql.Row) (UserProfile, error) {
 	u := UserProfile{}
 	var email string
@@ -258,10 +276,16 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 	} else {
 		getUser += "FALSE"
 	}
-	row := db.QueryRow(getUser, arg)
-	user, e := ScanUser(row)
+	rows, e := db.Query(getUser, arg)
 	if DidFail(e, "get user from email/id ", getUser) {
 		return User{}, 0
+	}
+	users, _ := ScanUsers(rows)
+	user := User{}
+	if len(users) != 1 {
+		return user, 0
+	} else {
+		user = users[0]
 	}
 
 	update, streak := DBUpdateUserLogin(db, user)

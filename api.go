@@ -1789,13 +1789,7 @@ func APISignIn(c *gin.Context) {
 			"tags":      tagFollowing,
 		})
 	} else {
-		if user.ID == -2 {
-			APIReturn(c, false, "missing")
-		} else if user.ID == -3 {
-			APIReturn(c, false, "password")
-		} else {
-			APIReturn(c, false, "unknown")
-		}
+		APIReturn(c, false, "error")
 	}
 }
 
