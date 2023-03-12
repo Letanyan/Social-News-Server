@@ -394,18 +394,27 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	if len(popularIn) > 0 {
 		locArray = DBGetLocationIndex(db, popularIn)
 	}
-	getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
-		SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
-		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate, forUser, search)
 
-	rows, e := db.Query(getPosts)
 	result := []PostResult{}
-	if DidFail(e, "get posts\n", getPosts) {
-		return result
+	// increase total posts to consider by months as more items requested
+	for i := 1; i <= 12; i += 1 {
+		cond = append(cond, fmt.Sprintf("p.createdAt > ((now() at time zone 'utc') - interval '%d month')", i))
+		getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
+			SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
+			upvotes, downvotes,
+			sortOrder, limit, offset, startDate, endDate, forUser, search)
+
+		rows, e := db.Query(getPosts)
+		if DidFail(e, "get posts\n", getPosts) {
+			return result
+		}
+
+		result = ScanPostResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
+		if len(result) != 0 {
+			break
+		}
 	}
 
-	result = ScanPostResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
 	if forUser > 0 && len(result) == 0 { // if no more recommended show 2nd degree recommended
 		result = DBGetSimilarPosts(db, forUser, 0, sortOrder, limit, offset)
 		if len(result) == 0 { // show trending if no recommended
