@@ -397,8 +397,12 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 
 	result := []PostResult{}
 	// increase total posts to consider by months as more items requested
-	for i := 1; i <= 12; i += 1 {
-		cond = append(cond, fmt.Sprintf("p.createdAt > ((now() at time zone 'utc') - interval '%d month')", i))
+	i := 0
+	j := 7
+	cond = append(cond, "", "")
+	for j < 356*16 {
+		cond[len(cond)-2] = fmt.Sprintf("p.createdAt <= ((now() at time zone 'utc') - interval '%d day')", i)
+		cond[len(cond)-1] = fmt.Sprintf("p.createdAt > ((now() at time zone 'utc') - interval '%d day')", j)
 		getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
 			SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 			upvotes, downvotes,
@@ -413,6 +417,8 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 		if len(result) != 0 {
 			break
 		}
+		i = j
+		j = j * 2
 	}
 
 	if forUser > 0 && len(result) == 0 { // if no more recommended show 2nd degree recommended
