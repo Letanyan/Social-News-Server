@@ -164,6 +164,16 @@ func DBCreateComment(db *sql.DB, userId int64, content string, postId int64, rep
 		return comment, userCont
 	}
 
+	var userToNotify int64
+	if replyId == 0 {
+		p := DBGetPost(db, postId)
+		userToNotify = p.Author.ID
+	} else {
+		c := DBGetComment(db, postId, replyId)
+		userToNotify = c.Author.ID
+	}
+	DBAddCommentNotification(db, userToNotify, comment.ID)
+
 	return comment, userCont
 }
 

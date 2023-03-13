@@ -10,6 +10,7 @@ func DBSetup(db *sql.DB) {
 	DBPostsSetup(db)
 	// DBCommentsSetup(db)
 	DBPostCommentsSetup(db)
+	DBCommentNotificationsSetup(db)
 	DBVotesSetup(db)
 	DBLocationSetup(db)
 	DBTagsSetup(db)
@@ -245,6 +246,19 @@ func DBCreatePostCommentsPartitionTable(db *sql.DB, year int) {
 	for i := 0; i < mod; i += 1 {
 		createPostCommentsHashPartition(mod, i)
 	}
+}
+
+func DBCommentNotificationsSetup(db *sql.DB) {
+	createNotifications := `CREATE TABLE IF NOT EXISTS CommentNotifications (
+		id BIGSERIAL NOT NULL,
+		userId BIGINT NOT NULL,
+		commentId BIGINT NOT NULL,
+		viewedAt TIMESTAMP, -- currently not used externally
+
+		PRIMARY KEY (id, userId, commentId)
+	);`
+	_, e := db.Exec(createNotifications)
+	DidFail(e, "create post comments table")
 }
 
 func DBVotesSetup(db *sql.DB) {
