@@ -584,6 +584,10 @@ func DBMigrations(db *sql.DB) {
 	DROP INDEX IF EXISTS iap19_index;
 
 	ALTER TABLE UserAuth ALTER COLUMN secret TYPE CHAR(64);
+
+	ALTER TABLE Agents
+	ADD COLUMN IF NOT EXISTS postId BIGINT 
+	DEFAULT 0;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")

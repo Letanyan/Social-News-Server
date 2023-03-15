@@ -28,13 +28,13 @@ func DBAgentPathExists(db *sql.DB, agentId int64, path string) bool {
 	return found
 }
 
-func DBAgentPathInsert(db *sql.DB, agentId int64, path string) bool {
+func DBAgentPathInsert(db *sql.DB, agentId int64, postId int64, path string) bool {
 	query := `
-	INSERT INTO Agents(agentId, path)
-	VALUES ($1, $2)
+	INSERT INTO Agents(agentId, path, postId)
+	VALUES ($1, $2, $3)
 	ON CONFLICT DO NOTHING;
 	`
-	_, e := db.Exec(query, agentId, path)
+	_, e := db.Exec(query, agentId, path, postId)
 	return !DidFail(e, "insert iap for user", query)
 }
 
@@ -42,6 +42,18 @@ func DBAgentPathRemoveOld(db *sql.DB, monthAgo int) {
 	query := fmt.Sprintf(`
 	DELETE FROM Agents
 	WHERE date < ((now() at time zone 'utc') - interval '%d month')
+	`, monthAgo)
+	_, e := db.Exec(query)
+	DidFail(e, "delete old agent paths", query)
+}
+
+func DBAgentPostRemoveOld(db *sql.DB, monthAgo int) {
+	query := fmt.Sprintf(`
+	DELETE FROM Posts p
+	USING Agents a
+	WHERE 
+		a.postId = p.id AND
+		a.date < ((now() at time zone 'utc') - interval '%d month')
 	`, monthAgo)
 	_, e := db.Exec(query)
 	DidFail(e, "delete old agent paths", query)
