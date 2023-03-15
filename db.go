@@ -10,6 +10,7 @@ func DBSetup(db *sql.DB) {
 	DBPostsSetup(db)
 	// DBCommentsSetup(db)
 	DBPostCommentsSetup(db)
+	DBCommentNotificationsSetup(db)
 	DBVotesSetup(db)
 	DBLocationSetup(db)
 	DBTagsSetup(db)
@@ -247,6 +248,19 @@ func DBCreatePostCommentsPartitionTable(db *sql.DB, year int) {
 	}
 }
 
+func DBCommentNotificationsSetup(db *sql.DB) {
+	createNotifications := `CREATE TABLE IF NOT EXISTS CommentNotifications (
+		id BIGSERIAL NOT NULL,
+		userId BIGINT NOT NULL,
+		commentId BIGINT NOT NULL,
+		viewedAt TIMESTAMP, -- currently not used externally
+
+		PRIMARY KEY (id, userId, commentId)
+	);`
+	_, e := db.Exec(createNotifications)
+	DidFail(e, "create post comments table")
+}
+
 func DBVotesSetup(db *sql.DB) {
 	year := utc().Year()
 	createVotes := `CREATE TABLE IF NOT EXISTS Votes (
@@ -407,7 +421,8 @@ func DBUserAuthSetup(db *sql.DB) {
 	createUserAuth := `CREATE TABLE IF NOT EXISTS UserAuth (
 		userId BIGINT,
 		deviceId TEXT,
-		secret CHAR(8),
+		secret CHAR(64),
+		key TEXT,
 		lastAction TIMESTAMP DEFAULT (now() at time zone 'utc'),
 
 		PRIMARY KEY (userId, deviceId)
@@ -569,6 +584,10 @@ func DBMigrations(db *sql.DB) {
 	DROP INDEX IF EXISTS iap19_index;
 
 	ALTER TABLE UserAuth ALTER COLUMN secret TYPE CHAR(64);
+
+	ALTER TABLE Agents
+	ADD COLUMN IF NOT EXISTS postId BIGINT 
+	DEFAULT 0;
 	`
 	_, e := db.Exec(commands)
 	DidFail(e, "migrations")
@@ -770,7 +789,13 @@ func DBFunctionSetup(db *sql.DB) {
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
 	BEGIN
 		RETURN accumulator + COALESCE(x / NULLIF(x + y, 0), 0.0);
-	END; $$; 
+	END; $$;
+
+	CREATE OR REPLACE FUNCTION sumRatioCombine (cagg DOUBLE PRECISION, dagg DOUBLE PRECISION)
+	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
+	BEGIN
+		RETURN cagg + dagg;
+	END; $$;
 
 	CREATE OR REPLACE FUNCTION sumRatioFinal (accumulator DOUBLE PRECISION)
 	RETURNS DOUBLE PRECISION LANGUAGE plpgsql STRICT AS $$
@@ -782,7 +807,9 @@ func DBFunctionSetup(db *sql.DB) {
 	CREATE OR REPLACE AGGREGATE sumRatio (x DOUBLE PRECISION, y DOUBLE PRECISION) (
 		sfunc = sumRatioAgg,
 		stype = DOUBLE PRECISION,
+		combinefunc = sumRatioCombine,
 		finalfunc = sumRatioFinal,
+		parallel = safe,
 		initcond = 0
 	);`
 	_, e = db.Exec(createAggRatioValue)
@@ -810,6 +837,64 @@ func DBFunctionSetup(db *sql.DB) {
 	);`
 	_, e = db.Exec(createAggWeightRatio)
 	DidFail(e, "create aggregate weight function")
+}
+
+func DBCreateCAggregateFunctions(db *sql.DB) {
+	createCSumRatio := `
+	CREATE OR REPLACE FUNCTION c_sumRatioAgg(DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION) 
+	RETURNS DOUBLE PRECISION 
+	AS '/home/letan/psqlc/func.so', 'c_sumRatioAgg'
+	LANGUAGE C STRICT;
+
+	CREATE OR REPLACE FUNCTION c_sumRatioCombine(DOUBLE PRECISION, DOUBLE PRECISION) 
+	RETURNS DOUBLE PRECISION 
+	AS '/home/letan/psqlc/func.so', 'c_sumRatioCombine'
+	LANGUAGE C STRICT;
+
+	CREATE OR REPLACE FUNCTION c_sumRatioFinal(DOUBLE PRECISION) 
+	RETURNS DOUBLE PRECISION 
+	AS '/home/letan/psqlc/func.so', 'c_sumRatioFinal'
+	LANGUAGE C STRICT;
+
+	CREATE OR REPLACE AGGREGATE c_sumRatio(DOUBLE PRECISION, DOUBLE PRECISION) (
+		sfunc = c_sumRatioAgg,
+		stype = DOUBLE PRECISION,
+		combinefunc = c_sumRatioCombine,
+		finalfunc = c_sumRatioFinal,
+		parallel = safe,
+		initcond = 0
+	);
+	`
+	_, e := db.Exec(createCSumRatio)
+	DidFail(e, "create C sum ratio function")
+
+	createCScoreValue := `
+	CREATE OR REPLACE FUNCTION c_scoreValueFactorAgg(ScoreValueType, DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION) 
+	RETURNS ScoreValueType
+	AS '/home/letan/psqlc/func.so', 'c_scoreValueFactorAgg'
+	LANGUAGE C STRICT;
+
+	CREATE OR REPLACE FUNCTION c_scoreValueFactorCombine(ScoreValueType, ScoreValueType) 
+	RETURNS ScoreValueType
+	AS '/home/letan/psqlc/func.so', 'c_scoreValueFactorCombine'
+	LANGUAGE C STRICT;
+
+	CREATE OR REPLACE FUNCTION c_scoreValueFactorFinal(ScoreValueType) 
+	RETURNS DOUBLE PRECISION 
+	AS '/home/letan/psqlc/func.so', 'c_scoreValueFactorFinal'
+	LANGUAGE C STRICT;
+
+	CREATE OR REPLACE AGGREGATE c_scoreValueFactor (DOUBLE PRECISION, DOUBLE PRECISION, DOUBLE PRECISION) (
+		sfunc = c_scoreValueFactorAgg,
+		stype = ScoreValueType,
+		combinefunc = c_ScoreValueFactorCombine,
+		finalfunc = c_scoreValueFactorFinal,
+		parallel = safe, 
+		initcond = '(0, 0, 0, 0)'
+	);
+	`
+	_, e = db.Exec(createCScoreValue)
+	DidFail(e, "create C score value function")
 }
 
 func DBDeleteTable(db *sql.DB, name string) {

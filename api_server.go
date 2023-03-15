@@ -28,6 +28,7 @@ func ServeAPI(router *gin.Engine) {
 		v1.POST("/users", APICreateUser)
 		v1.POST("/posts", APICreatePost)
 		v1.POST("/posts/:pid/comments", APICreateComment)
+		// Edit
 		v1.POST("/update/posts/:pid", APIUpdatePost)
 		v1.POST("/update/posts/:pid/comments/:cid", APIUpdateComment)
 		// Delete
@@ -84,6 +85,7 @@ func ServeAPI(router *gin.Engine) {
 		v1.POST("/users/:uid", APIVoteUser)
 		v1.POST("/posts/:pid", APIVotePost)
 		v1.POST("/posts/:pid/comments/:cid", APIVoteComment)
+		v1.POST("/users/:uid/watch/:pid", APIWatchUser)
 
 		v1.POST("/users/:uid/content/posts/read-later", APIAddUserCont(ucpReadLater))
 		v1.POST("/users/:uid/content/posts/viewed", APIAddUserCont(ucpViewed))
@@ -92,10 +94,14 @@ func ServeAPI(router *gin.Engine) {
 		v1.POST("/users/:uid/content/tag-follows", APIAddUserCont(ucpTagFollow))
 		v1.POST("/users/:uid/content/recommendations", APIRefreshUserContRecommendations)
 
+		// Onboarding
 		v1.POST("/users/:uid/content/onboard", APIOnboard)
-		v1.POST("/users/:uid/watch/:pid", APIWatchUser)
 		v1.GET("/onboard/agents", APIOnboardAgents)
 		v1.GET("/onboard/tags", APIOnboardTags)
+
+		// Notifications
+		v1.GET("/notifications/:uid/read/comments/:id", APIReadCommentNotification)
+		v1.GET("/notifications/:uid/comments", APICommentNotifications)
 
 		//Flags
 		v1.POST("/flags", APICreateFlag)

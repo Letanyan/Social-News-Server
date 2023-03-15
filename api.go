@@ -1638,6 +1638,52 @@ func APIOnboardTags(c *gin.Context) {
 }
 
 // ------------------------------------------------------------------------
+// Notifications
+// ------------------------------------------------------------------------
+
+func APIReadCommentNotification(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	if !APIMatchSecret(c, uid) {
+		return
+	}
+
+	id, e := strconv.ParseInt(c.Param("id"), 10, 64)
+	if APIFailed(c, e, "invalid notification id") {
+		return
+	}
+
+	DBReadCommentNotification(mainDB, id)
+}
+
+func APICommentNotifications(c *gin.Context) {
+	uid, e := strconv.ParseInt(c.Param("uid"), 10, 64)
+	if APIFailed(c, e, "invalid user id") {
+		return
+	}
+
+	if !APIMatchSecret(c, uid) {
+		return
+	}
+
+	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
+	if APIFailed(c, e, "invalid offset given") {
+		return
+	}
+
+	limit, e := strconv.ParseInt(c.DefaultQuery("limit", "50"), 10, 64)
+	if APIFailed(c, e, "invalid limit given") {
+		return
+	}
+
+	result := DBGetCommentNotifications(mainDB, uid, limit, offset)
+	APIReturn(c, true, result)
+}
+
+// ------------------------------------------------------------------------
 // Admin
 // ------------------------------------------------------------------------
 
@@ -1789,13 +1835,7 @@ func APISignIn(c *gin.Context) {
 			"tags":      tagFollowing,
 		})
 	} else {
-		if user.ID == -2 {
-			APIReturn(c, false, "missing")
-		} else if user.ID == -3 {
-			APIReturn(c, false, "password")
-		} else {
-			APIReturn(c, false, "unknown")
-		}
+		APIReturn(c, false, "error")
 	}
 }
 

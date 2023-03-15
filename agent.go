@@ -236,15 +236,9 @@ func ConvertAllAgentsFromFileToDB(db *sql.DB) {
 		hashFile := fmt.Sprintf("./agents/%d.gob", agent.ID)
 		visited := HashSetFromFile[int64](hashFile)
 		for k := range visited {
-			DBAgentPathInsert(db, agent.ID, k)
+			DBAgentPathInsert(db, agent.ID, 0, k)
 		}
 	}
-}
-
-func NATrimOldUrlsFromNewAgentHashSets(db *sql.DB) {
-	fmt.Printf("[AGENTS] Start Cleaning Article URLs\n")
-	DBAgentPathRemoveOld(db, 12)
-	fmt.Printf("[AGENTS] Finish Cleaning Article URLs\n")
 }
 
 func NAWriteAllNewsAgents(agents []NewsAgent) {
@@ -325,11 +319,13 @@ func NAUpdateNewsAgent(db *sql.DB, agent NewsAgent, wg *sync.WaitGroup) WebsiteS
 			canURLString := CanonicalURL(url.String())
 			canURLString = strings.TrimPrefix(canURLString, baseURL.Hostname())
 			if !DBAgentPathExists(db, id, canURLString) {
-				DBAgentPathInsert(db, id, canURLString)
 				subScraping := NAScrapeWebsite(urlString)
+				var postId int64
 				if subScraping.Type == "article" {
-					NACreatePost(db, agent.ID, urlString, agent.Locale, subScraping, true)
+					result := NACreatePost(db, agent.ID, urlString, agent.Locale, subScraping, true)
+					postId = result.ID
 				}
+				DBAgentPathInsert(db, id, postId, canURLString)
 			}
 		}
 	}
@@ -604,7 +600,8 @@ func NARegisterHourlyUpdates(db *sql.DB) {
 
 func NARegisterWeeklyCleanUp(db *sql.DB) {
 	time.AfterFunc(0, func() {
-		NATrimOldUrlsFromNewAgentHashSets(db)
+		// DBAgentPostRemoveOld(db, 9)
+		DBAgentPathRemoveOld(db, 9)
 		DBDeleteDuplicateAgentPosts(db)
 		AUTHRemoveOldSecrets(db, 1)
 		// DBClearTrashedContent(db)
