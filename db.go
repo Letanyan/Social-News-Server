@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 func DBSetup(db *sql.DB) {
@@ -941,4 +942,15 @@ func DBClearTrashedContent(db *sql.DB) {
 	`
 	_, e := db.Exec(query)
 	DidFail(e, "remove trashed content")
+}
+
+func DBRegisterWeeklyCleanUp(db *sql.DB) {
+	time.AfterFunc(0, func() {
+		DBAgentPostRemoveOld(db, 6)
+		DBAgentPathRemoveOld(db, 6)
+		DBDeleteDuplicateAgentPosts(db)
+		AUTHRemoveOldSecrets(db, 1)
+		// DBClearTrashedContent(db)
+	})
+	time.AfterFunc(time.Hour*24*7, func() { DBRegisterWeeklyCleanUp(db) })
 }

@@ -76,7 +76,7 @@ func main() {
 	agentsMutex = KeyedMutex{}
 	usersMutex = KeyedMutex{}
 	NARegisterHourlyUpdates(mainDB)
-	NARegisterWeeklyCleanUp(mainDB)
+	DBRegisterWeeklyCleanUp(mainDB)
 
 	router := gin.Default()
 	ServeFiles(router)

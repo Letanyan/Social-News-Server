@@ -597,14 +597,3 @@ func NARegisterHourlyUpdates(db *sql.DB) {
 	time.AfterFunc(0, func() { NAUpdateAllNewsAgent(db, time.Minute*30) })
 	time.AfterFunc(time.Hour, func() { NARegisterHourlyUpdates(db) })
 }
-
-func NARegisterWeeklyCleanUp(db *sql.DB) {
-	time.AfterFunc(0, func() {
-		// DBAgentPostRemoveOld(db, 9)
-		DBAgentPathRemoveOld(db, 9)
-		DBDeleteDuplicateAgentPosts(db)
-		AUTHRemoveOldSecrets(db, 1)
-		// DBClearTrashedContent(db)
-	})
-	time.AfterFunc(time.Hour*24*7, func() { NARegisterWeeklyCleanUp(db) })
-}
