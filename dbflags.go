@@ -116,17 +116,19 @@ func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, 
 		if sid <= 0 {
 			post := DBGetPost(db, pid)
 			updateFlag = fmt.Sprintf(`
-			UPDATE Posts
-			SET flagCount = flagCount + 1
-			WHERE id=%d
-			`, post.ID)
+			UPDATE Posts p
+			SET flagCount = flagCount + CEIL(weightRatio(u.judge, u.judge, u.jury))
+			FROM Users u
+			WHERE u.id=%d AND p.id=%d
+			`, uid, post.ID)
 		} else {
 			comment := DBGetComment(db, pid, sid)
 			updateFlag = fmt.Sprintf(`
-			UPDATE PostComments
-			SET flagCount = flagCount + 1
-			WHERE postId=%d AND id=%d
-			`, comment.PostID, comment.ID)
+			UPDATE PostComments p
+			SET flagCount = flagCount + CEIL(weightRatio(u.judge, u.judge, u.jury))
+			FROM Users u
+			WHERE u.id=%d AND postId=%d AND p.id=%d
+			`, uid, comment.PostID, comment.ID)
 		}
 	}
 
@@ -210,8 +212,6 @@ func DBGetFlagsForContent(db *sql.DB, pid int64, sid int64) map[FlagReason]int {
 
 func DBHandleFlag(db *sql.DB, id int64, pid int64, sid int64, action string) {
 	switch action {
-	case "ignore":
-		DBDeleteFlag(db, id)
 	case "ignore_all":
 		DBIgnoreFlagContent(db, pid, sid)
 	case "remove":
@@ -235,17 +235,18 @@ func DBHandleFlag(db *sql.DB, id int64, pid int64, sid int64, action string) {
 	}
 }
 
-func DBDeleteFlag(db *sql.DB, id int64) {
+func DBDeleteFlags(db *sql.DB, pid int64, sid int64) {
 	action := `
-	DELETE FROM Flags WHERE id = $1
+	DELETE FROM Flags WHERE pid = $1 AND sid = $2
 	`
-	_, e := db.Exec(action, id)
+	_, e := db.Exec(action, pid, sid)
 	if DidFail(e, "delete flag") {
 		return
 	}
 }
 
 func DBIgnoreFlagContent(db *sql.DB, pid int64, sid int64) {
+	DBUpdateUsersAuthority(db, pid, sid, false)
 	updateFlag := ""
 	// arbitrarily set flagCount to -1000 as a buffer
 	if sid <= 0 {
@@ -269,12 +270,13 @@ func DBIgnoreFlagContent(db *sql.DB, pid int64, sid int64) {
 }
 
 func DBRemoveFlagContent(db *sql.DB, id int64, pid int64, sid int64) {
+	DBUpdateUsersAuthority(db, pid, sid, true)
 	if sid > 0 {
 		DBDeleteComment(db, pid, sid)
 	} else {
 		DBDeletePost(db, pid)
 	}
-	DBDeleteFlag(db, id)
+	DBDeleteFlags(db, pid, sid)
 }
 
 func DBBlockFlagUser(db *sql.DB, id int64, pid int64, sid int64, duration int) {
@@ -291,4 +293,21 @@ func DBBlockFlagUser(db *sql.DB, id int64, pid int64, sid int64, duration int) {
 func DBReportFlagContent(db *sql.DB, id int64, pid int64, sid int64) {
 	// FIXME: Report to appropriate authorities
 	DBRemoveFlagContent(db, id, pid, sid)
+}
+
+func DBUpdateUsersAuthority(db *sql.DB, pid int64, sid int64, correctDecision bool) {
+	updateJudge := "jury = jury + 1"
+	if correctDecision {
+		updateJudge = "judge = judge + 1"
+	}
+	query := fmt.Sprintf(`
+	UPDATE Users AS u
+	SET %s
+	FROM Flags f
+	WHERE f.pid = $1 AND f.sid = $2 AND f.uid = u.id
+	`, updateJudge)
+
+	_, e := db.Exec(query, pid, sid)
+
+	DidFail(e, "update user judge")
 }

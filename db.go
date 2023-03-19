@@ -41,6 +41,9 @@ func DBUsersSetup(db *sql.DB) {
 		blocked TIMESTAMP DEFAULT '1970-01-01'::timestamp,
 		Investment BIGINT DEFAULT 0,
 
+		judge BIGINT DEFAULT 0,
+		jury BIGINT DEFAULT 0,
+
 		publicViews BOOLEAN DEFAULT true,
 		publicReadLater BOOLEAN DEFAULT true,
 		publicFollowing BOOLEAN DEFAULT true,
@@ -588,6 +591,13 @@ func DBMigrations(db *sql.DB) {
 
 	ALTER TABLE Agents
 	ADD COLUMN IF NOT EXISTS postId BIGINT 
+	DEFAULT 0;
+
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS judge BIGINT
+	DEFAULT 0;
+	ALTER TABLE Users
+	ADD COLUMN IF NOT EXISTS jury BIGINT
 	DEFAULT 0;
 	`
 	_, e := db.Exec(commands)
