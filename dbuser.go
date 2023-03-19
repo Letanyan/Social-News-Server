@@ -297,16 +297,11 @@ func DBGetUser(db *sql.DB, userId int64, email string) (User, int32) {
 
 func DBGetNextStreakAmount(current int32) int32 {
 	sample := []int32{
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-		4, 4, 4,
-		5, 5, 5,
-		6, 6,
-		7, 7,
-		8, 8,
-		9,
-		10,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		2, 2, 2, 2, 2, 2, 2, 2,
+		3, 3, 3, 3,
+		4, 4,
+		5,
 	}
 	i := len(sample)
 	r := rand.Intn(i)
@@ -425,13 +420,13 @@ func DBVoteForUser(db *sql.DB, userId int64, targetId int64, upvoteAmount int64,
 	updateUser := fmt.Sprintf(`
 	%s
 	UPDATE users p SET 
-	%s = %s + %d,
-	credits = credits + 0.75 * %d
+	%s = %s + %d
 	WHERE id = %d
 	RETURNING %s`,
 		voteQuery,
 		updatedField, updatedField, upvoteAmount,
-		upvoteAmount, targetId, SQLFieldsForUserProfile())
+		targetId,
+		SQLFieldsForUserProfile())
 
 	row := db.QueryRow(updateUser)
 	user, e := ScanUserProfile(row)
