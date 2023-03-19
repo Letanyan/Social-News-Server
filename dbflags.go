@@ -117,7 +117,7 @@ func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, 
 			post := DBGetPost(db, pid)
 			updateFlag = fmt.Sprintf(`
 			UPDATE Posts p
-			SET flagCount = flagCount + CEIL(weightRatio(u.judge, u.judge, u.jury))
+			SET flagCount = flagCount + GREATEST(weightRatio(u.judge, u.judge, u.jury), 1)
 			FROM Users u
 			WHERE u.id=%d AND p.id=%d
 			`, uid, post.ID)
@@ -125,7 +125,7 @@ func DBCreateFlag(db *sql.DB, uid int64, pid int64, sid int64, kind FlagReason, 
 			comment := DBGetComment(db, pid, sid)
 			updateFlag = fmt.Sprintf(`
 			UPDATE PostComments p
-			SET flagCount = flagCount + CEIL(weightRatio(u.judge, u.judge, u.jury))
+			SET flagCount = flagCount + GREATEST(weightRatio(u.judge, u.judge, u.jury), 1)
 			FROM Users u
 			WHERE u.id=%d AND postId=%d AND p.id=%d
 			`, uid, comment.PostID, comment.ID)
