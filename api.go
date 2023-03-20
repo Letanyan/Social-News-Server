@@ -1669,6 +1669,31 @@ func APICommentNotifications(c *gin.Context) {
 		return
 	}
 
+	pid, e := strconv.ParseInt(c.DefaultQuery("pid", "0"), 10, 64)
+	if APIFailed(c, e, "invalid post id") {
+		return
+	}
+
+	replyId, e := strconv.ParseInt(c.DefaultQuery("reply", "-1"), 10, 64)
+	if APIFailed(c, e, "invalid reply id") {
+		return
+	}
+
+	upvotes, e := strconv.ParseInt(c.DefaultQuery("upvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid upvotes value given") {
+		return
+	}
+
+	downvotes, e := strconv.ParseInt(c.DefaultQuery("downvotes", "0"), 10, 64)
+	if APIFailed(c, e, "invalid downvotes value given") {
+		return
+	}
+
+	order, e := SortOrderFromString(c.DefaultQuery("order", "score"))
+	if APIFailed(c, e, "invalid order given") {
+		return
+	}
+
 	offset, e := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	if APIFailed(c, e, "invalid offset given") {
 		return
@@ -1678,8 +1703,16 @@ func APICommentNotifications(c *gin.Context) {
 	if APIFailed(c, e, "invalid limit given") {
 		return
 	}
+	startCreated := sanitizeDate(c.DefaultQuery("startCreated", ""))
+	endCreated := sanitizeDate(c.DefaultQuery("endCreated", ""))
+	isReview, e := strconv.ParseInt(c.DefaultQuery("isReview", "0"), 10, 64)
+	if APIFailed(c, e, "isReview must be int") {
+		return
+	}
 
-	result := DBGetCommentNotifications(mainDB, uid, limit, offset)
+	search := c.DefaultQuery("search", "")
+
+	result := DBGetCommentNotifications(mainDB, uid, pid, replyId, int8(isReview), upvotes, downvotes, order, limit, offset, startCreated, endCreated, search)
 	APIReturn(c, true, result)
 }
 
