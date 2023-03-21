@@ -104,10 +104,11 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 
 		joins += "JOIN PostTags pt ON p.id = pt.postId\n"
 		joins += "JOIN TagScores ts ON ts.id = pt.tagId\n"
-		joins += "JOIN UserScores us ON us.id = p.userId\n"
+		joins += "LEFT JOIN UserScores us ON us.id = p.userId\n"
 		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
-		scoreField = "scoreValueFactor(ts.value, us.value, 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*24))"
+		cond = append(cond, "ts.value > 0.1")
+		scoreField = "scoreValueFactor(ts.value, COALESCE(us.value, 0), 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*24))"
 	}
 
 	result := fmt.Sprintf(`%s

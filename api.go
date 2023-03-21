@@ -1056,6 +1056,14 @@ func APIGetPosts(c *gin.Context) {
 	end := sanitizeDate(c.DefaultQuery("endCreated", ""))
 	startDate := sanitizeDate(c.DefaultQuery("start", ""))
 	endDate := sanitizeDate(c.DefaultQuery("end", ""))
+	startIndex, e := strconv.ParseInt(c.DefaultQuery("startIndex", "0"), 10, 64)
+	if APIFailed(c, e, "invalid start index given") {
+		return
+	}
+	endIndex, e := strconv.ParseInt(c.DefaultQuery("endIndex", "0"), 10, 64)
+	if APIFailed(c, e, "invalid end index given") {
+		return
+	}
 
 	forUser, e := strconv.ParseInt(c.DefaultQuery("for", "0"), 10, 64)
 	if APIFailed(c, e, "invalid for user") {
@@ -1069,8 +1077,11 @@ func APIGetPosts(c *gin.Context) {
 
 	search := c.DefaultQuery("search", "")
 
-	posts := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes, order, limit, offset, start, end, startDate, endDate, forUser, search)
-	APIReturn(c, true, posts)
+	posts, si, ei, off := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes,
+		order, limit, offset, start, end, startDate, endDate,
+		forUser, startIndex, endIndex, search)
+
+	APIReturn(c, true, gin.H{"results": posts, "start": si, "end": ei, "offset": off})
 }
 
 func APIGetSimilarPosts(c *gin.Context) {
