@@ -358,7 +358,8 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
 func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popularIn []string,
 	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
-	start string, end string, startDate string, endDate string, forUser int64, search string) []PostResult {
+	start string, end string, startDate string, endDate string,
+	forUser int64, startIndex int64, endIndex int64, search string) ([]PostResult, int64, int64, int64) {
 	voteTable := "p"
 	usingVotesTable := len(popularIn) > 0 || len(startDate) > 0 || len(endDate) > 0
 	if usingVotesTable {
@@ -396,13 +397,53 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	}
 
 	result := []PostResult{}
-	// increase total posts to consider by months as more items requested
-	i := 0
-	j := 7
-	cond = append(cond, "", "")
-	for j < 356*16 {
-		cond[len(cond)-2] = fmt.Sprintf("p.createdAt <= ((now() at time zone 'utc') - interval '%d day')", i)
-		cond[len(cond)-1] = fmt.Sprintf("p.createdAt > ((now() at time zone 'utc') - interval '%d day')", j)
+
+	i := startIndex
+	j := endIndex
+	if forUser > 0 {
+		// increase total posts to consider by months as more items requested
+		cond = append(cond, "", "")
+		for j < 356*2 {
+			cond[len(cond)-2] = fmt.Sprintf("p.createdAt <= ((now() at time zone 'utc') - interval '%d day')", i)
+			cond[len(cond)-1] = fmt.Sprintf("p.createdAt > ((now() at time zone 'utc') - interval '%d day')", j)
+			getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
+				SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
+				upvotes, downvotes,
+				sortOrder, limit, offset, startDate, endDate, forUser, search)
+
+			rows, e := db.Query(getPosts)
+			if DidFail(e, "get posts\n", getPosts) {
+				return result, 0, 0, 0
+			}
+
+			result = ScanPostResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
+			if len(result) != 0 {
+				offset += limit
+				break
+			}
+			i = j
+			j = j + 1
+			offset = 0
+		}
+
+		if len(result) == 0 { // if no more recommended show 2nd degree recommended
+			result = DBGetSimilarPosts(db, forUser, 0, sortOrder, limit, offset)
+			if len(result) == 0 { // show trending if no recommended
+				today := utc()
+				lastWeek := today.AddDate(0, 0, -7)
+
+				result, _, _, _ = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
+					0, 0, soScore, limit, offset, "", "",
+					formatTime(lastWeek), formatTime(today), 0, 0, 0, "")
+
+				if len(result) == 0 { // show new post if no trending
+					result, _, _, _ = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
+						0, 0, soCreatedAt, limit, offset, "", "",
+						"", "", 0, 0, 0, "")
+				}
+			}
+		}
+	} else {
 		getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
 			SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 			upvotes, downvotes,
@@ -410,36 +451,13 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 
 		rows, e := db.Query(getPosts)
 		if DidFail(e, "get posts\n", getPosts) {
-			return result
+			return result, 0, 0, -1
 		}
 
 		result = ScanPostResults(rows, usingVotesTable, len(search) > 0 && sortOrder == soRank)
-		if len(result) != 0 {
-			break
-		}
-		i = j
-		j = j * 2
 	}
 
-	if forUser > 0 && len(result) == 0 { // if no more recommended show 2nd degree recommended
-		result = DBGetSimilarPosts(db, forUser, 0, sortOrder, limit, offset)
-		if len(result) == 0 { // show trending if no recommended
-			today := utc()
-			lastWeek := today.AddDate(0, 0, -7)
-
-			result = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
-				0, 0, soScore, limit, offset, "", "",
-				formatTime(lastWeek), formatTime(today), 0, "")
-
-			if len(result) == 0 { // show new post if no trending
-				result = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
-					0, 0, soCreatedAt, limit, offset, "", "",
-					"", "", 0, "")
-			}
-		}
-	}
-
-	return result
+	return result, i, j, offset
 }
 
 func DBGetSimilarPosts(db *sql.DB, userId int64, postId int64, sortOrder SortOrder, limit int64, offset int64) []PostResult {
