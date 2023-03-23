@@ -219,6 +219,9 @@ func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
 }
 
 func DBSignIn(db *sql.DB, email string, password string) (User, int32) {
+	if len(password) <= 6 {
+		return User{ID: -2}, 0
+	}
 	user, streak := DBGetUser(db, 0, email)
 	if user.ID == 0 {
 		return User{ID: -2}, 0

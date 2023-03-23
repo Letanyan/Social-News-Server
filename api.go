@@ -1921,7 +1921,7 @@ func APISignInWithApple(c *gin.Context) {
 
 	user, streak := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
-		generatedPassword := in.Code + claims.Email + fmt.Sprintf("%d", time.Now().Unix())
+		generatedPassword := in.Code + claims.Email + generateRandomString(32) + fmt.Sprintf("%d", time.Now().Unix())
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, generatedPassword)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId, APIClientIP(c))
@@ -1974,7 +1974,7 @@ func APISignInWithGoogle(c *gin.Context) {
 
 	user, streak := DBGetUser(mainDB, 0, claims.Email)
 	if user.ID == 0 {
-		generatedPassword := in.Access + claims.Email + fmt.Sprintf("%d", time.Now().Unix())
+		generatedPassword := in.Access + claims.Email + generateRandomString(32) + fmt.Sprintf("%d", time.Now().Unix())
 		newUser := DBCreateUser(mainDB, claims.FirstName, claims.Email, generatedPassword)
 		if newUser.ID > 0 {
 			secret := AUTHRegister(mainDB, newUser.ID, in.DeviceId, APIClientIP(c))
