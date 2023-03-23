@@ -1081,7 +1081,12 @@ func APIGetPosts(c *gin.Context) {
 		order, limit, offset, start, end, startDate, endDate,
 		forUser, startIndex, endIndex, search)
 
-	APIReturn(c, true, gin.H{"results": posts, "start": si, "end": ei, "offset": off})
+	if forUser != 0 {
+		APIReturn(c, true, gin.H{"results": posts, "start": si, "end": ei, "offset": off})
+	} else {
+		APIReturn(c, true, posts)
+	}
+
 }
 
 func APIGetSimilarPosts(c *gin.Context) {
