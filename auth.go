@@ -37,15 +37,19 @@ func init() {
 // -------------------------------------------------------------------------
 // AUTH User Requests
 // -------------------------------------------------------------------------
-
-func AUTHRegister(db *sql.DB, user int64, deviceId string, ip string) string {
+func generateRandomString(length int) string {
 	tokens := "1234567890qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
 	result := ""
 	rand.Seed(time.Now().Unix())
-	for i := 0; i < 64; i++ {
+	for i := 0; i < int(length); i++ {
 		r := rand.Int31n(int32(len(tokens)))
 		result += string(tokens[r])
 	}
+	return result
+}
+
+func AUTHRegister(db *sql.DB, user int64, deviceId string, ip string) string {
+	result := generateRandomString(64)
 	updateSecret := fmt.Sprintf(`
 	INSERT INTO UserAuth (userId, deviceId, secret, key)
 	VALUES (%d, '%s', '%s', '%s')
