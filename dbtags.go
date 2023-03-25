@@ -255,7 +255,7 @@ func DBGetTags(db *sql.DB, id int64, tags []string, popularIn []string,
 	getTags := SQLGetItems(db, "Tags p", voteTable, SQLFieldsForTagAlias(),
 		SQLFieldsForTag(), joins, locArray, cond, usingVotesTable,
 		upvotes, downvotes,
-		sortOrder, limit, offset, startDate, endDate, forUser, search)
+		sortOrder, limit, offset, 0, startDate, endDate, forUser, search)
 
 	rows, e := db.Query(getTags)
 	if DidFail(e, "get tags", getTags) {

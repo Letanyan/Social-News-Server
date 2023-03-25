@@ -1052,6 +1052,16 @@ func APIGetPosts(c *gin.Context) {
 		return
 	}
 
+	ignore, e := strconv.ParseInt(c.DefaultQuery("ignore", "0"), 10, 64)
+	if APIFailed(c, e, "invalid ignore given") {
+		return
+	}
+	if ignore != 0 {
+		if !APIMatchSecret(c, ignore) {
+			return
+		}
+	}
+
 	start := sanitizeDate(c.DefaultQuery("startCreated", ""))
 	end := sanitizeDate(c.DefaultQuery("endCreated", ""))
 	startDate := sanitizeDate(c.DefaultQuery("start", ""))
@@ -1078,7 +1088,7 @@ func APIGetPosts(c *gin.Context) {
 	search := c.DefaultQuery("search", "")
 
 	posts, si, ei, off := DBGetPosts(mainDB, uid, tags, origin, popularIn, upvotes, downvotes,
-		order, limit, offset, start, end, startDate, endDate,
+		order, limit, offset, ignore, start, end, startDate, endDate,
 		forUser, startIndex, endIndex, search)
 
 	if forUser != 0 {
@@ -1181,6 +1191,16 @@ func APIGetComments(c *gin.Context) {
 		return
 	}
 
+	ignore, e := strconv.ParseInt(c.DefaultQuery("ignore", "0"), 10, 64)
+	if APIFailed(c, e, "invalid ignore given") {
+		return
+	}
+	if ignore != 0 {
+		if !APIMatchSecret(c, ignore) {
+			return
+		}
+	}
+
 	popularIn := strings.Split(c.DefaultQuery("popularIn", ""), ",")
 	if len(popularIn) == 1 && popularIn[0] == "" {
 		popularIn = []string{}
@@ -1202,7 +1222,9 @@ func APIGetComments(c *gin.Context) {
 
 	search := c.DefaultQuery("search", "")
 
-	result := DBGetComments(mainDB, pid, uid, replyId, int8(isReview), start, end, popularIn, upvotes, downvotes, order, limit, offset, startCreated, endCreated, forUser, search)
+	result := DBGetComments(mainDB, pid, uid, replyId, int8(isReview), start, end,
+		popularIn, upvotes, downvotes, order, limit, offset, ignore,
+		startCreated, endCreated, forUser, search)
 	APIReturn(c, true, result)
 }
 

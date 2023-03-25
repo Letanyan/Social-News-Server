@@ -8,7 +8,7 @@ import (
 
 func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string, returnedFields string, joins string,
 	popularIn string, cond []string, usingVotes bool, upvotes int64, downvotes int64,
-	sortOrder SortOrder, limit int64, offset int64,
+	sortOrder SortOrder, limit int64, offset int64, usersIgnoredBy int64,
 	startDate string, endDate string, forUser int64, search string) string {
 
 	ratioFunc := "Ratio"
@@ -109,6 +109,21 @@ func SQLGetItems(db *sql.DB, table string, voteTable string, aliasFields string,
 		cond = append(cond, "p.id NOT IN (SELECT * FROM Viewed)")
 		cond = append(cond, "ts.value > 0.1")
 		scoreField = "scoreValueFactor(ts.value, COALESCE(us.value, 0), 1.5 - dateFrac(p.createdAt, now() at time zone 'utc', 60*60*24))"
+	} else if usersIgnoredBy > 0 {
+		withTable = fmt.Sprintf(`
+		WITH 
+		UserConts AS (
+			SELECT *
+			FROM UserCont
+			WHERE uid=%d
+		),
+		Ignored AS (
+			SELECT pid
+			FROM UserConts
+			WHERE kind=4 -- ignored user
+		)
+		`, usersIgnoredBy)
+		cond = append(cond, "p.userId NOT IN (SELECT * FROM Ignored)")
 	}
 
 	result := fmt.Sprintf(`%s
