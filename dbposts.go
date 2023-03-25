@@ -357,7 +357,7 @@ func DBGetPost(db *sql.DB, id int64) PostResult {
 
 // ignore userId if equals 0. ignore id if equals 0. ignore tags if empty. ignore location if empty.
 func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popularIn []string,
-	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64,
+	upvotes int64, downvotes int64, sortOrder SortOrder, limit int64, offset int64, usersIgnoredBy int64,
 	start string, end string, startDate string, endDate string,
 	forUser int64, startIndex int64, endIndex int64, search string) ([]PostResult, int64, int64, int64) {
 	voteTable := "p"
@@ -409,7 +409,8 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 			getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
 				SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 				upvotes, downvotes,
-				sortOrder, limit, offset, startDate, endDate, forUser, search)
+				sortOrder, limit, offset, usersIgnoredBy,
+				startDate, endDate, forUser, search)
 
 			rows, e := db.Query(getPosts)
 			if DidFail(e, "get posts\n", getPosts) {
@@ -433,12 +434,14 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 				lastWeek := today.AddDate(0, 0, -7)
 
 				result, _, _, _ = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
-					0, 0, soScore, limit, offset, "", "",
+					0, 0, soScore, limit, offset, usersIgnoredBy,
+					"", "",
 					formatTime(lastWeek), formatTime(today), 0, 0, 0, "")
 
 				if len(result) == 0 { // show new post if no trending
 					result, _, _, _ = DBGetPosts(db, 0, []int64{}, []string{}, []string{},
-						0, 0, soCreatedAt, limit, offset, "", "",
+						0, 0, soCreatedAt, limit, offset, usersIgnoredBy,
+						"", "",
 						"", "", 0, 0, 0, "")
 				}
 			}
@@ -447,7 +450,8 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 		getPosts := SQLGetItems(db, "Posts p", voteTable, SQLFieldsForPostResultAlias(),
 			SQLFieldsForPostResult(), joins, locArray, cond, usingVotesTable,
 			upvotes, downvotes,
-			sortOrder, limit, offset, startDate, endDate, forUser, search)
+			sortOrder, limit, offset, usersIgnoredBy,
+			startDate, endDate, forUser, search)
 
 		rows, e := db.Query(getPosts)
 		if DidFail(e, "get posts\n", getPosts) {

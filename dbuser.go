@@ -375,7 +375,7 @@ func DBGetUsers(db *sql.DB, popularIn []string, upvotes int64, downvotes int64,
 	}
 	getUsers := SQLGetItems(db, "Users p", voteTable, SQLFieldsForUserProfileAlias(),
 		SQLFieldsForUserProfile(), joins, locArray, cond, usingVotesTable,
-		upvotes, downvotes, sortOrder, limit, offset, startDate, endDate, forUser, search)
+		upvotes, downvotes, sortOrder, limit, offset, 0, startDate, endDate, forUser, search)
 
 	rows, e := db.Query(getUsers)
 	if DidFail(e, "get users", getUsers) {
