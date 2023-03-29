@@ -964,3 +964,10 @@ func DBRegisterWeeklyCleanUp(db *sql.DB) {
 	})
 	time.AfterFunc(time.Hour*24*7, func() { DBRegisterWeeklyCleanUp(db) })
 }
+
+func DBRegisterDailyCleanUp(db *sql.DB) {
+	time.AfterFunc(0, func() {
+		DBDeleteTempUser(db, 4)
+	})
+	time.AfterFunc(time.Hour*12, func() { DBRegisterWeeklyCleanUp(db) })
+}

@@ -401,7 +401,6 @@ func DBGetPosts(db *sql.DB, userId int64, tags []int64, origin []string, popular
 	i := startIndex
 	j := endIndex
 	if forUser > 0 {
-		// increase total posts to consider by months as more items requested
 		cond = append(cond, "", "")
 		for j < 356*2 {
 			cond[len(cond)-2] = fmt.Sprintf("p.createdAt <= ((now() at time zone 'utc') - interval '%d day')", i)
