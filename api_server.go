@@ -26,6 +26,7 @@ func ServeAPI(router *gin.Engine) {
 		v1.GET("/available", APIAvailable)
 		// Create
 		v1.POST("/users", APICreateUser)
+		v1.POST("/temp-users", APICreateTempUser)
 		v1.POST("/posts", APICreatePost)
 		v1.POST("/posts/:pid/comments", APICreateComment)
 		// Edit

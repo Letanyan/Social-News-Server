@@ -140,6 +140,33 @@ func APICreateUser(c *gin.Context) {
 	}
 }
 
+func APICreateTempUser(c *gin.Context) {
+	type Input struct {
+		Device string `json:"device"`
+	}
+	var input Input
+
+	if e := c.BindJSON(&input); DidFail(e, "get input for create user") {
+		APIReturn(c, false, "invalid input values")
+		return
+	}
+
+	user := DBCreateTempUser(mainDB, input.Device)
+	if user.ID > 0 {
+		secret := AUTHRegister(mainDB, user.ID, input.Device, APIClientIP(c))
+		APIReturn(c, true, gin.H{
+			"user":      user,
+			"token":     secret,
+			"streak":    user.Credits,
+			"following": []string{},
+			"ignored":   []string{},
+			"tags":      []string{},
+		})
+	} else {
+		APIReturn(c, false, "could not create user")
+	}
+}
+
 func APICreatePost(c *gin.Context) {
 	type Input struct {
 		UserID    int64    `json:"userId,string"`

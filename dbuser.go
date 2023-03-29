@@ -200,6 +200,28 @@ func DBCreateUser(db *sql.DB, name string, email string, password string) User {
 	return user
 }
 
+func DBCreateTempUser(db *sql.DB, deviceId string) User {
+	removeOld := fmt.Sprintf(`
+	SELECT %s
+	FROM Users u
+	JOIN UserAuth a ON u.id = a.userid
+	WHERE
+		a.deviceId = $1 AND
+		u.email = 'temp@new-source.app'
+	`, SQLFieldsForUser())
+	rows, e := db.Query(removeOld, DBAlphaNumeric(deviceId))
+
+	if !DidFail(e, "remove old user with device id") {
+		users, _ := ScanUsers(rows)
+		if len(users) > 0 {
+			return users[0]
+		}
+	}
+
+	user := DBCreateUser(db, "Temporary", "temp@new-source.app", generateRandomString(64))
+	return user
+}
+
 func DBUpdateUser(db *sql.DB, id int64, name string) {
 	update := `UPDATE Users SET Name=$1 WHERE id=$2`
 	_, e := db.Exec(update, name, id)
@@ -209,6 +231,11 @@ func DBUpdateUser(db *sql.DB, id int64, name string) {
 }
 
 func DBValidateUser(db *sql.DB, userId int64, key int32) bool {
+	user, _ := DBGetUser(db, userId, "")
+	if user.Email == "temp@new-source.app" {
+		return false
+	}
+
 	validate := `UPDATE users SET validationKey = 0 WHERE id = $1 AND validationKey = $2 RETURNING id, validationKey`
 	row := db.QueryRow(validate, userId, key)
 	e := row.Scan(&userId, &key)
@@ -241,6 +268,23 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 	deleteUserContTable := `UPDATE UserCont SET trashed=true WHERE uid=$1`
 	_, e = db.Exec(deleteUserContTable, userId)
 	DidFail(e, "delete user content table")
+}
+
+func DBDeleteTempUser(db *sql.DB, daysAgo int) {
+	deleteFromUsers := `
+	DELETE FROM UserAuth p
+	USING Users u
+	WHERE 
+		u.email = 'temp@new-source.app' AND 
+		u.loginDate < ((now() at time zone 'utc') - interval '%d day') AND
+		u.id = p.userId;
+
+	DELETE FROM Users 
+	WHERE 
+		email='temp@new-source.app' AND 
+		loginDate < ((now() at time zone 'utc') - interval '%d day')`
+	_, e := db.Exec(deleteFromUsers)
+	DidFail(e, "delete user from users table")
 }
 
 func DBBlockUser(db *sql.DB, userId int64, duration int) {

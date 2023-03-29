@@ -172,7 +172,7 @@ func NAReadAllNewsAgents(db *sql.DB) []NewsAgent {
 		agentNames[agent.Name] = true
 		if oldUser.ID == 0 {
 			updated = true
-			user := DBCreateUser(db, agent.Name, "", "")
+			user := DBCreateUser(db, agent.Name, "", generateRandomString(64))
 			DBValidateUser(db, user.ID, user.ValidationKey)
 			result[i].ID = user.ID
 		} else if oldUser.ID != agent.ID {
