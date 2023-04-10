@@ -271,7 +271,7 @@ func DBDeleteUser(db *sql.DB, userId int64) {
 }
 
 func DBDeleteTempUser(db *sql.DB, daysAgo int) {
-	deleteFromUsers := `
+	deleteFromUsers := fmt.Sprintf(`
 	DELETE FROM UserAuth p
 	USING Users u
 	WHERE 
@@ -282,7 +282,7 @@ func DBDeleteTempUser(db *sql.DB, daysAgo int) {
 	DELETE FROM Users 
 	WHERE 
 		email='temp@new-source.app' AND 
-		loginDate < ((now() at time zone 'utc') - interval '%d day')`
+		loginDate < ((now() at time zone 'utc') - interval '%d day')`, daysAgo, daysAgo)
 	_, e := db.Exec(deleteFromUsers)
 	DidFail(e, "delete user from users table")
 }
