@@ -62,10 +62,10 @@ func DBGetCommentNotifications(db *sql.DB, userId int64,
 	if len(search) > 0 {
 		search, _ := DBPrepareSearchString(db, search)
 		if len(search) > 0 {
-			cond = append(cond, fmt.Sprintf("p.ContentLocaleVector @@ to_tsquery('%s')", search))
+			cond = append(cond, fmt.Sprintf("p.ContentLocaleVector @@ to_tsquery('english', '%s')", search))
 		}
 		if sortOrder == soRank {
-			rankString = fmt.Sprintf(", ts_rank(p.ContentLocaleVector, to_tsquery('%s')) AS rank", search)
+			rankString = fmt.Sprintf(", ts_rank(p.ContentLocaleVector, to_tsquery('english', '%s')) AS rank", search)
 		}
 	}
 
